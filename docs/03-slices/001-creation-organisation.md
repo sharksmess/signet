@@ -13,6 +13,24 @@ En tant que responsable d'equipe authentifie, je peux creer une organisation et 
   - retrait de membre (tranche 008) — le trigger `member_keep_last_owner` est cree ici car il protege `member` des sa creation, mais aucune route de retrait n'est exposee.
   - SSO, changement de mot de passe, recuperation de compte, selecteur multi-organisation — hors perimetre PRD ou non couverts par US-01.
 
+## Perimetre de fichiers
+Declare dans `.gates/scope-001.txt` (source de verite pour le hook `gate-check.sh` ; copie ci-dessous pour qu'il survive aux sessions) :
+
+```
+apps/web/**
+packages/db/**
+package.json
+pnpm-workspace.yaml
+pnpm-lock.yaml
+tsconfig*.json
+tests/organizations/**
+tests/helpers/**
+```
+
+`docs/02-architecture/api-contracts/organizations.ts` est en lecture seule pour cette tranche : tout ecart constate entre ce contrat et l'ERD doit etre remonte, jamais corrige silencieusement.
+
+Cette tranche amorce un depot vierge : des commandes d'echafaudage (`pnpm init`, `pnpm create next-app`, `pnpm add`) creeront des fichiers hors du controle du hook (lockfile, config generee). Verifier apres coup avec `git status` qu'aucun fichier n'est apparu hors de ce perimetre.
+
 ## Dependances
 - Tranches devant etre closes avant celle-ci : aucune (premiere tranche du backlog).
 
