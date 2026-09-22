@@ -41,6 +41,14 @@ switch ($Action) {
     Ok "Gate 4 approuve."
   }
 
+  "approve-release" {
+    if (-not (Test-Path ".gates\\04-hardening.approved")) { Fail "Approuve le durcissement d'abord." }
+    Write-Host "Mise en service. Sauvegardes testees ? RLS verifiee avec deux tenants ?" -ForegroundColor Yellow
+    if ((Read-Host "Tape OUI pour approuver") -ne "OUI") { Fail "Approbation annulee." }
+    New-Item -ItemType File -Force -Path ".gates\\release.approved" | Out-Null
+    Ok "Release approuvee. Lance /retro pendant que les frictions sont fraiches."
+  }
+
   "reopen-architecture" {
     Remove-Item ".gates\02-architecture.approved" -ErrorAction SilentlyContinue
     Ok "Gate 2 rouvert. Ecris un ADR expliquant pourquoi avant de reprendre."

@@ -11,6 +11,8 @@ Cette phase est celle que tout le monde bacle et qui coute le plus cher : un per
 ## 1. Interroger avant d'ecrire
 Si les elements manquent, pose au maximum cinq questions ciblees, puis attends. N'invente jamais une reponse metier.
 
+Si tu poses des questions a choix, chaque choix appelle ses details : un palier sans ses limites, un role sans ses droits, un quota sans son chiffre ne sont pas des reponses. Redemande-les avant d'ecrire.
+
 Le minimum incompressible :
 - **L'utilisateur et sa douleur.** Qui paie, pour resoudre quoi, et que fait-il aujourd'hui a la place.
 - **L'unite de compte.** Utilisateur seul, ou organisation avec membres, roles et donnees partagees. Cette reponse determine le modele de donnees, la strategie d'isolation et le destinataire de la facture. C'est la question la plus structurante du PRD.
@@ -40,4 +42,4 @@ La section **hors-perimetre** n'est pas de la decoration : elle est ce sur quoi 
 Un critere d'acceptation doit etre verifiable par un test. "L'interface est intuitive" n'en est pas un. "Un membre non-proprietaire recevant une invitation obtient une erreur 403" en est un.
 
 ## 3. Cloture
-Le PRD ecrit, affiche le resume et arrete-toi. Tu ne peux pas approuver ce gate toi-meme : c'est a l'humain de lancer `make approve-prd` apres lecture. Un hook bloque toute tentative d'approbation par un agent.
+Le PRD ecrit, affiche le resume et arrete-toi. Tu ne peux pas approuver ce gate toi-meme : c'est a l'humain de lancer `.\gates.ps1 approve-prd` (ou `make approve-prd` hors Windows) apres lecture. Un hook bloque toute tentative d'approbation par un agent.

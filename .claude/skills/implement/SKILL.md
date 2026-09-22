@@ -19,7 +19,11 @@ Une fois les criteres d'acceptation passes, lance en parallele :
 - `security-auditor` sur le diff de la tranche
 - `contract-guardian` sur les contrats
 
-Puis `scripts/close-slice.sh`. Ce script relance la suite complete, verifie les verdicts des deux auditeurs et n'ecrit le gate de tranche que si tout passe. Il ne peut pas etre satisfait autrement qu'en satisfaisant reellement ses conditions : c'est la difference entre un gate franchissable par une machine et un gate falsifiable par une machine.
+Enregistre le rapport final de chaque auditeur, **tel quel**, dans `docs/04-runbooks/audits/audit-NNN.md` et `docs/04-runbooks/audits/contracts-NNN.md`. La derniere ligne doit etre le verdict exact (`AUDIT: PASS`, `CONTRACTS: PASS`). Ne reformule pas, ne resume pas : ces fichiers sont relus par l'humain dans l'historique git.
+
+Puis `bash scripts/close-slice.sh`.
+
+Ce que ce mecanisme garantit, et ce qu'il ne garantit pas : le script relance lui-meme les tests, le controle de types et la verification des criteres d'acceptation — ceux-la ne peuvent pas etre falsifies. Le verdict d'audit, lui, est recopie par la session qui orchestre : sa fidelite repose sur la transcription et sur la relecture humaine du rapport versionne. Ce script relance la suite complete, verifie les verdicts des deux auditeurs et n'ecrit le gate de tranche que si tout passe. Il ne peut pas etre satisfait autrement qu'en satisfaisant reellement ses conditions : c'est la difference entre un gate franchissable par une machine et un gate falsifiable par une machine.
 
 ## 3. Si un audit echoue
 Les constats CRITIQUE et MAJEUR reviennent au `slice-implementer` sous forme de correctifs a appliquer. Les MINEUR deviennent des lignes dans `docs/03-slices/000-backlog.md`. Ne corrige pas toi-meme dans la session principale : tu perdrais l'isolation du worktree.

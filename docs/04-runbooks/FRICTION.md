@@ -23,3 +23,4 @@ qui a derive, un gabarit incomplet, une decision qu'on a du reprendre.
 | 2026-09-22 | block-dangerous.sh | Auto-approbation possible via make/gates.ps1 : le hook bloquait le chemin, pas l'intention | regle approve-* + 2 tests | oui, corrige |
 | 2026-09-22 | /architect | 2e erreur d'appel d'outil rattrapee seule | aucun | peut-etre, tendance a surveiller |
 | 2026-09-22 | /architect | 9 tranches pour un banc d'essai, une par user story ; SECURITY DEFINER sans exigence de search_path | reponses manuelles | oui, /architect doit regrouper les stories et db-architect doit exiger search_path |
+| 2026-09-22 | /slice + gate-check | /slice ecrit le perimetre dans .gates/, que le hook interdit ; close-slice attend les audits dans .gates/ : aucune tranche ne pouvait s'ouvrir ni se clore | usine 1.2.0 | oui, corrige |
