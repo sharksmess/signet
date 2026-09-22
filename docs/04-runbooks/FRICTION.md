@@ -21,3 +21,5 @@ qui a derive, un gabarit incomplet, une decision qu'on a du reprendre.
 | 2026-09-22 | /spec | Les boutons de reponse ne capturent pas les details (quota 50 liens perdu) | amendement du PRD | oui, /spec doit demander les details apres les choix |
 | 2026-09-22 | skills | Les skills citent make approve-* au lieu de gates.ps1 sous Windows | aucun | oui, citer les deux |
 | 2026-09-22 | block-dangerous.sh | Auto-approbation possible via make/gates.ps1 : le hook bloquait le chemin, pas l'intention | regle approve-* + 2 tests | oui, corrige |
+| 2026-09-22 | /architect | 2e erreur d'appel d'outil rattrapee seule | aucun | peut-etre, tendance a surveiller |
+| 2026-09-22 | /architect | 9 tranches pour un banc d'essai, une par user story ; SECURITY DEFINER sans exigence de search_path | reponses manuelles | oui, /architect doit regrouper les stories et db-architect doit exiger search_path |

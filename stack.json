@@ -1,15 +1,19 @@
 {
-  "profile": "nextjs-drizzle-postgres",
-  "language": "typescript",
-  "runtime": "node",
-  "framework": "next",
-  "orm": "drizzle",
-  "database": "postgres",
-  "auth": "better-auth",
-  "billing": "stripe",
-  "queue": "inngest",
-  "test": { "unit": "vitest", "e2e": "playwright" },
-  "packageManager": "pnpm",
-  "tenancy": "shared-schema-rls",
-  "frozenAt": null
+    "profile":  "nextjs-drizzle-postgres",
+    "language":  "typescript",
+    "runtime":  "node",
+    "framework":  "next",
+    "orm":  "drizzle",
+    "database":  "postgres",
+    "databaseVersion":  "16",
+    "auth":  "better-auth",
+    "billing":  "stripe",
+    "queue":  "inngest",
+    "test":  {
+                 "unit":  "vitest",
+                 "e2e":  "playwright"
+             },
+    "packageManager":  "pnpm",
+    "tenancy":  "shared-schema-rls",
+    "frozenAt":  "2026-09-22"
 }
