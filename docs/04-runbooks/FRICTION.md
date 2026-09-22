@@ -15,3 +15,4 @@ qui a derive, un gabarit incomplet, une decision qu'on a du reprendre.
 <!-- Exemple :
 | 2026-09-18 | /slice 012 | Le perimetre ne couvrait pas apps/web/lib/auth.ts, l'implementeur s'est bloque | Elargi le scope a la main | oui, /slice doit inclure les fichiers partages touches par une route |
 -->
+| 2026-09-17 | install-project.ps1 | Copy-Item -Recurse sur un dossier existant imbrique au lieu de remplacer | Suppression puis recopie | oui, corriger install-project.ps1 et update-factory.ps1 |
