@@ -1,0 +1,25 @@
+{
+  "name": "signet",
+  "private": true,
+  "version": "0.1.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @signet/web dev",
+    "build": "pnpm --filter @signet/web build",
+    "typecheck": "tsc -p tsconfig.json --noEmit && pnpm --filter @signet/web run typecheck && pnpm --filter @signet/db run typecheck",
+    "test": "vitest run",
+    "db:generate": "pnpm --filter @signet/db run generate",
+    "db:migrate": "pnpm --filter @signet/db run migrate"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "@types/pg": "8.11.10",
+    "dotenv": "16.4.7",
+    "pg": "8.13.1",
+    "typescript": "5.7.2",
+    "vitest": "2.1.8",
+    "zod": "3.24.1"
+  }
+}
