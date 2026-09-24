@@ -48,7 +48,14 @@
  * pas, toute tentative d'utiliser ces helpers echoue — c'est le comportement
  * attendu avant implementation.
  */
-import { Pool, type PoolClient } from "pg";
+// `pg` est CommonJS : import par defaut puis destructuration plutot qu'un
+// import nomme direct (meme raison qu'un import nomme direct echoue sous
+// Node ESM reel dans packages/db/src/migrate.ts).
+import pg from "pg";
+import type { Pool, PoolClient } from "pg";
+// Renomme a la destructuration : un `const Pool = ...` de meme nom que
+// l'import de type ci-dessus est refuse par le compilateur (TS2440).
+const { Pool: PgPool } = pg;
 
 function requiredEnv(name: string): string {
   const value = process.env[name];
@@ -68,14 +75,14 @@ let appPool: Pool | null = null;
 
 export function getBypassRlsPool(): Pool {
   if (!bypassRlsPool) {
-    bypassRlsPool = new Pool({ connectionString: requiredEnv("TEST_DATABASE_URL_BYPASSRLS") });
+    bypassRlsPool = new PgPool({ connectionString: requiredEnv("TEST_DATABASE_URL_BYPASSRLS") });
   }
   return bypassRlsPool;
 }
 
 export function getTableOwnerPool(): Pool {
   if (!tableOwnerPool) {
-    tableOwnerPool = new Pool({
+    tableOwnerPool = new PgPool({
       connectionString: requiredEnv("TEST_DATABASE_URL_TABLE_OWNER"),
     });
   }
@@ -84,7 +91,7 @@ export function getTableOwnerPool(): Pool {
 
 export function getAppPool(): Pool {
   if (!appPool) {
-    appPool = new Pool({ connectionString: requiredEnv("TEST_DATABASE_URL_APP") });
+    appPool = new PgPool({ connectionString: requiredEnv("TEST_DATABASE_URL_APP") });
   }
   return appPool;
 }

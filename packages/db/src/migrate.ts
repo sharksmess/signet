@@ -22,7 +22,15 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import "dotenv/config";
-import { Client } from "pg";
+// `pg` est CommonJS : sous Node ESM reel (ce script, "type": "module"), ses
+// exports nommes ne sont pas accessibles par un import nomme direct. Import
+// par defaut puis destructuration, seule forme fiable independamment du
+// bundler (cf. apps/web/src/lib/db.ts, tests/helpers/db.ts).
+import pg from "pg";
+import type { Client } from "pg";
+// Renomme a la destructuration : un `const Client = ...` de meme nom que
+// l'import de type ci-dessus est refuse par le compilateur (TS2440).
+const { Client: PgClient } = pg;
 
 const MIGRATIONS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "migrations");
 
@@ -79,7 +87,7 @@ async function applyMigration(client: Client, fileName: string): Promise<void> {
 
 async function main(): Promise<void> {
   const connectionString = requiredEnv("DATABASE_URL_MIGRATE");
-  const client = new Client({ connectionString });
+  const client = new PgClient({ connectionString });
   await client.connect();
 
   try {

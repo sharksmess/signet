@@ -10,7 +10,15 @@
  * better-auth (apps/web/src/lib/auth.ts) pour les quatre tables
  * d'authentification.
  */
-import { Pool, type PoolClient } from "pg";
+// `pg` est CommonJS : import par defaut puis destructuration plutot qu'un
+// import nomme direct, fiable independamment du bundler/runtime (Next.js
+// serveur ici ; meme raison qu'un import nomme direct echoue sous Node ESM
+// reel dans packages/db/src/migrate.ts).
+import pg from "pg";
+import type { Pool, PoolClient } from "pg";
+// Renomme a la destructuration : un `const Pool = ...` de meme nom que
+// l'import de type ci-dessus est refuse par le compilateur (TS2440).
+const { Pool: PgPool } = pg;
 
 function requiredEnv(name: string): string {
   const value = process.env[name];
@@ -27,14 +35,14 @@ let authPool: Pool | null = null;
 
 export function getAppPool(): Pool {
   if (!appPool) {
-    appPool = new Pool({ connectionString: requiredEnv("DATABASE_URL_APP") });
+    appPool = new PgPool({ connectionString: requiredEnv("DATABASE_URL_APP") });
   }
   return appPool;
 }
 
 export function getAuthPool(): Pool {
   if (!authPool) {
-    authPool = new Pool({ connectionString: requiredEnv("DATABASE_URL_AUTH") });
+    authPool = new PgPool({ connectionString: requiredEnv("DATABASE_URL_AUTH") });
   }
   return authPool;
 }
