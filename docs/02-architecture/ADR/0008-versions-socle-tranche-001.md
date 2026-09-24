@@ -69,7 +69,7 @@ de ligne particuliere (aucune CVE ni contrainte de compatibilite ne les retient 
 | `drizzle-kit` | 0.30.1 | **0.31.11** | Derniere stable ; satisfait l'exigence de better-auth 1.7.5 (`>=0.31.4`) |
 | `zod` | 3.24.1 | **4.6.5** | Derniere stable ; exigee telle quelle (`^4.5.4`) par la dependance `better-auth` |
 | `vitest` | 2.1.8 | **5.0.1** | Derniere stable ; compatible avec la `peerDependency` `vitest` de better-auth (`^2.0.0 \|\| ^3.0.0 \|\| ^4.0.0 \|\| ^5.0.0`) |
-| `typescript` | 5.7.2 | **7.0.2** | Derniere stable du registre ; aucune dependance du projet ne bundle ni ne peer-depend sur `typescript` (drizzle-kit et `tsx` embarquent leur propre `esbuild`, independant de ce paquet) |
+| `typescript` | 5.7.2 | ~~7.0.2~~ **6.0.3** | Voir correction du 2026-09-24 ci-dessous : `7.0.2` casse `next dev` (`next.config.ts`), retenu `6.0.3` — derniere version qui conserve l'API compilateur classique |
 
 Consequences directes verifiees dans cette session, avant tout code metier :
 - `pnpm install` reussit sans conflit de peer dependencies restant (`pnpm peers check` : aucun apres
@@ -125,3 +125,42 @@ Consequences directes verifiees dans cette session, avant tout code metier :
   cet ADR (et du gate 02, puisque cela impliquerait un changement de ligne majeure hors plan).
 - Approche d'octobre 2026 (fin de maintenance annoncee de Next 15) sans qu'une tranche de migration
   vers Next 16 n'ait ete planifiee au backlog.
+- `typescript` retente `7.x` (ou une ligne posterieure) des que Next.js et le reste de l'ecosysteme
+  outillage confirment leur compatibilite avec la nouvelle API (cf. correction ci-dessous) — a
+  re-verifier avant tout futur bump de cette ligne, pas seulement `pnpm view`.
+
+## Correction du 2026-09-24 — `typescript@7.0.2` casse `next dev`
+
+En verifiant la tranche apres la correction de l'import `pg` (ci-dessous), le demarrage de
+`next dev` echouait systematiquement :
+
+```
+⨯ Failed to load next.config.ts
+TypeError: Cannot read properties of undefined (reading 'fileExists')
+    at getTsConfig (.../next/dist/build/next-config-ts/transpile-config.js:71)
+```
+
+Cause identifiee : `typescript@7.0.2` est le portage natif (Go) du compilateur — confirme par ses
+`optionalDependencies` par plateforme (`@typescript/typescript-win32-x64` et equivalents pour
+chaque OS/architecture, absentes de toute version `6.x`) et par la disparition du binaire
+`tsserver` (present sur `6.0.3`, absent sur `7.0.2`). Cette version n'expose plus l'API compilateur
+classique (`ts.sys`, `ts.createProgram`, `ts.findConfigFile`, etc.) dont depend le chargeur
+`next.config.ts` de Next.js — et vraisemblablement d'autres outils de l'ecosysteme qui s'appuient
+sur cette meme API (ESLint, etc.), non tous verifies ici.
+
+`pnpm typecheck` (simple invocation CLI `tsc --noEmit`) continuait de passer avec `7.0.2` : le
+risque etait deja explicitement signale plus haut ("aucune garantie n'est prise sur d'autres usages
+futurs de l'API compilateur TypeScript") mais seulement au niveau du risque, pas encore constate.
+C'est desormais constate, sur un cas reel et bloquant (l'application ne demarre plus du tout).
+
+**Decision** : `typescript` repingle a **`6.0.3`** (derniere version stable qui conserve
+l'architecture et l'API classiques, verifie par la presence de `tsserver` et l'absence
+d'`optionalDependencies` par plateforme). `pnpm typecheck`, `pnpm audit` et un demarrage reel de
+`next dev` (requete HTTP contre une route, echec attendu uniquement sur la connexion Postgres
+factice utilisee pour le test) ont ete revalides apres ce repinglage.
+
+Consequence acceptee : le projet n'est plus sur la toute derniere version du registre pour ce
+paquet, en ecart assume avec l'instruction initiale ("prends les dernieres versions stables ...
+epinglees exactement") — mais la toute derniere version casse une fonctionnalite centrale
+(demarrage du serveur de developpement), donc "stable" au sens du registre npm (balise `latest`)
+ne l'est pas au sens de compatibilite avec ce projet.
