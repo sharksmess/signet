@@ -82,6 +82,6 @@ function extractCookie(response: Response): string | null {
 }
 
 /** En-tetes d'une requete authentifiee avec la session fournie. */
-export function authHeaders(session: AuthenticatedSession): HeadersInit {
+export function authHeaders(session: AuthenticatedSession): Record<string, string> {
   return { Cookie: session.cookie, "Content-Type": "application/json" };
 }
