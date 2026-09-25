@@ -23,6 +23,21 @@ function baseUrl(): string {
   return url;
 }
 
+/**
+ * better-auth refuse (403 MISSING_OR_NULL_ORIGIN / INVALID_ORIGIN) toute
+ * requete vers `/api/auth/*` dont l'origine ne peut pas etre validee — la
+ * protection CSRF reste active volontairement (regle du projet : la corriger
+ * cote client de test, jamais en la desactivant cote serveur). Un client
+ * navigateur envoie toujours `Origin` ; `fetch` sous Node ne le fait pas,
+ * d'ou ce header pose explicitement, egal a `TEST_APP_BASE_URL` lui-meme
+ * (aucun `baseURL` n'etant configure cote serveur, better-auth deduit son
+ * origine de confiance de la requete entrante — cf. apps/web/src/lib/auth.ts
+ * et l'avertissement "Base URL is not set" au demarrage).
+ */
+function originHeader(): Record<string, string> {
+  return { Origin: baseUrl() };
+}
+
 export interface AuthenticatedSession {
   cookie: string;
   userId: string;
@@ -52,7 +67,7 @@ export async function signUp(options?: {
 
   const response = await fetch(`${baseUrl()}/api/auth/sign-up/email`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...originHeader() },
     body: JSON.stringify({ email, password, name }),
   });
 
@@ -83,5 +98,5 @@ function extractCookie(response: Response): string | null {
 
 /** En-tetes d'une requete authentifiee avec la session fournie. */
 export function authHeaders(session: AuthenticatedSession): Record<string, string> {
-  return { Cookie: session.cookie, "Content-Type": "application/json" };
+  return { Cookie: session.cookie, "Content-Type": "application/json", ...originHeader() };
 }
