@@ -22,6 +22,26 @@ export interface ApiResponse<T = unknown> {
   body: T;
 }
 
+/**
+ * Lit le corps de la reponse sans jamais le faire disparaitre silencieusement.
+ * `response.json().catch(() => undefined)` transformait toute reponse non-JSON
+ * (page d'erreur HTML, corps vide, texte brut) en `undefined` — un message de
+ * diagnostic qui affiche "undefined" au lieu du corps reel fait perdre plus de
+ * temps que l'echec lui-meme (cf. createOrganizationFixture). Ici : corps vide
+ * -> `undefined` (rien a montrer, cas normal) ; JSON valide -> objet parse
+ * (comportement inchange pour le cas nominal) ; sinon -> texte brut, pour que
+ * l'appelant voie exactement ce que le serveur a renvoye.
+ */
+async function readBody(response: Response): Promise<unknown> {
+  const text = await response.text();
+  if (text.length === 0) return undefined;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
 export async function createOrganization(
   session: AuthenticatedSession | null,
   payload: Record<string, unknown>,
@@ -31,7 +51,7 @@ export async function createOrganization(
     headers: session ? authHeaders(session) : { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  const body = await response.json().catch(() => undefined);
+  const body = await readBody(response);
   return { status: response.status, body };
 }
 
@@ -45,6 +65,6 @@ export async function renameOrganization(
     headers: session ? authHeaders(session) : { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  const body = await response.json().catch(() => undefined);
+  const body = await readBody(response);
   return { status: response.status, body };
 }

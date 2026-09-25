@@ -19,14 +19,22 @@ export async function createOrganizationFixture(name: string): Promise<Organizat
   const owner = await signUp();
   const { status, body } = await createOrganization(owner, { name });
   if (status !== 200 && status !== 201) {
+    // Echec immediat et explicite : ne JAMAIS laisser un appelant continuer
+    // avec un organizationId absent — c'est ce qui transformerait un 422 ici
+    // en violation de contrainte (member_organization_id_organization_id_fk)
+    // bien plus loin, sur un appel qui ne dirait rien de la cause reelle.
     throw new Error(
-      `Impossible de construire la fixture d'organisation "${name}" (${status}) : ` +
-        JSON.stringify(body),
+      `createOrganizationFixture("${name}") : le serveur a refuse la creation ` +
+        `(HTTP ${status}), aucune organisation n'a ete construite. Corps de la reponse : ` +
+        `${JSON.stringify(body)}`,
     );
   }
   const organizationId = (body as { id?: string }).id;
   if (!organizationId) {
-    throw new Error(`Reponse de creation d'organisation sans id : ${JSON.stringify(body)}`);
+    throw new Error(
+      `createOrganizationFixture("${name}") : reponse HTTP ${status} sans champ "id". ` +
+        `Corps de la reponse : ${JSON.stringify(body)}`,
+    );
   }
   return { organizationId, name, owner };
 }
@@ -69,6 +77,16 @@ export async function addMemberDirect(params: {
   userId: string;
   role: "owner" | "member";
 }): Promise<void> {
+  // Garde-fou explicite : sans elle, un organizationId/userId invalide
+  // (fixture en amont qui a echoue silencieusement) ne se manifeste qu'au
+  // niveau de la contrainte member_organization_id_organization_id_fk, un
+  // message qui ne dit rien de la cause reelle.
+  if (!params.organizationId || !params.userId) {
+    throw new Error(
+      `addMemberDirect appele avec un identifiant manquant (organizationId=${JSON.stringify(params.organizationId)}, ` +
+        `userId=${JSON.stringify(params.userId)}) — la fixture qui a produit cette valeur a echoue avant cet appel.`,
+    );
+  }
   await asBypassRls(async (client) => {
     await client.query(
       "INSERT INTO member (organization_id, user_id, role) VALUES ($1, $2, $3)",
