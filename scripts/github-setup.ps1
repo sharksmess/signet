@@ -1,11 +1,13 @@
 # Cree le depot GitHub du projet et pose les protections. A lancer UNE fois,
-# par l'humain, depuis la racine du projet :
-#   .\scripts\github-setup.ps1 -Name signet
+# par l'humain, depuis la racine du projet, sur la branche main :
+#   C:\dev\saas-factory\scripts\github-setup.ps1 -Name signet -Visibility public
 # Aucun jeton n'est ecrit dans un fichier : gh range l'authentification dans
 # le gestionnaire d'identifiants de Windows.
 param(
   [Parameter(Mandatory=$true)][string]$Name,
-  [ValidateSet("private","public")][string]$Visibility = "private"
+  [ValidateSet("private","public")][string]$Visibility = "private",
+  # Reposer uniquement la protection de main et les alertes, sans recreer le depot.
+  [switch]$ProtectOnly
 )
 function Step($m) { Write-Host "`n== $m" -ForegroundColor Cyan }
 function Ok($m)   { Write-Host "   $m" -ForegroundColor Green }
@@ -16,7 +18,10 @@ Step "Pre-requis"
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { Fail "GitHub CLI absent : winget install GitHub.cli, rouvre le terminal, puis gh auth login." }
 gh auth status 2>$null | Out-Null
 if ($LASTEXITCODE -ne 0) { Fail "gh non authentifie : lance 'gh auth login' (GitHub.com, HTTPS, navigateur)." }
-if (git status --porcelain) { Fail "arbre de travail non propre : committe d'abord." }
+# Seuls les fichiers suivis comptent : un fichier non suivi (ex. .env.test.local)
+# ne part jamais sur GitHub, un push ne transmet que des commits.
+if (-not $ProtectOnly) {
+if (git status --porcelain --untracked-files=no) { Fail "modifications non committees sur des fichiers suivis : committe d'abord." }
 if ((git symbolic-ref --short HEAD) -ne "main") { Fail "place-toi sur main pour la creation initiale." }
 $owner = gh api user -q .login
 Ok "connecte en tant que $owner"
@@ -34,6 +39,8 @@ Ok "main pousse"
 Step "Reglages de fusion : squash uniquement, branche supprimee apres fusion"
 gh repo edit "$owner/$Name" --enable-squash-merge --enable-merge-commit=false --enable-rebase-merge=false --delete-branch-on-merge | Out-Null
 Ok "fait"
+
+} else { $owner = gh api user -q .login; Ok "connecte en tant que $owner (protection seule)" }
 
 Step "Protection de main (regle serveur : la seule qui ne depend pas de la discipline locale)"
 $ruleset = @'
@@ -59,16 +66,28 @@ $ruleset = @'
   ]
 }
 '@
-$tmp = New-TemporaryFile
-Set-Content $tmp $ruleset -Encoding UTF8
-gh api -X POST "repos/$owner/$Name/rulesets" --input $tmp 2>&1 | Out-Null
+$tmp = [IO.Path]::GetTempFileName()
+# Ecriture sans BOM : Set-Content -Encoding UTF8 de PowerShell 5 en ajoute un,
+# que l'API GitHub rejette comme JSON invalide.
+[IO.File]::WriteAllText($tmp, $ruleset, (New-Object System.Text.UTF8Encoding($false)))
+# Filtre en PowerShell : PowerShell 5 retire les guillemets doubles des
+# arguments passes a gh, ce qui casserait une expression jq.
+$existing = $null
+$list = gh api "repos/$owner/$Name/rulesets" 2>$null
+if ($LASTEXITCODE -eq 0 -and $list) { $existing = (($list | Out-String | ConvertFrom-Json) | Where-Object { $_.name -eq "main-protegee" } | Select-Object -First 1).id }
+if ($existing) {
+  $out = gh api -X PUT "repos/$owner/$Name/rulesets/$existing" --input $tmp 2>&1
+} else {
+  $out = gh api -X POST "repos/$owner/$Name/rulesets" --input $tmp 2>&1
+}
 $rc = $LASTEXITCODE
 Remove-Item $tmp
 if ($rc -eq 0) { Ok "main protegee : PR obligatoire, CI 'ci' verte, historique lineaire, pas de force-push ni de suppression." }
 else {
-  Warn "protection refusee par GitHub. Sur un compte gratuit, les regles de protection ne s'appliquent"
-  Warn "qu'aux depots publics : passe le depot en public, ou en GitHub Pro, puis relance ce script."
-  Warn "En attendant, seuls les hooks locaux protegent main - c'est une protection de discipline, pas de serveur."
+  Warn "protection refusee par GitHub. Reponse exacte :"
+  $out | ForEach-Object { Warn "  $_" }
+  if ($Visibility -eq "private") { Warn "Sur un compte gratuit, les regles ne s'appliquent qu'aux depots publics (ou avec GitHub Pro)." }
+  Warn "Tant que ce n'est pas regle, seuls les hooks locaux protegent main."
 }
 
 Step "Alertes de securite des dependances"
