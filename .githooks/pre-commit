@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Rituel de commit — controles rapides sur ce qui est indexe.
+# Installe par l'usine via : git config core.hooksPath .githooks
+set -uo pipefail
+fail() { printf '\n[pre-commit] REFUSE : %s\n' "$1" >&2; exit 1; }
+
+BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "")
+case "$BRANCH" in
+  main|master) fail "commit direct sur $BRANCH. Travaille sur une branche slice/NNN-nom ; main ne recoit que des PR fusionnees." ;;
+esac
+
+STAGED=$(git diff --cached --name-only --diff-filter=ACMR)
+[ -z "$STAGED" ] && exit 0
+
+# 1. Fichiers qui ne doivent jamais entrer dans le depot
+BAD=$(printf '%s\n' "$STAGED" | grep -E '(^|/)(\.env($|\.)|node_modules/|\.next/|dist/|coverage/)|\.(pem|key|p12|pfx)$|(^|/)id_(rsa|ed25519)' | grep -vE '\.example$' || true)
+[ -n "$BAD" ] && fail "fichiers interdits indexes :
+$BAD
+Retire-les : git restore --staged <fichier>"
+
+# 2. Taille : un fichier > 1 Mo dans un depot de code est presque toujours une erreur
+while IFS= read -r f; do
+  [ -f "$f" ] || continue
+  SZ=$(wc -c < "$f" | tr -d ' ')
+  [ "$SZ" -gt 1048576 ] && fail "$f fait $SZ octets (> 1 Mo)."
+done <<< "$STAGED"
+
+# 3. Secrets dans le contenu indexe (et non dans le disque : c'est l'index qui part)
+PATTERN='(sk_(live|test)_[A-Za-z0-9]{16,}|sk-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|postgres(ql)?://[^:/@ ]+:[^@/ ]{3,}@|whsec_[A-Za-z0-9]{16,})'
+# Les *.example sont des gabarits de configuration : valeurs factices par nature.
+HITS=$(git diff --cached -U0 --diff-filter=ACMR -- . ':(exclude)*.example' | grep -E '^\+' | grep -vE '^\+\+\+' | grep -nE "$PATTERN" || true)
+[ -n "$HITS" ] && fail "secret probable dans le diff indexe :
+$(printf '%s' "$HITS" | cut -c1-160)
+Deplace la valeur dans .env.local (ignore par git) et reference la variable."
+
+# 4. Outil dedie si present (plus complet que la regex ci-dessus)
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks protect --staged --no-banner --redact >/dev/null 2>&1 || fail "gitleaks a detecte un secret (lance : gitleaks protect --staged -v)."
+fi
+exit 0

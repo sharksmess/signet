@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Rituel de commit — rien ne quitte la machine sans passer les controles.
+set -uo pipefail
+fail() { printf '\n[pre-push] REFUSE : %s\n' "$1" >&2; exit 1; }
+
+while read -r LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
+  case "$REMOTE_REF" in
+    refs/heads/main|refs/heads/master)
+      # Seule exception : la creation initiale de main sur un depot vide.
+      case "$REMOTE_SHA" in *[!0]*) fail "push direct vers ${REMOTE_REF#refs/heads/}. Passe par une PR." ;; esac
+      continue ;;
+    refs/tags/*) ;;
+    refs/heads/slice/[0-9][0-9][0-9]-*|refs/heads/chore/*|refs/heads/fix/*|refs/heads/docs/*) ;;
+    *) fail "branche ${REMOTE_REF#refs/heads/} hors convention (slice/NNN-nom, fix/, chore/, docs/)." ;;
+  esac
+done
+
+[ -n "$(git status --porcelain --untracked-files=no)" ] && fail "modifications non committees : ce qui est pousse ne serait pas ce qui a ete teste."
+
+printf '[pre-push] pnpm run check\n'
+pnpm run check || fail "controle de types / lint en echec."
+printf '[pre-push] pnpm test\n'
+pnpm test || fail "tests en echec."
+exit 0

@@ -7,3 +7,17 @@ dist/
 .turbo/
 *.log
 *.tsbuildinfo
+
+# --- ajoute par saas-factory 1.3.0 ---
+.env.*.local
+*.local.ps1
+*.pem
+*.key
+build/
+out/
+coverage/
+.vercel/
+.claude/settings.local.json
+.DS_Store
+Thumbs.db
+.claude/settings.json.bak-*

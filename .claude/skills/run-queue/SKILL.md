@@ -1,6 +1,6 @@
 ---
 name: run-queue
-description: Mode autonome. Enchaine plusieurs tranches sans supervision, en worktrees paralleles, avec budget, conditions d'arret et rapport consolide. A lancer quand tu veux laisser l'usine tourner seule.
+description: Mode autonome. Enchaine plusieurs tranches sans supervision, une a la fois avec une PR chacune, avec budget, conditions d'arret et rapport consolide. A lancer quand tu veux laisser l'usine tourner seule.
 disable-model-invocation: true
 ---
 
@@ -14,15 +14,15 @@ Mode autonome. Tu enchaines des tranches sans supervision humaine. La totalite d
 ## 1. Constituer la file
 Depuis `docs/03-slices/000-backlog.md`, retiens les tranches dont toutes les dependances sont closes. Presente la file et son budget, puis demarre.
 
-Parallelise uniquement les tranches dont les perimetres de fichiers ne se recouvrent pas : compare les `.gates/scope-*.txt`. Deux tranches qui touchent la meme table sont sequentielles, meme si elles semblent independantes fonctionnellement.
+Les tranches s'executent **l'une apres l'autre**, chacune sur sa branche depuis `main`. Une tranche dont une dependance a une PR encore ouverte ne demarre pas : tu t'arretes et signales que la fusion humaine est attendue. Pas de parallelisme dans cette version de l'usine : il a produit plus de travail perdu que de temps gagne.
 
 ## 2. Boucle, par tranche
 1. `/saas-factory:slice` pour ouvrir et rediger le contrat.
 2. `test-writer` pour les tests.
-3. `slice-implementer` en worktree.
+3. `slice-implementer` sur la branche de la tranche.
 4. `security-auditor` et `contract-guardian` en parallele.
 5. `scripts/close-slice.sh`.
-6. Si succes : commit sur une branche dediee, tranche suivante. Si echec : voir conditions d'arret.
+6. Si succes : `scripts/ship-slice.sh`, puis tranche suivante si ses dependances sont fusionnees. Si echec : voir conditions d'arret.
 
 ## 3. Conditions d'arret — non negociables
 Arrete-toi immediatement et attends l'humain si :
@@ -37,7 +37,7 @@ Arrete-toi immediatement et attends l'humain si :
 
 La regle qui compte : **en cas de doute, tu t'arretes.** Le cout d'une pause est quelques heures d'attente. Le cout d'une decision metier inventee et propagee sur cinq tranches est une reecriture. L'asymetrie est ecrasante et elle doit dicter ton comportement.
 
-Ne fusionne jamais sur la branche principale en mode autonome. Chaque tranche vit sur sa branche jusqu'a revue humaine.
+Tu ne fusionnes jamais : `gh pr merge` et tout push vers `main` sont bloques. Chaque tranche attend sa PR relue et fusionnee par l'humain.
 
 ## 4. Journal
 Tiens `docs/04-runbooks/autonomous-run-<date>.md` a jour au fil de l'eau, pas a la fin : si la session est interrompue, le journal doit permettre de reprendre. Par tranche : issue, duree, verdicts d'audit, decisions prises, points a l'attention.
