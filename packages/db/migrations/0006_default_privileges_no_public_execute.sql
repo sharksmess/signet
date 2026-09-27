@@ -1,0 +1,24 @@
+-- Migration 6 — MINEUR-7 (docs/04-runbooks/audits/audit-001.md) : le
+-- REVOKE EXECUTE ... FROM PUBLIC de la migration 0005 n'etait qu'un
+-- instantane, applique une fois aux fonctions qui existaient a cet instant.
+-- Toute fonction SECURITY DEFINER que la tranche 002 ajoutera
+-- (signet.create_invitation, signet.accept_invitation,
+-- signet.lookup_invitation) naitrait avec EXECUTE de nouveau acquis a
+-- PUBLIC (comportement par defaut de Postgres pour CREATE FUNCTION),
+-- rouvrant MAJEUR-1 sans qu'aucun test ne le detecte.
+--
+-- ALTER DEFAULT PRIVILEGES rend ce refus permanent, pour toute fonction
+-- future du schema, sans avoir a y repenser migration apres migration.
+--
+-- `FOR ROLE` est deliberement omis : sans cette clause, Postgres scope la
+-- regle au role qui EXECUTE cette instruction — c'est-a-dire, pour toute
+-- migration a venir, le meme role bootstrap qui joue deja
+-- DATABASE_URL_MIGRATE (0001 : "typiquement le superuser d'une instance
+-- locale ou jetable de developpement/test"). Nommer ce role explicitement
+-- aurait fige un nom d'installation arbitraire dans une migration versionnee
+-- ; omettre la clause suit au contraire, sans le nommer, quel que soit le
+-- role qui joue reellement les migrations futures — a condition que ce
+-- reste le meme d'une migration a l'autre, hypothese deja faite par tout le
+-- reste de ce fichier de migrations.
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA signet REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;

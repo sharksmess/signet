@@ -180,4 +180,39 @@ describe("Invariants de schema (anti-regression, tranche 001)", () => {
       }),
     ).rejects.toMatchObject({ code: "42501" });
   });
+
+  /**
+   * Anti-regression audit-001 (MINEUR-7, migration 0006) : REVOKE EXECUTE ...
+   * FROM PUBLIC (0005) n'agissait que sur les fonctions existant a cet
+   * instant. Sans ALTER DEFAULT PRIVILEGES, toute fonction SECURITY DEFINER
+   * ajoutee par une tranche future (invitations, tranche 002...) naitrait de
+   * nouveau avec EXECUTE accorde a PUBLIC, rouvrant MAJEUR-1 en silence. Ce
+   * test cree une fonction APRES coup, dans une transaction jetable
+   * annulee ensuite (le pool `BYPASSRLS`, superuser, joue ici exactement le
+   * role de la connexion de migration — meme role, ADR-0007/0006), et
+   * verifie directement le catalogue plutot que de tenter une execution sous
+   * un role tiers : has_function_privilege('public', ..., 'EXECUTE') est la
+   * question posee par MINEUR-7 elle-meme, sans dependre d'un role de test
+   * supplementaire.
+   */
+  it("ALTER DEFAULT PRIVILEGES (migration 0006) : une fonction signet creee apres coup n'est pas executable par PUBLIC", async () => {
+    const functionName = `signet.test_default_privileges_probe_${Date.now()}`;
+
+    try {
+      const hasPublicExecute = await asBypassRls(async (client) => {
+        await client.query(`CREATE FUNCTION ${functionName}() RETURNS void LANGUAGE sql AS $$ SELECT 1 $$`);
+        const result = await client.query<{ has_execute: boolean }>(
+          "SELECT has_function_privilege('public', $1::regprocedure, 'EXECUTE') AS has_execute",
+          [`${functionName}()`],
+        );
+        return result.rows[0]?.has_execute;
+      });
+
+      expect(hasPublicExecute).toBe(false);
+    } finally {
+      await asBypassRls(async (client) => {
+        await client.query(`DROP FUNCTION IF EXISTS ${functionName}()`);
+      });
+    }
+  });
 });

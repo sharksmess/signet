@@ -19,3 +19,20 @@ Ordre de dependance technique d'abord, risque decroissant en departage a profond
 - Aucune tranche ne couvre l'edition de lien/collection ni la suppression d'un lien isole : hors-perimetre explicite du PRD (US-10 ne couvre que la suppression d'une collection entiere).
 - Toute tranche qui ferait apparaitre une fonctionnalite listee en hors-perimetre (recherche, tags, import Slack, etc.) est un signal du risque #1 du PRD (derive de perimetre) et doit etre refusee ou renvoyee en backlog explicite, pas glissee dans une tranche existante.
 - Le detail complet de chaque tranche (perimetre fichiers, contrat de donnees, contrat d'API, criteres d'acceptation AC1-AC5, anti-regression) est ecrit au moment de son ouverture, au format `templates/SLICE.md`, dans `docs/03-slices/<id>-<nom>.md`.
+
+## Questions d'architecture ouvertes
+
+Decisions qui ne bloquaient pas la cloture de la tranche qui les a fait apparaitre (aucun constat CRITIQUE ni MAJEUR associe), mais qui doivent etre tranchees avant que d'autres tranches ne reproduisent le meme patron.
+
+### MINEUR-1 (audit-001.md, tranche 001) — La RLS n'est pas une defense en profondeur pour les routes a `organizationId` dans le chemin
+
+**Constat** : dans `apps/web/src/lib/db.ts` (`withTenant`), le contexte tenant (`SET LOCAL app.organization_id`) est pose **avant** d'invoquer la fonction appelante, a partir de la valeur `organizationId` que celle-ci lui passe. Pour `PATCH /api/organizations/:organizationId` (`apps/web/src/lib/organizations.ts`, `renameOrganization`), cette valeur vient directement du parametre d'URL — entierement choisie par l'appelant, validee seulement pour sa forme (UUID) par le schema Zod, jamais pour son appartenance avant cet appel. La verification d'appartenance (`SELECT role FROM member WHERE organization_id = $1 AND user_id = $2`) s'execute *ensuite*, a l'interieur de la transaction, donc *apres* que le contexte RLS ait deja ete pose sur l'organisation demandee par l'attaquant.
+
+**Consequence exacte** : les politiques RLS `organization_id = signet.current_org()` deviennent tautologiques dans ce chemin — elles valident l'organisation que l'appelant vient de demander, pas celle a laquelle il appartient reellement. La seule protection reelle contre un acces inter-tenant est le filtre explicite `AND user_id = $2` de cette unique requete. AC5 passe aujourd'hui parce que cette requete est bien ecrite, mais ADR-0004 (point 4) affirme que « le filtre `organization_id` explicite et la politique RLS restent la defense de dernier recours si une des etapes precedentes est contournee par une erreur de code » — cette propriete ne tient pas avec un contexte derive du chemin : une route future qui lirait `member`, `organization` ou `organization_link_usage` avant (ou sans) le controle d'appartenance obtiendrait un acces inter-tenant complet, sans qu'aucune politique ne s'y oppose. Cette tranche est le gabarit que toutes les suivantes copieront — a trancher **avant la tranche 002**, qui reutilisera le meme patron `withTenant`.
+
+**Options identifiees (audit-001.md, non arbitrees)** :
+1. Poser `app.organization_id` seulement *apres* la verification d'appartenance (le controle redevient anterieur au contexte, la RLS redevient un filet reel).
+2. Deriver le contexte de `session.active_organization_id` (ERD §2.2 : « c'est cette colonne qui alimente le `SET LOCAL app.organization_id` ») plutot que du parametre d'URL.
+3. Conserver le patron actuel (Option B d'ADR-0004), mais corriger le point 4 d'ADR-0004 pour ne plus presenter la RLS comme une defense independante sur ces routes, et rendre le controle d'appartenance obligatoire et teste pour chaque route qui touche une ressource a `organizationId` dans le chemin.
+
+Decision d'architecture : a trancher par un humain, pas a corriger silencieusement dans une tranche.
