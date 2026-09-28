@@ -18,6 +18,9 @@ Ordre de dependance technique d'abord, risque decroissant en departage a profond
 
 - Aucune tranche ne couvre l'edition de lien/collection ni la suppression d'un lien isole : hors-perimetre explicite du PRD (US-10 ne couvre que la suppression d'une collection entiere).
 - Toute tranche qui ferait apparaitre une fonctionnalite listee en hors-perimetre (recherche, tags, import Slack, etc.) est un signal du risque #1 du PRD (derive de perimetre) et doit etre refusee ou renvoyee en backlog explicite, pas glissee dans une tranche existante.
+- Avant tout choix d'hebergement (audit-001 MINEUR-11) : fixer l'en-tete IP de confiance et les proxys de confiance de better-auth (`advanced.ipAddress.ipAddressHeaders`/`trustedProxies`) et le consigner dans ADR-0010. Sans cela, le limiteur de debit est contournable ou bloque tous les utilisateurs selon le proxy.
+- Migration 0009 (audit-001 MINEUR-10) : reimposer les attributs des quatre roles `signet_*` (`ALTER ROLE ... NOBYPASSRLS NOSUPERUSER ...`) et verifier par test de catalogue `rolbypassrls`/`rolsuper`/appartenances : un role preexistant n'est aujourd'hui jamais verifie.
+- Corriger `.claude/rules/drizzle-postgres.md:22` : les privileges par defaut visent le role qui CREE les fonctions (le role de migration), pas leur proprietaire final ; `FOR ROLE signet_definer` serait sans effet (audit-001, passe 4).
 - Reevaluer ESLint 10 (`latest`) au passage a Next 16 : ESLint reste en 9.39.5 parce que `eslint-config-next@15.5.26` echoue sous ESLint 10 (ADR-0009). A traiter avec la montee de Next, fin de vie de la ligne 15 en octobre 2026 (ADR-0008).
 - Le detail complet de chaque tranche (perimetre fichiers, contrat de donnees, contrat d'API, criteres d'acceptation AC1-AC5, anti-regression) est ecrit au moment de son ouverture, au format `templates/SLICE.md`, dans `docs/03-slices/<id>-<nom>.md`.
 

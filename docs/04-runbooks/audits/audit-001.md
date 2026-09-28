@@ -365,3 +365,57 @@ Point qui relevait probablement de MINEUR-7 et que je re-constate en tout etat d
 MAJEUR-1, MAJEUR-2 et MAJEUR-3 sont clos. Les deux nouveaux tests protegent la bonne garantie, dans le bon sens, et echoueraient tous deux sans le correctif 0005. La correction d'ADR-0007 est fidele a l'implementation.
 
 AUDIT: PASS
+
+---
+
+## Passe 4 — adoption de l'usine 1.3 (diff ccf260c..HEAD, 2026-09-28)
+
+**Perimetre** : `git diff ccf260c..HEAD`. Relus : migrations 0001, 0006, 0007, 0008, `packages/db/src/migrate.ts`, `apps/web/src/lib/auth-rate-limit.ts`, `apps/web/src/lib/auth.ts`, `tests/_factory/*`, `tests/helpers/*`, `tests/organizations/*`, `.github/workflows/ci.yml`, ADR-0010 ; code de better-auth 1.7.5 (`dist/api/rate-limiter/index.mjs`, `dist/context/create-context.mjs`, `dist/utils/wildcard.mjs`, `@better-auth/core/dist/utils/ip.mjs`). Aucune base Postgres lancee par l'auditeur : les conclusions sur le catalogue reposent sur la lecture et la semantique documentee de Postgres, et sur l'etat transmis (46/46 verts, `pnpm run check` vert).
+
+### Constats
+
+**MINEUR-10 — Roles idempotents : un role preexistant n'est jamais verifie**
+- **Emplacement** : `packages/db/migrations/0001_roles_schema_context.sql:34-72` (quatre blocs `DO $$ IF NOT EXISTS (SELECT 1 FROM pg_roles ...)`).
+- **Attributs** : strictement identiques a la version precedente (`signet_owner`/`signet_app`/`signet_auth` : `LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS` ; `signet_definer` : `NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS`). Aucune regression sur base neuve.
+- **Defaut** : la garde teste le nom, pas les attributs. Un role deja present sur le cluster avec `BYPASSRLS`, `SUPERUSER`, `LOGIN` sur `signet_definer`, ou membre d'un role privilegie, passe sans signal. Aucun test ne lit `pg_roles.rolbypassrls`/`rolsuper` ni `pg_auth_members`.
+- **Scenario** (mauvaise configuration, pas attaquant externe) : `signet_app` cree a la main avec `BYPASSRLS` avant la premiere migration ; `pnpm db:migrate` reussit ; l'application ignore toutes les politiques RLS, l'isolation tenant ne tient plus qu'aux `WHERE` applicatifs. La CI (cluster neuf) ne le voit pas.
+- **Gravite** : MINEUR — exige un acces administrateur, mais la defense echoue ouverte et en silence.
+- **Remediation** : nouvelle migration (0001 figee) reimposant les attributs par `ALTER ROLE ... NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE [NO]LOGIN`, ou levant si `pg_roles`/`pg_auth_members` divergent ; plus une assertion de catalogue (`rolbypassrls = false AND rolsuper = false`, aucune appartenance) pour les quatre roles.
+- Remarque de processus (auditeur) : `migrate.ts` enregistre un nom sans somme de controle, une base deja migree ne voit donc jamais une modification de 0001. (Note de l'orchestrateur : 0001 n'est pas dans `main` et sa correction en place est autorisee par `docs/04-runbooks/consigne-adoption-1.3.md`, etape 1.)
+
+**MINEUR-11 — Limiteur better-auth : IP client non resolue de maniere fiable hors test**
+- **Emplacement** : `apps/web/src/lib/auth.ts:36-50` (`advanced` sans `ipAddress.ipAddressHeaders` ni `trustedProxies`) ; mecanisme dans `@better-auth/core/dist/utils/ip.mjs` (`getIP`) et `better-auth/dist/api/rate-limiter/index.mjs` (`resolveRateLimitConfig`).
+- **Comportement** : seul `x-forwarded-for` est lu ; sans `trustedProxies`, il n'est accepte que s'il porte **une seule** valeur IP valide, sinon `null` (repli `127.0.0.1` seulement en development/test). En production, `null` donne la cle partagee `no-trusted-ip|<chemin>`. Cle `ip|chemin`, stockage en memoire du processus.
+- **Scenarios** (hebergement non encore fixe) : (a) `next start` expose directement : un `X-Forwarded-For` aleatoire a valeur unique par tentative contourne le limiteur (bourrage d'identifiants sur `/sign-in/email`), tandis que les clients legitimes partagent un seul compteur ; (b) proxy qui ajoute a l'en-tete (nginx `$proxy_add_x_forwarded_for`) : deux valeurs, donc `null`, tout le monde partage le compteur, 3 requetes par 10 s suffisent a bloquer connexion et inscription pour tous ; (c) hebergeur qui remplace l'en-tete : fonctionne, par instance.
+- **Gravite** : MINEUR tant qu'aucune cible de deploiement n'est fixee ; devient MAJEUR des qu'un deploiement de type (a) ou (b) est choisi sans cette configuration. Pas une regression du diff, mais ADR-0010 promet « 3 par 10 s et par IP » sans garantir d'ou vient l'IP.
+- **Remediation** : completer ADR-0010 par une decision sur l'en-tete et les proxys de confiance (`advanced.ipAddress.ipAddressHeaders`/`trustedProxies`), a poser en condition de mise en production dans « Signal de reexamen ».
+
+### Points verifies sans constat
+
+- **0008 sans `FOR ROLE` : correcte.** Les privileges par defaut s'appliquent a la creation, selon le role createur, ici le role de migration (le globalSetup passe `testDbUrl()` comme `DATABASE_URL_MIGRATE`, et `invariants.test.ts` cree sa sonde sous ce meme role). `ALTER FUNCTION ... OWNER TO signet_definer` transfere les entrees du proprietaire sans rajouter PUBLIC. `FOR ROLE signet_definer` ne changerait rien : ce role est `NOLOGIN` et ne cree aucune fonction, ce serait le meme no-op silencieux que 0006. **L'ecart est dans la regle** : `.claude/rules/drizzle-postgres.md:22` (« `FOR ROLE <proprietaire>` ») est faux pour le patron « creer puis `ALTER OWNER` » ; il faut y lire « le role qui cree les fonctions ». Une regression serait detectee par `invariants.test.ts:198` et `db-catalog.test.ts`. Justification de l'echec de 0006 (une revocation par schema ne retire pas un defaut global) exacte. Limite : si le role de migration change en cours de vie d'une base, les nouvelles fonctions redeviennent executables par PUBLIC ; filet : `REVOKE` par fonction et test de catalogue.
+- **0007** : le superutilisateur ignore RLS meme forcee, `migrate.ts` continue de lire et d'ecrire `_signet_migrations`. `REVOKE ALL ... FROM PUBLIC` sans effet reel (aucun privilege PUBLIC par defaut sur une table) mais sans cout. Rien d'autre d'ouvert. Avec un role de migration non superutilisateur et proprietaire (Postgres manage), l'`INSERT` de la ligne 0007 serait refuse par RLS : echec bruyant avec rollback, pas une faille.
+- **Limiteur (`auth-rate-limit.ts`)** : enums Zod exacts (`OFF`, `off `, vide, `staging` levent) ; `off` seulement avec `test` ; defauts `on`/`production` ; `enabled` explicite, donc le `?? isProduction` de better-auth ne joue plus ; aucun plugin ni regle-fonction ne renvoie `false` ; `disableIpTracking` non active. Messages d'erreur limites aux deux variables, leves au demarrage, jamais renvoyes au client. `customRules["/sign-up/*"]` couvre `/sign-up/email` (`normalizePathname` retire `/api/auth`, `wildcardMatch` fait correspondre `*` a un segment) ; la regle integree donnerait la meme limite ; sign-in, change-password et change-email restent couverts par la regle integree. Les tests purs couvrent les six combinaisons de l'ADR.
+- **CI** : `ci_only_not_a_secret` et `ci-only-better-auth-secret-not-a-real-secret-0001` sont factices, pour un Postgres jetable ; `permissions: contents: read`, aucun secret de depot consomme ; gitleaks present. `APP_ENV=test` ne peut pas fuir vers un deploiement : aucun job de deploiement, `next.config.ts` sans bloc `env` ni `NEXT_PUBLIC_*`, valeur relue au chargement du module et non figee au build. Risque residuel deja note dans l'ADR : un hebergeur qui poserait lui-meme `APP_ENV`.
+- **Tests** : aucune assertion d'isolation par BYPASSRLS (`isolation.test.ts` passe par `asTenant`/`signet_app` et `asTableOwner`) ; BYPASSRLS reserve a l'arrangement (`addMemberDirect`) et aux lectures boite blanche, desormais scopees a l'utilisateur ou au nom du test. `testRoleUrl` refuse toute URL hors `TEST_DATABASE_NAME` ; `recreateTestDatabase` exige le suffixe `_test`.
+- **Dependances** : `pnpm audit --prod` et `pnpm audit` : aucune vulnerabilite connue.
+
+### Statut des MINEUR precedents touches par ce diff
+
+| Constat | Statut |
+|---|---|
+| MINEUR-7 (fonction future executable par PUBLIC) | **Clos** par 0008. `invariants.test.ts:198` distingue les deux etats (sans 0008 : `pg_default_acl` vide, le test echoue ; avec 0008 : il passe). `db-catalog.test.ts` couvre toutes les `SECURITY DEFINER` de `signet` en CI (`TEST_APP_SCHEMAS=signet,public`). Detail cosmetique : le titre du test cite « migration 0006 » au lieu de 0008. |
+| MINEUR-5 (pas de limite de debit sur `POST /api/organizations`) | Inchange : le limiteur better-auth ne couvre que `/api/auth/*`. |
+| MINEUR-6 (variables d'environnement sans schema) | Partiellement traite : `AUTH_RATE_LIMIT` et `APP_ENV` passent par Zod ; `BETTER_AUTH_SECRET` et `DATABASE_URL_*` restent en `requiredEnv`. |
+| MINEUR-1, 2, 3 (elargi), 4, 9 | Inchanges : perimetre non touche. |
+
+### Synthese
+
+| Gravite | Nombre |
+|---|---|
+| CRITIQUE | 0 |
+| MAJEUR | 0 |
+| MINEUR | 9 ouverts : 1, 2, 3 (elargi), 4, 5, 9 inchanges ; 6 partiel ; **10** et **11** nouveaux. MINEUR-7 clos. |
+
+Ordre recommande : MINEUR-11 avant tout choix d'hebergement ; MINEUR-10 par une migration 0009 avec une assertion sur le catalogue des roles ; corriger `drizzle-postgres.md:22` pour ne pas reintroduire le no-op de 0006.
+
+AUDIT: PASS
