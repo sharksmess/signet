@@ -33,7 +33,7 @@ describe("Isolation tenant — organization / member / organization_link_usage /
     const rows = await asTenant(
       { organizationId: orgA.organizationId, userId: orgA.owner.userId },
       async (client) => {
-        const result = await client.query("SELECT id FROM organization WHERE id = $1", [
+        const result = await client.query<{ id: string }>("SELECT id FROM organization WHERE id = $1", [
           orgB.organizationId,
         ]);
         return result.rows;
@@ -66,7 +66,7 @@ describe("Isolation tenant — organization / member / organization_link_usage /
     const rows = await asTenant(
       { organizationId: orgA.organizationId, userId: orgA.owner.userId },
       async (client) => {
-        const result = await client.query(
+        const result = await client.query<{ id: string }>(
           "SELECT id FROM member WHERE organization_id = $1",
           [orgB.organizationId],
         );
@@ -83,7 +83,7 @@ describe("Isolation tenant — organization / member / organization_link_usage /
     const rows = await asTenant(
       { organizationId: orgA.organizationId, userId: orgA.owner.userId },
       async (client) => {
-        const result = await client.query(
+        const result = await client.query<{ organization_id: string }>(
           "SELECT organization_id FROM organization_link_usage WHERE organization_id = $1",
           [orgB.organizationId],
         );
@@ -100,7 +100,7 @@ describe("Isolation tenant — organization / member / organization_link_usage /
     const rows = await asTenant(
       { organizationId: orgA.organizationId, userId: orgA.owner.userId },
       async (client) => {
-        const result = await client.query(
+        const result = await client.query<{ organization_id: string }>(
           "SELECT organization_id FROM subscription WHERE organization_id = $1",
           [orgB.organizationId],
         );
@@ -123,7 +123,7 @@ describe("Isolation tenant — organization / member / organization_link_usage /
     const rows = await asTenant(
       { organizationId: orgA.organizationId, userId: memberSession.userId },
       async (client) => {
-        const result = await client.query(
+        const result = await client.query<{ organization_id: string }>(
           "SELECT organization_id FROM subscription WHERE organization_id = $1",
           [orgA.organizationId],
         );
@@ -138,7 +138,7 @@ describe("Isolation tenant — organization / member / organization_link_usage /
     const { orgA } = await createTwoOrganizationsFixture();
 
     const rows = await asTenant({}, async (client) => {
-      const result = await client.query("SELECT id FROM organization WHERE id = $1", [
+      const result = await client.query<{ id: string }>("SELECT id FROM organization WHERE id = $1", [
         orgA.organizationId,
       ]);
       return result.rows;
@@ -155,7 +155,7 @@ describe("Isolation tenant — organization / member / organization_link_usage /
     // exempterait ce role de toute politique par defaut (ERD §1) : ce test
     // echoue si `FORCE ROW LEVEL SECURITY` a ete retire d'`organization`.
     const rows = await asTableOwner(async (client) => {
-      const result = await client.query("SELECT id FROM organization WHERE id = $1", [
+      const result = await client.query<{ id: string }>("SELECT id FROM organization WHERE id = $1", [
         orgA.organizationId,
       ]);
       return result.rows;

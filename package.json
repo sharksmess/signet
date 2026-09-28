@@ -3,22 +3,28 @@
   "private": true,
   "version": "0.1.0",
   "engines": {
-    "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
+    "node": ">=24"
   },
   "scripts": {
     "dev": "pnpm --filter @signet/web dev",
     "build": "pnpm --filter @signet/web build",
     "typecheck": "tsc -p tsconfig.json --noEmit && pnpm --filter @signet/web run typecheck && pnpm --filter @signet/db run typecheck",
     "test": "vitest run",
+    "lint": "eslint .",
+    "check": "pnpm typecheck && pnpm lint",
     "db:generate": "pnpm --filter @signet/db run generate",
     "db:migrate": "pnpm --filter @signet/db run migrate"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "3.3.7",
     "@types/node": "22.19.21",
     "@types/pg": "8.11.10",
     "dotenv": "16.4.7",
+    "eslint": "9.39.5",
+    "eslint-config-next": "15.5.26",
     "pg": "8.13.1",
     "typescript": "6.0.3",
+    "typescript-eslint": "8.70.1",
     "vitest": "5.0.1",
     "zod": "4.6.5"
   }

@@ -146,7 +146,7 @@ describe("POST /api/organizations", () => {
     const organizationId = (body as { id: string }).id;
 
     const rows = await asTenant({ userId: session.userId }, async (client) => {
-      const result = await client.query(
+      const result = await client.query<{ id: string }>(
         "SELECT id FROM signet.organizations_for_user($1::uuid)",
         [session.userId],
       );
