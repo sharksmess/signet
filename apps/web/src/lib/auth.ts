@@ -16,6 +16,7 @@
  * verite, stable independamment de la version de l'adaptateur Kysely interne.
  */
 import { betterAuth } from "better-auth";
+import { buildRateLimitOptions } from "./auth-rate-limit";
 import { getAuthPool } from "./db";
 import { uuidv7 } from "./uuid";
 
@@ -33,6 +34,10 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
   },
+  // Actif partout, desactivable uniquement en APP_ENV=test (ADR-0010) ;
+  // evalue au chargement du module : une configuration invalide bloque le
+  // demarrage.
+  rateLimit: buildRateLimitOptions(process.env),
   advanced: {
     database: {
       // UUIDv7 cote applicatif (ERD "Prerequis d'infrastructure"),

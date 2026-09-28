@@ -31,6 +31,10 @@ jobs:
       # et psql) : aucune URL ne contient d'identifiants, meme factices.
       PGPASSWORD: ci_only_not_a_secret
       TEST_DATABASE_ADMIN_URL: postgresql://postgres@localhost:5432/postgres
+      # Limiteur de debit better-auth coupe pour la suite de tests : accepte
+      # seulement avec APP_ENV=test, sinon le serveur refuse de demarrer (ADR-0010).
+      AUTH_RATE_LIMIT: "off"
+      APP_ENV: test
     steps:
       - uses: actions/checkout@v5
         with:
