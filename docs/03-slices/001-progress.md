@@ -3,10 +3,11 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : tests verts (46/46), `pnpm run check` vert ; re-audit en cours (adoption usine 1.3, `docs/04-runbooks/consigne-adoption-1.3.md`)
+- Statut : close (bc7066e) — PR ouverte par `scripts/ship-slice.sh` (adoption usine 1.3, `docs/04-runbooks/consigne-adoption-1.3.md`)
 - Branche : slice/001-creation-organisation
-- Dernier commit : fda2959 feat(auth): limiteur de debit coupe seulement en APP_ENV=test ; env CI et `.env.test.example` committes a la suite
-- Prochaine etape : `scripts/close-slice.sh` (arbre propre requis), puis `scripts/ship-slice.sh`
+- Dernier commit : bc7066e chore(slice-001): cloturer la tranche
+- Prochaine etape : aucune pour l'agent ; CI puis relecture et fusion (squash) par l'humain
+- Cloture 2026-09-28 : `close-slice.sh` vert (check, 46/46, `pnpm audit --prod` propre, verdicts PASS), commit bc7066e
 - Re-audit 2026-09-28 : AUDIT: PASS (passe 4 : MINEUR-10 et 11 nouveaux, MINEUR-7 clos) ; CONTRACTS: PASS (passe 2, aucune rupture). Suites portees au backlog.
 
 ## Couches
