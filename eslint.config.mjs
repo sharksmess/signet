@@ -11,9 +11,11 @@ const compat = new FlatCompat({ baseDirectory: root });
 export default tseslint.config(
   {
     // docs/templates : gabarits de l'usine, pas du code du projet.
+    // next-env.d.ts : genere par next build, ignore par git, a ne pas editer.
     ignores: [
       "**/node_modules/**",
       "**/.next/**",
+      "**/next-env.d.ts",
       "**/dist/**",
       "packages/db/migrations/**",
       ".claude/**",
