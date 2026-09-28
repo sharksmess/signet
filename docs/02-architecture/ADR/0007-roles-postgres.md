@@ -65,6 +65,10 @@ des objets qu'elle a crees pour leur compte.
 - `TEST_DATABASE_URL_TABLE_OWNER` doit pointer vers `signet_owner`, jamais vers le role bootstrap
   utilise par `DATABASE_URL_MIGRATE` : sinon le test anti-regression `FORCE ROW LEVEL SECURITY`
   redevient un test qui ne peut jamais echouer.
+- `public._signet_migrations` (historique tenu par `packages/db/src/migrate.ts`) a RLS activee et
+  forcee sans aucune politique, et aucun privilege pour PUBLIC (migration 0007) : seules les
+  migrations lancees en superutilisateur peuvent la lire ou l'ecrire. Jouer les migrations sous un
+  role non superuser exigerait de rouvrir cette ADR.
 - Un role supplementaire a documenter et dont il faut fixer le mot de passe (cf. CLAUDE.md :
   aucun mot de passe n'est genere ni ecrit en dur dans les migrations, c'est une operation humaine
   hors version control).

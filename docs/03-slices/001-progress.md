@@ -5,8 +5,8 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 ## Etat
 - Statut : en cours (adoption de l'usine 1.3, cf. `docs/04-runbooks/consigne-adoption-1.3.md`)
 - Branche : slice/001-creation-organisation
-- Dernier commit : 20f4791 test: brancher la suite sur l'infrastructure de test de l'usine 1.3 (etape 2) ; etape 3 (lint) committee a la suite
-- Prochaine etape : etape 4 — `pnpm test` puis `pnpm run check`, migration 0007 (`_signet_migrations` fermee) si db-catalog le confirme
+- Dernier commit : a50feeb build: lint ESLint type-aware et script check (ADR-0009) (etape 3) ; migrations 0007/0008 committees a la suite
+- Prochaine etape : decision humaine sur le limiteur de debit better-auth (voir Blocages), puis suite complete verte et `pnpm run check`
 
 ## Couches
 Reconstitue depuis `git log main..HEAD` et l'historique anterieur :
@@ -20,6 +20,7 @@ Reconstitue depuis `git log main..HEAD` et l'historique anterieur :
 Audits : premier passage security-auditor et contract-guardian committe en `ccf260c` ; re-audit attendu a l'etape 5.
 
 ## Blocages
+- `pnpm test` : 26 tests HTTP en echec, tous « Echec de l'inscription de test (429) : Too many requests ». Cause : le serveur de l'usine tourne en `NODE_ENV=production`, et better-auth 1.7.5 active alors son limiteur (`enabled: options.rateLimit?.enabled ?? isProduction`) avec une regle speciale de 3 `/sign-up` par 10 s et par IP. La suite en fait des dizaines. C'est un controle de securite de production : son contournement en test est une decision humaine.
 - `pnpm typecheck` : 3 erreurs TS2345 dans `tests/_factory/env.ts:34` et `tests/_factory/global-setup.ts:25,32`, presentes des l'installation de l'usine (b2c0f32), independantes de la tranche. Cause : `requireEnv` renvoie `Record<string, string>`, lu en `string | undefined` sous `noUncheckedIndexedAccess`. Correctif d'une ligne (signature generique `requireEnv<const N extends string>(names: readonly N[]): Record<N, string>`) refuse par le hook : `tests/_factory/**` est hors de `scope-001.txt`. Options : l'humain ajoute `tests/_factory/env.ts` au perimetre, ou corrige l'usine en amont. Exclure `_factory` du tsconfig serait une suppression de verification de type : ecarte.
 - `pnpm lint` : 1 erreur dans `tests/_factory/global-setup.ts:151` (`require-await`, fonction de teardown `async` sans `await`), meme cause de perimetre. Correctif : retirer `async` et renvoyer `Promise.resolve()`, ou l'humain etend le perimetre. Tout le reste du depot passe le lint.
 ## Decisions
@@ -29,4 +30,6 @@ Audits : premier passage security-auditor et contract-guardian committe en `ccf2
 - Totaux globaux remplaces : 422 -> organisations dont l'utilisateur du test est membre (= 0) ; 401 -> organisations portant un nom unique au test (= 0).
 - Lint (ADR-0009) : ESLint 9.39.5 (ligne `maintenance`), pas 10.11.0 (`latest`) : `eslint-config-next@15.5.26` plante sous 10 (« Failed to patch ESLint because the calling module was not recognized »), incompatibilite reproduite. Ligne de reevaluation ajoutee au backlog. Script `postinstall` d'`unrs-resolver` refuse explicitement (`allowBuilds: false`), binding natif deja fourni par la dependance optionnelle.
 - Lint des tests : 8 `no-unsafe-return` corriges en typant les lignes des `client.query<...>` (aucune regle desactivee).
+- Migration 0007 (contenu valide par l'humain) : `_signet_migrations` avec RLS activee et forcee, sans politique, `REVOKE ALL` a PUBLIC. Le constat db-catalog a ete reproduit sans 0007, puis leve avec elle. Ligne ajoutee a ADR-0007.
+- Migration 0008 (constat, non demandee explicitement) : 0006 n'a jamais eu d'effet. Un `ALTER DEFAULT PRIVILEGES IN SCHEMA` ne peut pas retirer un privilege accorde par defaut globalement, et `pg_default_acl` etait vide apres migration. Revocation reprise au niveau global. Le test anti-regression de 0006 echouait, il passe desormais.
 - `packages/db/src/migrate.ts` inchange : il lit deja `DATABASE_URL_MIGRATE`, et `dotenv/config` n'ecrase pas la valeur fournie par le globalSetup.

@@ -1,0 +1,26 @@
+-- Migration 8 — la migration 0006 n'a jamais eu d'effet.
+--
+-- Constat (tests/organizations/invariants.test.ts, suite lancee par le
+-- globalSetup de l'usine 1.3 le 2026-09-28) : une fonction creee dans
+-- `signet` apres coup reste executable par PUBLIC, et `pg_default_acl` est
+-- VIDE sur une base fraichement migree.
+--
+-- Cause : des privileges par defaut propres a un schema (`IN SCHEMA`) ne font
+-- que s'AJOUTER aux privileges par defaut globaux ; ils ne peuvent pas retirer
+-- ce que ces derniers accordent (documentation Postgres, ALTER DEFAULT
+-- PRIVILEGES : « you cannot revoke privileges per-schema if they are granted
+-- globally »). EXECUTE a PUBLIC sur les fonctions est un defaut GLOBAL
+-- integre : `... IN SCHEMA signet REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC`
+-- (0006) ne retirait rien et n'a laisse aucune entree dans le catalogue.
+--
+-- Correctif : la meme revocation, au niveau global (sans `IN SCHEMA`). Elle
+-- vaut pour cette base et pour le role qui joue les migrations (meme
+-- raisonnement que 0006 pour l'absence de `FOR ROLE`), c'est-a-dire le role
+-- qui cree toutes les fonctions du schema avant d'en transferer la propriete
+-- a signet_definer. Les privileges de la fonction sont fixes a sa creation :
+-- ce transfert ulterieur ne les rouvre pas.
+--
+-- 0006 n'est pas modifiee (migration deja jouee) ; son instruction reste
+-- inoffensive.
+
+ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
