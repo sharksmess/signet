@@ -13,7 +13,7 @@ export function loadTestEnv(): void {
   if (existsSync(file)) process.loadEnvFile(file);
 }
 
-export function requireEnv(names: readonly string[]): Record<string, string> {
+export function requireEnv<const N extends string>(names: readonly N[]): Record<N, string> {
   const missing = names.filter((n) => !process.env[n]);
   if (missing.length > 0) {
     throw new Error(
@@ -22,7 +22,7 @@ export function requireEnv(names: readonly string[]): Record<string, string> {
         `(l'humain le fait ; un agent ne lit ni n'ecrit ce fichier).`,
     );
   }
-  return Object.fromEntries(names.map((n) => [n, process.env[n] as string]));
+  return Object.fromEntries(names.map((n) => [n, process.env[n] as string])) as Record<N, string>;
 }
 
 /** URL d'administration pointee sur la base de test (jamais la base de dev). */

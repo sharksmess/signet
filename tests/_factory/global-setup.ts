@@ -144,11 +144,11 @@ async function startServer(): Promise<ChildProcess | undefined> {
   fail(`le serveur ne repond pas sur ${base} apres le delai imparti :\n${tail.join("\n")}`);
 }
 
-export default async function setup(): Promise<() => Promise<void>> {
+export default async function setup(): Promise<() => void> {
   loadTestEnv();
   await recreateTestDatabase();
   const server = await startServer();
-  return async () => {
+  return () => {
     if (server) killTree(server);
     // La base de test est conservee pour l'inspection post-mortem ; elle est
     // recreee au prochain lancement.
