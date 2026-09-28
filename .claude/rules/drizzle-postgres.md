@@ -19,7 +19,7 @@ Une telle fonction s'execute avec les droits de son proprietaire. Sous `NOBYPASS
 2. Proprietaire : un role dedie `NOLOGIN NOBYPASSRLS`, jamais le superutilisateur.
 3. **Premiere instruction** : poser le contexte tenant de l'operation (`set_config('app.organization_id', ..., true)`) ; si l'identifiant est NULL, `RAISE EXCEPTION`. Echouer bruyamment, jamais conclure « rien a faire ».
 4. Tout `UPDATE`/`DELETE` qui doit toucher une ligne verifie `GET DIAGNOSTICS n = ROW_COUNT` et leve une exception si `n = 0`.
-5. `REVOKE ALL ON FUNCTION ... FROM PUBLIC`, puis `GRANT EXECUTE` au seul role appelant. La premiere migration pose `ALTER DEFAULT PRIVILEGES ... REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC` pour que les fonctions futures naissent fermees.
+5. `REVOKE ALL ON FUNCTION ... FROM PUBLIC`, puis `GRANT EXECUTE` au seul role appelant. La premiere migration pose `ALTER DEFAULT PRIVILEGES FOR ROLE <proprietaire> REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC` **sans `IN SCHEMA`** : le droit d'execution de PUBLIC est un defaut global, qu'une revocation limitee a un schema ne retire pas (elle ne fait rien, sans erreur). Un test cree une fonction apres coup et verifie que PUBLIC ne peut pas l'executer.
 6. Un test qui appelle la fonction **sans** contexte et exige une erreur, et un test d'isolation croisee entre deux organisations.
 
 Les points 1, 2 et 5 sont verifies automatiquement pour tout le schema par `tests/_factory/db-catalog.test.ts`.
