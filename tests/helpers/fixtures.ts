@@ -106,9 +106,29 @@ export async function readOrganizationNameDirect(organizationId: string): Promis
   });
 }
 
-export async function countOrganizationsDirect(): Promise<number> {
+/**
+ * Organisations dont `userId` est membre (verification "boite blanche", role
+ * BYPASSRLS). La creation pose l'owner dans la meme transaction (AC1) : une
+ * organisation creee par une requete de cet utilisateur apparait ici. Ne
+ * compte jamais la table entiere, qui depend des autres tests.
+ */
+export async function countOrganizationsOfUserDirect(userId: string): Promise<number> {
   return asBypassRls(async (client) => {
-    const result = await client.query<{ count: string }>("SELECT count(*)::text FROM organization");
+    const result = await client.query<{ count: string }>(
+      "SELECT count(*)::text FROM member WHERE user_id = $1",
+      [userId],
+    );
+    return Number(result.rows[0]?.count ?? "0");
+  });
+}
+
+/** Organisations portant exactement `name` (verification "boite blanche", role BYPASSRLS). */
+export async function countOrganizationsNamedDirect(name: string): Promise<number> {
+  return asBypassRls(async (client) => {
+    const result = await client.query<{ count: string }>(
+      "SELECT count(*)::text FROM organization WHERE name = $1",
+      [name],
+    );
     return Number(result.rows[0]?.count ?? "0");
   });
 }

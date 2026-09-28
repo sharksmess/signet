@@ -7,15 +7,7 @@
  * restant validee par les schemas Zod importes directement du contrat.
  */
 import type { AuthenticatedSession } from "./auth";
-import { authHeaders } from "./auth";
-
-function baseUrl(): string {
-  const url = process.env.TEST_APP_BASE_URL;
-  if (!url) {
-    throw new Error("TEST_APP_BASE_URL n'est pas definie (voir tests/helpers/db.ts).");
-  }
-  return url;
-}
+import { authHeaders, baseUrl } from "./auth";
 
 export interface ApiResponse<T = unknown> {
   status: number;

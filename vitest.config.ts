@@ -4,18 +4,18 @@ export default defineConfig({
   test: {
     include: ["tests/**/*.test.ts"],
     environment: "node",
+    // Le globalSetup de l'usine recree et migre la base de test, puis construit
+    // et demarre le serveur applicatif sur cette base : aucun serveur a lancer
+    // a la main. Le build Next depasse largement un delai de hook ordinaire.
+    globalSetup: ["./tests/_factory/global-setup.ts"],
     testTimeout: 20000,
-    hookTimeout: 20000,
+    hookTimeout: 180000,
     // Ces tests partagent UNE base Postgres reelle, jamais mockee (regle du
-    // projet). Chaque fichier appelle resetDatabase() (TRUNCATE global) dans
-    // son propre beforeAll/beforeEach et certains font des assertions
-    // globales (countOrganizationsDirect() compte toutes les lignes de la
-    // table, sans filtre par test). Le parallelisme par defaut de vitest
-    // (fichiers executes en parallele, tests d'un meme fichier en sequence)
-    // rend ces deux choses incompatibles entre fichiers : le TRUNCATE ou une
-    // creation d'un fichier peut retomber en plein milieu d'une assertion
-    // d'un autre, cote a cote sur la meme base. Desactive ici, pas de cause a
-    // effet cachee. Les tests d'un meme fichier restent sequentiels.
+    // projet), et chaque fichier appelle resetDatabase() (TRUNCATE global)
+    // dans son beforeAll. Le parallelisme par defaut de vitest (fichiers
+    // executes en parallele) ferait retomber le TRUNCATE d'un fichier en plein
+    // milieu des assertions d'un autre. Les tests d'un meme fichier restent
+    // sequentiels.
     fileParallelism: false,
   },
 });

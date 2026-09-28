@@ -8,19 +8,15 @@
  * n'inventent aucune regle metier : ils s'appuient sur l'API HTTP publique de
  * better-auth lui-meme, pas sur le code de cette tranche.
  *
- * Necessite TEST_APP_BASE_URL (application deja demarree, cf. tests/helpers/db.ts).
+ * Necessite TEST_APP_BASE_URL : le serveur est demarre sur la base de test par
+ * le globalSetup de l'usine (tests/_factory/global-setup.ts).
  */
+import { loadTestEnv, requireEnv } from "../_factory/env";
 
-function baseUrl(): string {
-  const url = process.env.TEST_APP_BASE_URL;
-  if (!url) {
-    throw new Error(
-      "TEST_APP_BASE_URL n'est pas definie. Ces tests HTTP exigent une instance " +
-        "reelle de l'application (apps/web) deja demarree et pointee vers la base " +
-        "de test — voir tests/helpers/db.ts.",
-    );
-  }
-  return url;
+loadTestEnv();
+
+export function baseUrl(): string {
+  return requireEnv(["TEST_APP_BASE_URL"]).TEST_APP_BASE_URL ?? "";
 }
 
 /**
