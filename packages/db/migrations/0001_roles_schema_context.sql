@@ -27,16 +27,32 @@
 -- FORCE ROW LEVEL SECURITY s'applique a lui comme a n'importe quel role,
 -- puisqu'il n'a pas BYPASSRLS (ERD §1 : "FORCE est indispensable : sans lui,
 -- le role proprietaire ... contourne silencieusement toutes les politiques").
-CREATE ROLE signet_owner LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+--
+-- Les roles sont communs au cluster, pas a la base : une base de test neuve
+-- sur un cluster ou ils existent deja ne doit pas faire echouer la migration.
+-- Chaque creation est donc conditionnelle ; attributs inchanges.
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'signet_owner') THEN
+    CREATE ROLE signet_owner LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+  END IF;
+END $$;
 
 -- Role applicatif non privilegie sous lequel l'application (Route Handlers /
 -- Server Actions) execute ses requetes tenant (ADR-0001). Jamais BYPASSRLS.
-CREATE ROLE signet_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'signet_app') THEN
+    CREATE ROLE signet_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+  END IF;
+END $$;
 
 -- Role dedie a better-auth, limite aux quatre tables d'authentification
 -- (ERD §2). Distinct de signet_app : l'authentification precede le contexte
 -- tenant et ne doit jamais pouvoir lire/ecrire les tables tenant.
-CREATE ROLE signet_auth LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'signet_auth') THEN
+    CREATE ROLE signet_auth LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+  END IF;
+END $$;
 
 -- Role proprietaire des fonctions SECURITY DEFINER et de leurs triggers
 -- internes (ERD §1, liste fermee). NOLOGIN : inatteignable par connexion
@@ -48,7 +64,11 @@ CREATE ROLE signet_auth LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
 -- politique additionnelle scopee par current_user_id() quand elle doit
 -- legitimement voir plusieurs organisations (signet.organizations_for_user,
 -- seule exception documentee par ADR-0002).
-CREATE ROLE signet_definer NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'signet_definer') THEN
+    CREATE ROLE signet_definer NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+  END IF;
+END $$;
 
 -- --------------------------------------------------------------------------
 -- Schema `signet` — fonctions et roles, jamais les tables (ERD §0 : les
