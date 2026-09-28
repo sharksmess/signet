@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Rituel de commit — message Conventional Commits + tracabilite de la tranche.
+set -uo pipefail
+MSG_FILE="$1"
+FIRST=$(grep -vE '^\s*#' "$MSG_FILE" | head -1)
+case "$FIRST" in Merge\ *|Revert\ *|fixup!*|squash!*) exit 0 ;; esac
+
+RE='^(feat|fix|test|refactor|perf|docs|chore|build|ci|style|revert)(\([a-z0-9._/-]+\))?!?: [^ ].{0,70}$'
+if ! printf '%s' "$FIRST" | grep -qE "$RE"; then
+  cat >&2 << EOF
+
+[commit-msg] REFUSE : "$FIRST"
+Format attendu :  type(portee): resume a l'imperatif, 72 caracteres max
+  types : feat fix test refactor perf docs chore build ci style revert
+  exemple : feat(organizations): creer une organisation avec son owner
+EOF
+  exit 1
+fi
+
+# Trailer Slice ajoute automatiquement sur une branche slice/NNN-*
+BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "")
+SLICE=$(printf '%s' "$BRANCH" | sed -nE 's#^slice/([0-9]{3})-.*#\1#p')
+if [ -n "$SLICE" ] && ! grep -qE '^Slice: ' "$MSG_FILE"; then
+  git interpret-trailers --in-place --trailer "Slice: $SLICE" "$MSG_FILE"
+fi
+exit 0

@@ -5,12 +5,15 @@
  * ouvrent de vraies connexions Postgres et executent du vrai SQL contre un schema
  * de test (conteneur ou instance dediee), jamais un mock d'ORM.
  *
- * Variables d'environnement attendues (a documenter dans .env.example par la
- * tranche d'amorcage d'infrastructure — hors perimetre de ce fichier) :
+ * L'environnement est charge par `loadTestEnv()` (tests/_factory/env.ts), comme
+ * le globalSetup de l'usine qui recree et migre la base de test avant la
+ * suite. Toutes les connexions ci-dessous visent CETTE base
+ * (`TEST_DATABASE_NAME`), jamais la base de dev : une URL qui designe une
+ * autre base fait echouer le helper au lieu de s'y connecter.
  *
- * - TEST_DATABASE_URL_BYPASSRLS : connexion sous un role possedant l'attribut
- *   Postgres `BYPASSRLS` (ex. le role superuser du conteneur de test, distinct
- *   de `signet_app`, `signet_auth` et `signet_definer`). `BYPASSRLS` ignore
+ * - Connexion BYPASSRLS : l'URL d'administration de l'usine pointee sur la base
+ *   de test (`testDbUrl()`, superutilisateur, distinct de `signet_app`,
+ *   `signet_auth` et `signet_definer`). `BYPASSRLS` ignore
  *   RLS inconditionnellement, y compris `FORCE` (Postgres : seul `BYPASSRLS`
  *   passe outre `FORCE ROW LEVEL SECURITY`, la propriete de table seule ne le
  *   permet plus des que `FORCE` est actif). Utilise UNIQUEMENT pour :
@@ -38,25 +41,35 @@
  *   l'application tourne reellement : toute assertion de comportement (y
  *   compris l'isolation tenant, AC5) doit passer par cette connexion.
  *
- * - TEST_APP_BASE_URL : URL de base de l'application Next.js deja demarree
- *   (ex. http://localhost:3100), pointee vers la meme base que ci-dessus.
- *   Le demarrage du serveur n'est pas la responsabilite de ces tests (voir
- *   tests/helpers/auth.ts) : il doit etre lance en amont (CI ou dev) une fois
- *   que apps/web existe.
- *
- * Tant que packages/db (migrations, roles) et apps/web (serveur) n'existent
- * pas, toute tentative d'utiliser ces helpers echoue — c'est le comportement
- * attendu avant implementation.
+ * - TEST_APP_BASE_URL : URL de base du serveur Next.js que le globalSetup
+ *   construit, demarre sur la base de test et arrete en fin de suite.
  */
-import { Pool, type PoolClient } from "pg";
+// `pg` est CommonJS : import par defaut puis destructuration plutot qu'un
+// import nomme direct (meme raison qu'un import nomme direct echoue sous
+// Node ESM reel dans packages/db/src/migrate.ts).
+import pg from "pg";
+import type { Pool, PoolClient } from "pg";
+import { loadTestEnv, requireEnv, testDbUrl } from "../_factory/env";
+// Renomme a la destructuration : un `const Pool = ...` de meme nom que
+// l'import de type ci-dessus est refuse par le compilateur (TS2440).
+const { Pool: PgPool } = pg;
 
-function requiredEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) {
+loadTestEnv();
+
+/**
+ * URL d'un role applicatif, verifiee : elle doit designer la base de test
+ * recreee par le globalSetup. Pointer ailleurs ferait tourner les assertions
+ * contre une base que la suite ne controle pas.
+ */
+function testRoleUrl(name: string): string {
+  const env = requireEnv([name, "TEST_DATABASE_NAME"]);
+  const value = env[name] ?? "";
+  const { TEST_DATABASE_NAME } = env;
+  const database = new URL(value).pathname.replace(/^\//, "");
+  if (database !== TEST_DATABASE_NAME) {
     throw new Error(
-      `${name} n'est pas definie. Ces tests exigent une base Postgres 16 reelle et jetable ` +
-        `(conteneur ou schema temporaire), migree avec le schema de la tranche 001 ` +
-        `(pnpm db:migrate). Voir tests/helpers/db.ts pour la liste des variables attendues.`,
+      `[tests] ${name} designe la base "${database}", pas la base de test "${TEST_DATABASE_NAME}". ` +
+        `Corrige .env.test.local (l'humain le fait).`,
     );
   }
   return value;
@@ -68,15 +81,15 @@ let appPool: Pool | null = null;
 
 export function getBypassRlsPool(): Pool {
   if (!bypassRlsPool) {
-    bypassRlsPool = new Pool({ connectionString: requiredEnv("TEST_DATABASE_URL_BYPASSRLS") });
+    bypassRlsPool = new PgPool({ connectionString: testDbUrl() });
   }
   return bypassRlsPool;
 }
 
 export function getTableOwnerPool(): Pool {
   if (!tableOwnerPool) {
-    tableOwnerPool = new Pool({
-      connectionString: requiredEnv("TEST_DATABASE_URL_TABLE_OWNER"),
+    tableOwnerPool = new PgPool({
+      connectionString: testRoleUrl("TEST_DATABASE_URL_TABLE_OWNER"),
     });
   }
   return tableOwnerPool;
@@ -84,7 +97,7 @@ export function getTableOwnerPool(): Pool {
 
 export function getAppPool(): Pool {
   if (!appPool) {
-    appPool = new Pool({ connectionString: requiredEnv("TEST_DATABASE_URL_APP") });
+    appPool = new PgPool({ connectionString: testRoleUrl("TEST_DATABASE_URL_APP") });
   }
   return appPool;
 }

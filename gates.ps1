@@ -1,4 +1,4 @@
-# Gates humains — equivalent Windows du Makefile.
+# Gates humains - equivalent Windows du Makefile.
 # Usage :  .\gates.ps1 approve-prd
 #          .\gates.ps1 approve-architecture
 #          .\gates.ps1 status

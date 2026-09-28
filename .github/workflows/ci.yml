@@ -1,0 +1,79 @@
+# CI de l'usine — rejoue sur un serveur neutre ce que close-slice.sh et
+# pre-push verifient en local. Le job s'appelle "ci" : c'est le nom exige
+# par la regle de protection de main.
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci_only_not_a_secret
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      CI: "true"
+      # Base jetable de la CI. Le mot de passe passe par PGPASSWORD (lu par pg
+      # et psql) : aucune URL ne contient d'identifiants, meme factices.
+      PGPASSWORD: ci_only_not_a_secret
+      TEST_DATABASE_ADMIN_URL: postgresql://postgres@localhost:5432/postgres
+      TEST_DATABASE_NAME: signet_test
+      TEST_APP_SCHEMAS: signet,public
+      # Mots de passe des roles, poses par le globalSetup apres migration. Meme
+      # valeur que PGPASSWORD : les URL ci-dessous n'en portent aucun.
+      TEST_ROLE_PASSWORDS: signet_owner:ci_only_not_a_secret,signet_app:ci_only_not_a_secret,signet_auth:ci_only_not_a_secret
+      TEST_DATABASE_URL_TABLE_OWNER: postgresql://signet_owner@localhost:5432/signet_test
+      TEST_DATABASE_URL_APP: postgresql://signet_app@localhost:5432/signet_test
+      TEST_APP_BASE_URL: http://localhost:3100
+      TEST_SERVER_ENV_DATABASE_URL_APP: postgresql://signet_app@localhost:5432/signet_test
+      TEST_SERVER_ENV_DATABASE_URL_AUTH: postgresql://signet_auth@localhost:5432/signet_test
+      TEST_SERVER_ENV_BETTER_AUTH_SECRET: ci-only-better-auth-secret-not-a-real-secret-0001
+      TEST_SERVER_ENV_BETTER_AUTH_URL: http://localhost:3100
+      # Limiteur de debit better-auth coupe pour la suite de tests : accepte
+      # seulement avec APP_ENV=test, sinon le serveur refuse de demarrer (ADR-0010).
+      AUTH_RATE_LIMIT: "off"
+      APP_ENV: test
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Controle de types et lint
+        run: pnpm run check
+      - name: Preparation base de test (propre au projet)
+        run: pnpm run --if-present ci:db-setup
+      - name: Tests
+        run: pnpm test
+      - name: Build
+        run: pnpm run --if-present build
+        # next build charge apps/web/src/lib/auth.ts, qui lit ces variables au
+        # chargement ; les pools pg ne se connectent qu'a la premiere requete.
+        env:
+          DATABASE_URL_APP: postgresql://signet_app@localhost:5432/signet_test
+          DATABASE_URL_AUTH: postgresql://signet_auth@localhost:5432/signet_test
+          BETTER_AUTH_SECRET: ci-only-better-auth-secret-not-a-real-secret-0001
+      - name: Audit des dependances de production
+        run: pnpm audit --prod --audit-level=high
+      - name: Secrets dans l'historique de la PR
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -10,7 +10,7 @@ Implemente la tranche active.
 - `.gates/current-slice` designe une tranche dont les tests existent et echouent. S'ils passent deja, la tranche est mal definie : signale-le.
 
 ## 1. Deleguer
-Delegue au sous-agent `slice-implementer`. Il travaille dans un worktree isole, ce qui permet a plusieurs tranches d'avancer en parallele sans collision de fichiers, et laisse ton depot principal intact si la tranche echoue.
+Delegue au sous-agent `slice-implementer`. Il travaille sur la branche `slice/NNN-*` du depot principal, commite couche par couche et tient `docs/03-slices/NNN-progress.md` : une interruption se reprend en relisant ce journal.
 
 Passe-lui dans le prompt de delegation : le chemin du fichier de tranche, le chemin du perimetre, et le rappel explicite des regles hors-perimetre. Un sous-agent demarre avec un contexte vierge : ce que tu ne lui dis pas, il ne le sait pas.
 
@@ -26,7 +26,10 @@ Puis `bash scripts/close-slice.sh`.
 Ce que ce mecanisme garantit, et ce qu'il ne garantit pas : le script relance lui-meme les tests, le controle de types et la verification des criteres d'acceptation — ceux-la ne peuvent pas etre falsifies. Le verdict d'audit, lui, est recopie par la session qui orchestre : sa fidelite repose sur la transcription et sur la relecture humaine du rapport versionne. Ce script relance la suite complete, verifie les verdicts des deux auditeurs et n'ecrit le gate de tranche que si tout passe. Il ne peut pas etre satisfait autrement qu'en satisfaisant reellement ses conditions : c'est la difference entre un gate franchissable par une machine et un gate falsifiable par une machine.
 
 ## 3. Si un audit echoue
-Les constats CRITIQUE et MAJEUR reviennent au `slice-implementer` sous forme de correctifs a appliquer. Les MINEUR deviennent des lignes dans `docs/03-slices/000-backlog.md`. Ne corrige pas toi-meme dans la session principale : tu perdrais l'isolation du worktree.
+Les constats CRITIQUE et MAJEUR reviennent au `slice-implementer` sous forme de correctifs a appliquer. Les MINEUR deviennent des lignes dans `docs/03-slices/000-backlog.md`. Ne corrige pas toi-meme dans la session principale : l'implementeur tient le journal et les commits de la tranche.
 
-## 4. Rendre compte
-Criteres passes, fichiers touches, verdicts d'audit, decisions prises, points a l'attention de l'humain. Pas de recit du cheminement.
+## 4. Livrer
+`bash scripts/ship-slice.sh` : verifie que la branche est a jour de `main`, pousse (le hook pre-push rejoue controles et tests), ouvre ou met a jour la PR avec contrat, verdicts, commits et decisions. Puis arrete-toi : la CI tourne, la fusion appartient a l'humain.
+
+## 5. Rendre compte
+Lien de la PR, criteres passes, verdicts d'audit, decisions prises a valider, points d'attention. Pas de recit du cheminement.

@@ -8,19 +8,30 @@
  * n'inventent aucune regle metier : ils s'appuient sur l'API HTTP publique de
  * better-auth lui-meme, pas sur le code de cette tranche.
  *
- * Necessite TEST_APP_BASE_URL (application deja demarree, cf. tests/helpers/db.ts).
+ * Necessite TEST_APP_BASE_URL : le serveur est demarre sur la base de test par
+ * le globalSetup de l'usine (tests/_factory/global-setup.ts).
  */
+import { loadTestEnv, requireEnv } from "../_factory/env";
 
-function baseUrl(): string {
-  const url = process.env.TEST_APP_BASE_URL;
-  if (!url) {
-    throw new Error(
-      "TEST_APP_BASE_URL n'est pas definie. Ces tests HTTP exigent une instance " +
-        "reelle de l'application (apps/web) deja demarree et pointee vers la base " +
-        "de test — voir tests/helpers/db.ts.",
-    );
-  }
-  return url;
+loadTestEnv();
+
+export function baseUrl(): string {
+  return requireEnv(["TEST_APP_BASE_URL"]).TEST_APP_BASE_URL ?? "";
+}
+
+/**
+ * better-auth refuse (403 MISSING_OR_NULL_ORIGIN / INVALID_ORIGIN) toute
+ * requete vers `/api/auth/*` dont l'origine ne peut pas etre validee — la
+ * protection CSRF reste active volontairement (regle du projet : la corriger
+ * cote client de test, jamais en la desactivant cote serveur). Un client
+ * navigateur envoie toujours `Origin` ; `fetch` sous Node ne le fait pas,
+ * d'ou ce header pose explicitement, egal a `TEST_APP_BASE_URL` lui-meme
+ * (aucun `baseURL` n'etant configure cote serveur, better-auth deduit son
+ * origine de confiance de la requete entrante — cf. apps/web/src/lib/auth.ts
+ * et l'avertissement "Base URL is not set" au demarrage).
+ */
+function originHeader(): Record<string, string> {
+  return { Origin: baseUrl() };
 }
 
 export interface AuthenticatedSession {
@@ -52,7 +63,7 @@ export async function signUp(options?: {
 
   const response = await fetch(`${baseUrl()}/api/auth/sign-up/email`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...originHeader() },
     body: JSON.stringify({ email, password, name }),
   });
 
@@ -82,6 +93,6 @@ function extractCookie(response: Response): string | null {
 }
 
 /** En-tetes d'une requete authentifiee avec la session fournie. */
-export function authHeaders(session: AuthenticatedSession): HeadersInit {
-  return { Cookie: session.cookie, "Content-Type": "application/json" };
+export function authHeaders(session: AuthenticatedSession): Record<string, string> {
+  return { Cookie: session.cookie, "Content-Type": "application/json", ...originHeader() };
 }

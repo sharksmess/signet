@@ -30,3 +30,6 @@ qui a derive, un gabarit incomplet, une decision qu'on a du reprendre.
 | 2026-09-22 | settings.json | deny Read(.env.*) bloque aussi .env.example, que CLAUDE.md demande justement de lire | aucun | oui, restreindre le deny a .env et .env.*.local |
 | 2026-09-25 | test-writer | Message d echec de fixture trompeur : affiche (500) undefined alors que le serveur repond 422 avec un corps | lecture des journaux serveur | oui, test-writer doit imposer que tout helper affiche le vrai statut et le corps complet |
 | 2026-09-25 | test-writer | Suite dependante d un serveur lance a la main dans une autre fenetre : son arret produit 28 echecs qui ressemblent a des bugs metier | relance manuelle | oui, les tests doivent demarrer leur serveur ou verifier le port avant de commencer |
+| 2026-09-27 | install-project.ps1 | Lance depuis le dossier personnel, puis erreurs New-Item sur les fichiers a la racine | garde-fou de dossier + Split-Path | oui, corrige en 1.3.0 |
+| 2026-09-27 | pre-commit | Faux positifs : URL factice de la CI et gabarits .example bloques | PGPASSWORD en CI, exclusion *.example, test « gabarits contre hooks » | oui, corrige en 1.3.0 |
+| 2026-09-27 | github-setup.ps1 | Ruleset refuse : BOM ajoute par Set-Content (PS 5), erreur GitHub masquee et message trompeur | ecriture sans BOM, erreur reelle affichee, option -ProtectOnly | oui, corrige en 1.3.0 |

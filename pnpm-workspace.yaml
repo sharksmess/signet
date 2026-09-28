@@ -1,0 +1,14 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+allowBuilds:
+  esbuild: true
+  sharp: true
+  # ADR-0009 : postinstall de repli qui telecharge le binding natif si la
+  # dependance optionnelle de plateforme manque ; elle est installee, le
+  # script n'a pas a s'executer.
+  unrs-resolver: false
+overrides:
+  postcss: ">=8.5.23"
+  kysely: ">=0.28.17"
+  esbuild: ">=0.25.0"

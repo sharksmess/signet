@@ -12,7 +12,7 @@ import { createOrganization as createOrganizationOutput } from "../../docs/02-ar
 import { createOrganization } from "../helpers/organizationsApi";
 import { signUp, uniqueEmail } from "../helpers/auth";
 import { asTenant, resetDatabase, closeAllPools } from "../helpers/db";
-import { countOrganizationsDirect } from "../helpers/fixtures";
+import { countOrganizationsNamedDirect, countOrganizationsOfUserDirect } from "../helpers/fixtures";
 
 beforeAll(async () => {
   await resetDatabase();
@@ -110,35 +110,34 @@ describe("POST /api/organizations", () => {
       ["name > 120 caracteres", "a".repeat(121)],
     ])("%s -> 422 VALIDATION_FAILED, aucune organisation creee", async (_label, name) => {
       const session = await signUp();
-      const before = await countOrganizationsDirect();
 
       const { status, body } = await createOrganization(session, { name });
 
       expect(status).toBe(422);
       expect((body as { code?: string }).code).toBe("VALIDATION_FAILED");
-      expect(await countOrganizationsDirect()).toBe(before);
+      expect(await countOrganizationsOfUserDirect(session.userId)).toBe(0);
     });
 
     it("AC3c : name absent du corps -> 422 VALIDATION_FAILED", async () => {
       const session = await signUp();
-      const before = await countOrganizationsDirect();
 
       const { status, body } = await createOrganization(session, {});
 
       expect(status).toBe(422);
       expect((body as { code?: string }).code).toBe("VALIDATION_FAILED");
-      expect(await countOrganizationsDirect()).toBe(before);
+      expect(await countOrganizationsOfUserDirect(session.userId)).toBe(0);
     });
   });
 
   it("AC4 : aucune session valide -> 401 UNAUTHENTICATED, aucune organisation creee", async () => {
-    const before = await countOrganizationsDirect();
+    // Nom propre a ce test : aucune autre creation ne le porte.
+    const name = `Sans Session ${Date.now()}`;
 
-    const { status, body } = await createOrganization(null, { name: "Sans Session" });
+    const { status, body } = await createOrganization(null, { name });
 
     expect(status).toBe(401);
     expect((body as { code?: string }).code).toBe("UNAUTHENTICATED");
-    expect(await countOrganizationsDirect()).toBe(before);
+    expect(await countOrganizationsNamedDirect(name)).toBe(0);
   });
 
   it("AC4 : immediatement apres inscription et creation, organizations_for_user retourne l'organisation", async () => {
@@ -147,7 +146,7 @@ describe("POST /api/organizations", () => {
     const organizationId = (body as { id: string }).id;
 
     const rows = await asTenant({ userId: session.userId }, async (client) => {
-      const result = await client.query(
+      const result = await client.query<{ id: string }>(
         "SELECT id FROM signet.organizations_for_user($1::uuid)",
         [session.userId],
       );

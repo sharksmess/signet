@@ -21,8 +21,10 @@ Audite le diff de la tranche active (`git diff` contre la branche de base), pas 
 4. **Injection.** SQL brut concatene, requetes NoSQL construites par interpolation, commandes shell prenant de l'entree utilisateur, rendu HTML non echappe.
 5. **Secrets et fuites.** Valeurs en dur, secrets dans les logs, stack traces renvoyees au client, messages d'erreur revelant l'existence d'une ressource d'un autre tenant.
 6. **Webhooks.** Signature verifiee avant tout traitement ? Idempotence assuree par une cle persistee ? Un webhook rejoue deux fois ne doit jamais facturer deux fois.
-7. **Rate limiting** sur les routes couteuses, d'authentification et de reinitialisation de mot de passe.
-8. **Dependances.** Lance l'audit de vulnerabilites du gestionnaire de paquets du projet.
+7. **Fonctions a privileges.** Chaque `SECURITY DEFINER` : contexte tenant pose en premiere instruction avec exception si absent, `ROW_COUNT` verifie, pas d'`EXECUTE` pour PUBLIC. Une fonction qui ne voit aucune ligne conclut en silence : cherche ce mode d'echec explicitement.
+8. **Origine du contexte tenant.** D'ou vient l'identifiant d'organisation pose dans la session base ? S'il provient de la requete (URL, corps) sans que les politiques RLS verifient aussi l'appartenance de l'utilisateur, RLS n'est plus une seconde barriere : c'est MAJEUR, pas MINEUR.
+9. **Rate limiting** sur les routes couteuses, d'authentification et de reinitialisation de mot de passe.
+10. **Dependances.** Lance l'audit de vulnerabilites du gestionnaire de paquets du projet.
 
 ## Format de rapport
 Pour chaque constat :

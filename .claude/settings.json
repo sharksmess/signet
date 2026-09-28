@@ -1,4 +1,4 @@
-﻿{
+{
   "hooks": {
     "PreToolUse": [
       {
@@ -41,13 +41,23 @@
   "permissions": {
     "deny": [
       "Read(./.env)",
-      "Read(./.env.*)",
+      "Read(./.env.local)",
+      "Read(./.env.*.local)",
       "Read(./**/.env)",
+      "Read(./**/.env.local)",
+      "Read(./**/.env.*.local)",
+      "Edit(./.env.*.local)",
+      "Edit(./.env.local)",
+      "Edit(./.env)",
+      "Write(./.env)",
+      "Write(./.env.local)",
+      "Write(./.env.*.local)",
       "Bash(git push --force*)",
-      "Bash(git commit --no-verify*)"
+      "Bash(git commit --no-verify*)",
+      "Bash(gh pr merge*)"
     ]
   },
   "env": {
-    "CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS": "6"
+    "CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS": "4"
   }
 }
