@@ -20,7 +20,7 @@ Les tranches s'executent **l'une apres l'autre**, chacune sur sa branche depuis 
 1. `/saas-factory:slice` pour ouvrir et rediger le contrat.
 2. `test-writer` pour les tests.
 3. `slice-implementer` sur la branche de la tranche.
-4. `security-auditor` et `contract-guardian` en parallele.
+4. `security-auditor`, `contract-guardian` et `code-reviewer` en parallele ; decisions de la tranche reportees dans `docs/DECISIONS.md`.
 5. `scripts/close-slice.sh`.
 6. Si succes : `scripts/ship-slice.sh`, puis tranche suivante si ses dependances sont fusionnees. Si echec : voir conditions d'arret.
 
@@ -28,6 +28,7 @@ Les tranches s'executent **l'une apres l'autre**, chacune sur sa branche depuis 
 Arrete-toi immediatement et attends l'humain si :
 - Un audit rend un verdict CRITIQUE, meme si tu penses pouvoir le corriger.
 - `contract-guardian` rend BREAKING.
+- `code-reviewer` rend `REVIEW: CHANGES` une deuxieme fois apres correctifs.
 - Une meme tranche echoue deux fois de suite.
 - Une tranche exige d'ecrire hors de son perimetre.
 - Une dependance nouvelle serait necessaire.

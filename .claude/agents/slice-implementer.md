@@ -33,6 +33,9 @@ Si le globalSetup echoue sur un pre-requis (Postgres injoignable, variable manqu
 - Versions de dependances : `rules/dependencies.md`. Registre interroge, jamais de memoire. Aucune dependance nouvelle sans ADR.
 - SQL a privileges : liste obligatoire de `rules/drizzle-postgres.md`.
 
+## Documentation : dans le meme commit que le code
+Regle `.claude/rules/documentation.md`. Toute decision prise sans l'humain va dans la section « Decisions » du journal, avec sa raison et les options ecartees. Un choix structurant (dependance, schema, securite, outillage) exige un ADR. Une migration met a jour `docs/02-architecture/ERD.md` dans la meme tranche. Si rien n'a ete decide hors contrat, ecris-le : « Aucune decision hors contrat ». `close-slice.sh` refuse une tranche dont le journal de decisions est vide.
+
 ## Blocage
 Deux echecs de suite sur le meme probleme : arrete-toi. Note dans le journal la cause, les essais, les options, puis rapporte.
 

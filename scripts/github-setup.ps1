@@ -36,11 +36,14 @@ git push -u origin main
 if ($LASTEXITCODE -ne 0) { Fail "push initial de main impossible." }
 Ok "main pousse"
 
-Step "Reglages de fusion : squash uniquement, branche supprimee apres fusion"
-gh repo edit "$owner/$Name" --enable-squash-merge --enable-merge-commit=false --enable-rebase-merge=false --delete-branch-on-merge | Out-Null
-Ok "fait"
-
 } else { $owner = gh api user -q .login; Ok "connecte en tant que $owner (protection seule)" }
+
+Step "Reglages de fusion : squash uniquement, message = titre + description de la PR"
+gh repo edit "$owner/$Name" --enable-squash-merge --enable-merge-commit=false --enable-rebase-merge=false --delete-branch-on-merge | Out-Null
+# Le commit de squash reprend la description de la PR : preuves, verdicts,
+# decisions et trailer "Slice: NNN" restent dans l'historique de main.
+gh api -X PATCH "repos/$owner/$Name" -f squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY 2>&1 | Out-Null
+if ($LASTEXITCODE -eq 0) { Ok "fait" } else { Warn "reglage du message de squash refuse : a faire dans Settings > General > Pull Requests" }
 
 Step "Protection de main (regle serveur : la seule qui ne depend pas de la discipline locale)"
 $ruleset = @'

@@ -22,6 +22,17 @@
             "timeout": 120
           }
         ]
+      },
+      {
+        "matcher": "Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "C:/dev/saas-factory/hooks/guard-search.sh",
+            "shell": "bash",
+            "timeout": 60
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -39,6 +50,43 @@
     ]
   },
   "permissions": {
+    "allow": [
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git switch *)",
+      "Bash(git fetch*)",
+      "Bash(git pull --ff-only*)",
+      "Bash(git rev-parse*)",
+      "Bash(git branch*)",
+      "Bash(git rebase origin/main*)",
+      "Bash(git merge-base*)",
+      "Bash(git ls-files*)",
+      "Bash(git grep*)",
+      "Bash(pnpm test*)",
+      "Bash(pnpm run check*)",
+      "Bash(pnpm typecheck*)",
+      "Bash(pnpm lint*)",
+      "Bash(pnpm run build*)",
+      "Bash(pnpm exec vitest*)",
+      "Bash(pnpm exec tsc*)",
+      "Bash(pnpm audit*)",
+      "Bash(pnpm view *)",
+      "Bash(pnpm outdated*)",
+      "Bash(bash scripts/close-slice.sh*)",
+      "Bash(bash scripts/ship-slice.sh*)",
+      "Bash(bash scripts/ship-branch.sh*)",
+      "Bash(gh pr view*)",
+      "Bash(gh pr create*)",
+      "Bash(gh pr edit*)",
+      "Bash(gh pr checks*)",
+      "Bash(gh auth status*)",
+      "Bash(gh run view*)",
+      "Bash(gh run list*)"
+    ],
     "deny": [
       "Read(./.env)",
       "Read(./.env.local)",
