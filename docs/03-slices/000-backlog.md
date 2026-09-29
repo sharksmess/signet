@@ -13,14 +13,39 @@ Ordre de dependance technique d'abord, risque decroissant en departage a profond
 | 007 | Suppression d'une collection (cascade) | US-10 | 004, 005 | Depend d'une collection et de liens a supprimer en cascade dans la meme operation, pour verifier reellement la cascade. Operation irreversible (pas de soft delete) : risque de perte de donnee si la cascade est mal bornee. |
 | 008 | Retrait d'un membre | US-04 | 006 | Depend d'un membre reel obtenu par acceptation d'invitation (006), pour tester le retrait sur un membre effectif plutot que sur une donnee de fixture. Contient l'invariant "dernier owner protege" (US-04.3). |
 | 009 | Consultation des collections et des liens | US-07 | 004, 005 | Depend de collections et de liens existants pour verifier le tri et l'isolation en lecture sur des donnees reelles. Risque le plus bas du backlog : lecture seule, patron d'isolation deja eprouve par les tranches precedentes. |
+| 010 | Durcissement de l'isolation tenant (tranche technique) | US-09 (transverse) | 001 | Decision humaine D-022 (audit-001 MINEUR-1, option A) + MINEUR-10. **Executee avant 002** (D-024) : toutes les tranches suivantes copient le patron `withTenant` et les politiques RLS ; il doit etre juste avant d'etre reproduit. |
+
+## Ordre d'execution
+
+Les identifiants ne sont jamais renumerotes (D-025) : une tranche inseree prend le prochain numero libre, et l'ordre d'execution est ecrit ici.
+
+001 (close) -> **010** -> 002 -> 003 -> 004 -> 005 -> 006 -> 007 -> 008 -> 009
+
+## Tranche 010 — cadrage (decision D-022)
+
+**Objectif.** Faire de RLS une seconde barriere reelle. Aujourd'hui les politiques des tables a `organization_id` comparent la ligne au contexte `app.organization_id`, que le serveur pose a partir d'une valeur que l'appelant peut choisir (parametre d'URL) : elles valident ce que l'appelant demande. Apres 010, une ligne n'est visible ou modifiable sous `signet_app` que si **l'utilisateur de session** (`app.user_id`, pose par le serveur depuis la session authentifiee, jamais depuis la requete) est **membre** de l'organisation du contexte.
+
+**Conception.** Laissee a `db-architect`, dans un ADR-0011 qui : compare les options (fonction de contexte qui verifie l'appartenance, predicat d'appartenance dans chaque politique, etc.), traite explicitement le risque de recursion des politiques sur `member` (une politique de `member` qui interroge `member`), le cout (index `member(user_id, organization_id)`), et amende le point 4 d'ADR-0004. ERD mis a jour. Nouvelle migration uniquement (0001 a 0008 sont dans `main`, donc immuables).
+
+**MINEUR-10 inclus.** Une migration reimpose les attributs des quatre roles `signet_*` (`ALTER ROLE ... NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE`, `LOGIN`/`NOLOGIN` selon ADR-0007). Le test de catalogue de l'usine 1.4 (`tests/_factory/db-catalog.test.ts`) verifie qu'aucun role applicatif n'est `SUPERUSER` ou `BYPASSRLS`, directement ou par heritage.
+
+**Criteres d'acceptation attendus** (a reprendre dans `docs/03-slices/010-*.md`) :
+- AC1 — non-regression : un membre accede a son organisation exactement comme avant ; toute la suite de la tranche 001 reste verte **sans modifier ses assertions**.
+- AC2 — contexte force : sous `signet_app`, avec `app.organization_id` = organisation B et `app.user_id` = un membre de A seulement, toute lecture de `organization`, `member`, `organization_link_usage` et de toute autre table a `organization_id` renvoie 0 ligne, et toute ecriture est refusee. Teste directement en base, **sans** passer par le controle d'appartenance applicatif.
+- AC3 — echec ferme : sans `app.user_id` (ou avec un utilisateur inconnu), aucune ligne visible et aucune ecriture, meme avec un `app.organization_id` valide.
+- AC4 — fonctions a privileges : les fonctions `SECURITY DEFINER` gardent leurs garanties (tests d'invariants de 001 verts) et echouent bruyamment la ou elles dependent d'un utilisateur de session absent.
+- AC5 — isolation tenant par l'API : `PATCH /api/organizations/:idB` par un membre de A seulement donne la meme reponse qu'une organisation inexistante, et rien ne change en base.
+- AC6 — roles : attributs des quatre roles reimposes par migration ; test de catalogue vert, en local et en CI.
+
+**NE touche PAS.** Aucune capacite utilisateur nouvelle, aucune route nouvelle, aucune forme de requete ou de reponse modifiee (`contract-guardian` doit rendre PASS), rien de Stripe, des invitations ni des liens.
 
 ## Notes
 
 - Aucune tranche ne couvre l'edition de lien/collection ni la suppression d'un lien isole : hors-perimetre explicite du PRD (US-10 ne couvre que la suppression d'une collection entiere).
 - Toute tranche qui ferait apparaitre une fonctionnalite listee en hors-perimetre (recherche, tags, import Slack, etc.) est un signal du risque #1 du PRD (derive de perimetre) et doit etre refusee ou renvoyee en backlog explicite, pas glissee dans une tranche existante.
 - Avant tout choix d'hebergement (audit-001 MINEUR-11) : fixer l'en-tete IP de confiance et les proxys de confiance de better-auth (`advanced.ipAddress.ipAddressHeaders`/`trustedProxies`) et le consigner dans ADR-0010. Sans cela, le limiteur de debit est contournable ou bloque tous les utilisateurs selon le proxy.
-- Migration 0009 (audit-001 MINEUR-10) : reimposer les attributs des quatre roles `signet_*` (`ALTER ROLE ... NOBYPASSRLS NOSUPERUSER ...`) et verifier par test de catalogue `rolbypassrls`/`rolsuper`/appartenances : un role preexistant n'est aujourd'hui jamais verifie.
-- Corriger `.claude/rules/drizzle-postgres.md:22` : les privileges par defaut visent le role qui CREE les fonctions (le role de migration), pas leur proprietaire final ; `FOR ROLE signet_definer` serait sans effet (audit-001, passe 4).
+- ~~Migration 0009 (audit-001 MINEUR-10)~~ : integree a la tranche 010 (D-024).
+- ~~Corriger `.claude/rules/drizzle-postgres.md:22`~~ : fait dans l'usine 1.4.0 (revocation sans `FOR ROLE` ni `IN SCHEMA`, visant le role qui cree les fonctions).
 - Reevaluer ESLint 10 (`latest`) au passage a Next 16 : ESLint reste en 9.39.5 parce que `eslint-config-next@15.5.26` echoue sous ESLint 10 (ADR-0009). A traiter avec la montee de Next, fin de vie de la ligne 15 en octobre 2026 (ADR-0008).
 - Le detail complet de chaque tranche (perimetre fichiers, contrat de donnees, contrat d'API, criteres d'acceptation AC1-AC5, anti-regression) est ecrit au moment de son ouverture, au format `templates/SLICE.md`, dans `docs/03-slices/<id>-<nom>.md`.
 
@@ -39,4 +64,4 @@ Decisions qui ne bloquaient pas la cloture de la tranche qui les a fait apparait
 2. Deriver le contexte de `session.active_organization_id` (ERD §2.2 : « c'est cette colonne qui alimente le `SET LOCAL app.organization_id` ») plutot que du parametre d'URL.
 3. Conserver le patron actuel (Option B d'ADR-0004), mais corriger le point 4 d'ADR-0004 pour ne plus presenter la RLS comme une defense independante sur ces routes, et rendre le controle d'appartenance obligatoire et teste pour chaque route qui touche une ressource a `organizationId` dans le chemin.
 
-Decision d'architecture : a trancher par un humain, pas a corriger silencieusement dans une tranche.
+**Tranche le 2026-09-28 par l'humain : option A** (les politiques verifient aussi l'appartenance de l'utilisateur de session), registre D-022. Realisation : tranche 010.
