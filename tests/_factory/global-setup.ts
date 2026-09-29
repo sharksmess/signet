@@ -8,7 +8,7 @@
 import { spawn, execSync, type ChildProcess } from "node:child_process";
 import net from "node:net";
 import pg from "pg";
-import { ROOT, loadTestEnv, requireEnv, testDbUrl } from "./env";
+import { ROOT, envOrigin, loadTestEnv, requireEnv, testDbUrl } from "./env";
 
 const log = (m: string) => process.stdout.write(`[tests] ${m}\n`);
 
@@ -146,6 +146,11 @@ async function startServer(): Promise<ChildProcess | undefined> {
 
 export default async function setup(): Promise<() => void> {
   loadTestEnv();
+  // Trace de provenance (noms seulement) : en cas de resultat incoherent entre
+  // deux machines ou deux terminaux, c'est la premiere chose a comparer.
+  const origin = envOrigin();
+  log(`environnement : ${origin.fromFile} variable(s) depuis .env.test.local` +
+    (origin.fromShell.length ? ` ; depuis le terminal ou la CI : ${origin.fromShell.join(", ")}` : ""));
   await recreateTestDatabase();
   const server = await startServer();
   return () => {

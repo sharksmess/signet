@@ -1,0 +1,36 @@
+# Registre des decisions — Signet
+
+Registre unique et chronologique de **toutes** les decisions du projet : humaines et d'agents, produit et techniques. Regle : `.claude/rules/documentation.md` (usine 1.4.0). Le detail vit dans l'ADR, le journal de tranche ou la PR cites en lien ; ici, une ligne par decision.
+
+Decideur : `humain` pour toute decision de l'humain ; sinon l'agent (`cowork` = l'orchestrateur Claude qui pilote via le pont desktop ; `claude-code` = la session d'execution ; ou le nom du sous-agent).
+
+Les lignes D-001 a D-018 ont ete reconstituees le 2026-09-28, a l'adoption de la regle, a partir des ADR, du journal git, du journal de la tranche 001 et des echanges avec l'humain. Les suivantes sont ecrites au fil de l'eau.
+
+| ID | Date | Decision | Decideur | Portee | Lien |
+|---|---|---|---|---|---|
+| D-001 | 2026-09-22 | PRD de Signet approuve (gate 1) | humain | projet | `docs/01-product/PRD.md`, commit fa76b01 |
+| D-002 | 2026-09-22 | Architecture approuvee, socle gele dans `stack.json` (gate 2) : ADR-0001 a ADR-0006 acceptes | humain | projet | commit b0e9cd7 |
+| D-003 | 2026-09-22 | Isolation multi-tenant par schema partage et RLS | architecte (agent), approuve par D-002 | projet | ADR-0001 |
+| D-004 | 2026-09-22 | Verification atomique du quota Free | architecte (agent), approuve par D-002 | projet | ADR-0002 |
+| D-005 | 2026-09-22 | Jeton d'invitation stocke en empreinte SHA-256, jamais en clair | architecte (agent), approuve par D-002 | projet | ADR-0003 |
+| D-006 | 2026-09-22 | Authentification et autorisation par role d'organisation | architecte (agent), approuve par D-002 | projet | ADR-0004 (point 4 amende par D-022) |
+| D-007 | 2026-09-22 | Facturation par palier pilotee par Stripe, journal d'evenements local | architecte (agent), approuve par D-002 | projet | ADR-0005 |
+| D-008 | 2026-09-22 | Traitement asynchrone via Inngest (webhooks Stripe, e-mails) | architecte (agent), approuve par D-002 | projet | ADR-0006 |
+| D-009 | 2026-09-22 | Roles Postgres sans `BYPASSRLS`, fonctions `SECURITY DEFINER` sous role dedie ; refus du `BYPASSRLS` propose par l'implementeur | humain (refus), db-architect | tranche 001 | ADR-0007, FRICTION 2026-09-22 |
+| D-010 | 2026-09-22 | Refus des versions anciennes et vulnerables proposees par l'implementeur ; versions du registre + audit | humain | projet | FRICTION 2026-09-22, `rules/dependencies.md` |
+| D-011 | 2026-09-24 | Versions du socle : ligne Next 15, epinglage exact, fin de vie octobre 2026 | slice-implementer | projet | ADR-0008 |
+| D-012 | 2026-09-28 | Depot GitHub public `sharksmess/signet` (« on passera en prive si besoin ») | humain | projet | https://github.com/sharksmess/signet |
+| D-013 | 2026-09-28 | Rituel git : branche par tranche, Conventional Commits, `main` protegee (PR, CI verte, historique lineaire, squash), fusion par l'humain seulement | humain | projet | `.claude/rules/git.md`, regle serveur « main-protegee » |
+| D-014 | 2026-09-28 | Lint reel : ESLint 9 (ligne de maintenance), typescript-eslint type-aware | claude-code | projet | ADR-0009 |
+| D-015 | 2026-09-28 | Limiteur de debit toujours actif, coupe seulement si `AUTH_RATE_LIMIT=off` et `APP_ENV=test` | humain | projet | ADR-0010 |
+| D-016 | 2026-09-28 | Tranche 001 : migration 0001 corrigee en place (hors `main`), migrations 0007 (contenu valide par l'humain) et 0008, helpers de test sur la base de test uniquement (valides par l'humain) | humain + claude-code | tranche 001 | `docs/03-slices/001-progress.md` § Decisions |
+| D-017 | 2026-09-28 | Tranche 001 : decisions d'implementation locales (env de build en CI, totaux par test, lint des tests, tsconfig genere) | claude-code | tranche 001 | `docs/03-slices/001-progress.md` § Decisions |
+| D-018 | 2026-09-28 | `packageManager: pnpm@12.3.4` et version de pnpm verrouillee dans le lockfile (CI rouge sans elle) | cowork | projet | commits b709c9e, 23752fe (PR #1) |
+| D-019 | 2026-09-28 | PR #1 (tranche 001) fusionnee en squash, CI verte, audits PASS | humain | tranche 001 | commit 55c3773 |
+| D-020 | 2026-09-28 | La fusion se decide sur preuves (CI, verdicts des relecteurs, fiche de preuves), sans relecture humaine du code | humain | projet | usine 1.4.0, `.claude/rules/git.md` |
+| D-021 | 2026-09-28 | Chaque decision et chaque choix du projet est documente dans le depot | humain | projet | ce registre, `.claude/rules/documentation.md` |
+| D-022 | 2026-09-28 | audit-001 MINEUR-1 tranche : option A — les politiques RLS verifient aussi que l'utilisateur de session est membre de l'organisation du contexte. Ecartees : B (une fonction obligatoire unique pour poser le contexte, la RLS resterait tautologique si on l'oublie) et C (accepter le risque) | humain | projet | backlog § Tranche 010 ; ADR-0011 a ecrire |
+| D-023 | 2026-09-28 | Suite apres la tranche 001 : usine 1.4.0 d'abord, puis une tranche en autonomie (budget 1), puis point d'arret | humain | projet | usine `DECISIONS.md` D-001 |
+| D-024 | 2026-09-28 | D-022 est realisee par une tranche technique 010 « durcissement de l'isolation tenant », executee **avant** la tranche 002, qui inclut aussi MINEUR-10 (attributs des roles) ; c'est la tranche du passage autonome de D-023 | cowork | projet | backlog § Ordre d'execution. Raisons : audit-001 exige MINEUR-1 avant 002 ; 002 (Stripe) exige des cles que seul l'humain peut fournir. Contestable par l'humain |
+| D-025 | 2026-09-28 | Les identifiants de tranche ne sont jamais renumerotes : une tranche inseree prend le prochain numero libre, l'ordre d'execution est ecrit a part | cowork | projet | backlog ; evite que les audits et journaux passes designent une autre tranche |
+| D-026 | 2026-09-28 | Adoption de l'usine 1.4.0 (relecteur de code independant, fiche de preuves, registre, garde des recherches, `.gitattributes`, CI `ubuntu-24.04` + gitleaks v3) | humain (D-023), cowork | projet | PR chore/usine-1.4.0 |

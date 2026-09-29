@@ -1,0 +1,17 @@
+# Fins de ligne normalisees dans le depot (usine 1.4). Sans ce fichier, Windows
+# (CRLF) et Linux/CI (LF) voient des fichiers "modifies" qui ne le sont pas.
+* text=auto eol=lf
+# Scripts Windows : CRLF, attendu par PowerShell 5 et cmd.
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+# Binaires
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.pdf binary
+*.woff binary
+*.woff2 binary

@@ -24,23 +24,24 @@ DOC=$(ls docs/03-slices/"$SLICE"-*.md 2>/dev/null | grep -v progress | head -1)
 TITLE=$(head -1 "$DOC" 2>/dev/null | sed -E 's/^# *//')
 [ -n "$TITLE" ] || TITLE="tranche $SLICE"
 
+EVID="docs/04-runbooks/evidence/$SLICE.md"
+[ -f "$EVID" ] || fail "fiche de preuves $EVID absente : relance scripts/close-slice.sh."
+
 BODY=$(mktemp)
 {
   printf '## Tranche %s\n\n%s — `%s`\n\n' "$SLICE" "$TITLE" "$DOC"
+  printf '## Preuves (decision de fusion)\n\n'
+  sed -n '/^| Preuve/,/^$/p' "$EVID"
+  printf 'Fiche complete : `%s`. Rapports : `docs/04-runbooks/audits/{audit,contracts,review}-%s.md`.\n\n' "$EVID" "$SLICE"
   printf '## Criteres d acceptation\n\n'
   grep -E '^- \[[ x]\] AC' "$DOC" 2>/dev/null || printf '(introuvables dans le contrat)\n'
-  printf '\n## Verdicts\n\n'
-  for r in audit contracts; do
-    F="docs/04-runbooks/audits/$r-$SLICE.md"
-    printf -- '- `%s` : %s\n' "$F" "$(tail -1 "$F" 2>/dev/null || echo 'ABSENT')"
-  done
   printf '\n## Commits\n\n'
   git log --format='- %s' origin/main..HEAD
   if [ -f "docs/03-slices/$SLICE-progress.md" ]; then
     printf '\n## Decisions et points d attention (journal)\n\n'
-    sed -n '/^## Decisions/,$p' "docs/03-slices/$SLICE-progress.md"
+    sed -n '/^## Decisions/,$p' "docs/03-slices/$SLICE-progress.md" | sed '1d'
   fi
-  printf '\n---\nFusion : gate humain, apres CI verte et relecture. Methode : squash.\n'
+  printf '\n---\nFusion : gate humain, **sur preuves** (tableau ci-dessus + CI verte), sans relecture humaine du code. Methode : squash ; le commit reprend cette description.\n\nSlice: %s\n' "$SLICE"
 } > "$BODY"
 
 git push -u origin "$BRANCH" || fail "push refuse (voir pre-push ci-dessus)."

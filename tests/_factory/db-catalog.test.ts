@@ -51,4 +51,40 @@ describe("catalogue Postgres — invariants de l'usine", () => {
     const bad = rows.filter((r) => !rlsExempt.has(r.t) && !(r.rls && r.force)).map((r) => r.t);
     expect(bad, "table sans RLS forcee (exemption explicite : TEST_RLS_EXEMPT_TABLES + ADR)").toEqual([]);
   });
+
+  it("aucun role applicatif n'est superutilisateur ni BYPASSRLS, directement ou par heritage", async () => {
+    // Roles applicatifs : proprietaires ou beneficiaires de droits dans les schemas
+    // applicatifs, hors role de connexion des tests (l'administrateur qui migre).
+    // TEST_APP_ROLES permet de les lister explicitement si la detection ne suffit pas.
+    const explicit = (process.env.TEST_APP_ROLES ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    const { rows } = await db.query<{ role: string; bad: string[] }>(
+      `WITH objs AS (
+         SELECT c.relowner AS owner, c.relacl AS acl FROM pg_class c
+           JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = ANY($1)
+         UNION ALL
+         SELECT p.proowner, p.proacl FROM pg_proc p
+           JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = ANY($1)
+       ), app_roles AS (
+         SELECT owner AS oid FROM objs
+         UNION SELECT (aclexplode(acl)).grantee FROM objs WHERE acl IS NOT NULL
+         UNION SELECT oid FROM pg_roles WHERE rolname = ANY($2::text[])
+       )
+       SELECT r.rolname AS role,
+              array_remove(ARRAY[
+                CASE WHEN r.rolsuper THEN 'SUPERUSER' END,
+                CASE WHEN r.rolbypassrls THEN 'BYPASSRLS' END,
+                CASE WHEN EXISTS (SELECT 1 FROM pg_roles s
+                                   WHERE s.oid <> r.oid AND (s.rolsuper OR s.rolbypassrls)
+                                     AND pg_has_role(r.oid, s.oid, 'MEMBER'))
+                     THEN 'membre d''un role privilegie' END
+              ], NULL) AS bad
+         FROM pg_roles r JOIN app_roles a ON a.oid = r.oid
+        WHERE r.rolname <> current_user`,
+      [schemas, explicit],
+    );
+    const missing = explicit.filter((e) => !rows.some((r) => r.role === e));
+    expect(missing, "roles de TEST_APP_ROLES introuvables dans le cluster").toEqual([]);
+    const bad = rows.filter((r) => r.bad.length > 0).map((r) => `${r.role} (${r.bad.join(", ")})`);
+    expect(bad, "role applicatif privilegie : RLS contournee en silence. ALTER ROLE ... NOSUPERUSER NOBYPASSRLS").toEqual([]);
+  });
 });
