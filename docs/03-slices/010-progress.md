@@ -3,21 +3,24 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : implementation en cours — BLOQUE partiellement (voir « Blocages » : deux tests AC4 infaisables)
+- Statut : implementation terminee — BLOQUE sur deux tests AC4 defectueux (voir « Blocages »), decision du proprietaire des tests attendue
 - Branche : slice/010-durcissement-isolation
-- Dernier commit : 19042a2 feat(db): verifier l'appartenance de session dans la RLS
-- Prochaine etape : migration 0010 (attributs des roles), puis commentaires de `withUserOnly`
+- Dernier commit : 42e5f83 docs(db): commentaires de withTenant et withUserOnly
+- Prochaine etape : correction des deux tests AC4 (hors mandat de l'implementeur), puis `pnpm test` complet, cocher AC4, relecteurs, `close-slice.sh`
 - Etat des tests a l'ecriture : 28 echecs attendus (AC2, AC3, AC4, catalogue ADR-0011, concurrence, AC6 i-ii), 54 verts (suite 001, catalogue usine, AC5 API, AC6 iii, recursion, member non owner). Rejoue a l'implementation (baseline) : identique, 28 echecs / 54 verts.
 - Apres 0009 : 78 verts / 4 echecs (AC6 i-ii : 0010 absente ; AC4 create_organization x2 : defaut de test, voir « Blocages »)
+- Apres 0010 + commentaires (derniere suite) : `Test Files 1 failed | 9 passed (10)`, `Tests 2 failed | 80 passed (82)` ; les 2 echecs sont les tests AC4 defectueux (`25P02`). Aucun test ignore.
+- `pnpm run check` (typecheck + lint) : vert.
+- `pnpm db:generate` : « No schema changes, nothing to migrate », aucun fichier produit (`git status` propre) — preuve ADR-0011 § j.
 
 ## Couches
 - [x] Migration 0009 (RLS par appartenance, fonctions `signet.*`) — 19042a2
-- [ ] Migration 0010 (attributs des roles)
-- [ ] Acces donnees (`withTenant` : commentaires seulement)
-- [ ] Logique metier — sans objet (aucune)
-- [ ] API — sans objet (aucune route modifiee)
-- [ ] UI — sans objet
-- [ ] Suite complete verte + `pnpm run check`
+- [x] Migration 0010 (attributs des roles) — 1588c66
+- [x] Acces donnees (`withTenant` : commentaires seulement) — 42e5f83
+- [x] Logique metier — sans objet (aucune)
+- [x] API — sans objet (aucune route modifiee)
+- [x] UI — sans objet
+- [ ] Suite complete verte + `pnpm run check` — `check` vert ; suite : 80/82, 2 echecs = defaut de test (Blocages)
 
 ## Blocages
 <!-- cause, essais, options. Vide = aucun. -->
@@ -34,3 +37,7 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 - 0009, implementeur : messages `SG002` distincts pour « identite absente » et « identite differente », sans aucun identifiant dans le texte (regle secrets/erreurs). Meme code, pour le test et pour ERD §0.
 - 0009, implementeur : `ALTER POLICY ... TO signet_app` pour `organization_isolation` / `member_isolation` (plutot que `DROP` + `CREATE`) : l'expression est conservee a l'identique, ce qu'exige ADR-0011 § d (« texte inchange »). `REVOKE ALL FROM PUBLIC` + `GRANT` re-emis sur chaque fonction remplacee, meme si `CREATE OR REPLACE` conserve les privileges : la migration se lit seule. L'`EXECUTE` explicite accorde a `signet_definer` sur `current_org()` en 0005 n'est pas revoque : `signet_definer` en est desormais proprietaire (droit implicite, non revocable utilement).
 - 0009, implementeur : `context_org()` est `STABLE`, `LANGUAGE sql`, `SECURITY INVOKER` sans `SET search_path` (comme `current_user_id()` de 0001, et conforme a ERD §1) : pas de `SECURITY DEFINER`, donc hors des exigences de `search_path` du catalogue ; elle ne reference aucune relation.
+- 0010, implementeur : le message d'erreur liste toutes les appartenances fautives (`<role signet_*> membre de <parent>`), triees, plus un `HINT` de remediation ; noms de roles seulement, aucun secret. SQLSTATE `P0001` par defaut (pas d'`ERRCODE` personnalise : ADR-0011 § h et le test attendent `P0001`). Tables du catalogue qualifiees `pg_catalog.` dans le bloc `DO`.
+- 0010, implementeur : pas de controle d'existence des roles avant `ALTER ROLE` : 0001 les cree toujours ; un role absent ferait echouer la migration bruyamment, ce qui est le comportement voulu.
+- `db.ts`, implementeur : en plus du commentaire de `withUserOnly` (ADR-0011 § i), une phrase ajoutee au commentaire de `withTenant` (la RLS verifie desormais l'appartenance ; le controle applicatif et le 404 uniforme restent requis). Commentaire seulement, dans le perimetre declare ; ecarte : laisser `withTenant` muet sur le changement de sens de la barriere.
+- AC cochees dans le contrat : AC1, AC2, AC3, AC5, AC6 (tests verts). AC4 **non cochee** : ses assertions `SG002` et de catalogue passent, mais deux de ses tests echouent (defaut de test).
