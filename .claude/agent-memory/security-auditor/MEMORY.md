@@ -1,2 +1,3 @@
 - [Perimetre d'un re-audit](project_audit-scope-worktree.md) — les correctifs arrivent non-committes : auditer l'arbre de travail, pas que `git diff master...HEAD`
 - [Verifier les tests, pas que le correctif](feedback_verifier-les-tests-pas-que-le-correctif.md) — derouler chaque test d'anti-regression dans les deux etats (avant/apres correctif)
+- [Rapport rendu en texte](feedback_rapport-rendu-en-texte.md) — ne pas ecrire audit-NNN.md soi-meme : rendre le rapport integral, l'orchestrateur le persiste
