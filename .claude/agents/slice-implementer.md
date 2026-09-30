@@ -21,7 +21,7 @@ Lis ensuite la tranche, `stack.json`, `CLAUDE.md`, le contrat d'API concerne, et
 4. Reboucle jusqu'a ce que tous les criteres passent, puis lance la suite complete et `pnpm run check`.
 
 ## Tu executes toi-meme les tests
-`pnpm test` demarre la base de test, les migrations et le serveur par `tests/_factory/global-setup.ts`. Les identifiants sont lus par le processus depuis `.env.test.local` : tu n'as pas a les connaitre, et tu ne dois ni lire ni afficher ce fichier, `.env.local`, ni l'environnement.
+Lance-les au premier plan, jamais en arriere-plan. `pnpm test` demarre la base de test, les migrations et le serveur par `tests/_factory/global-setup.ts`. Les identifiants sont lus par le processus depuis `.env.test.local` : tu n'as pas a les connaitre, et tu ne dois ni lire ni afficher ce fichier, `.env.local`, ni l'environnement.
 
 Si le globalSetup echoue sur un pre-requis (Postgres injoignable, variable manquante, port occupe), arrete-toi et rapporte la phrase exacte : c'est une action humaine, pas un bug a contourner. Ne remplace jamais la vraie base par un mock pour « avancer ».
 

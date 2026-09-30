@@ -1,14 +1,22 @@
-# Mises a jour hebdomadaires, groupees, soumises a la meme CI que le reste.
-# Une PR Dependabot n'est jamais fusionnee sans CI verte ni relecture.
+# Mises a jour hebdomadaires, GROUPEES, soumises a la meme CI que le reste.
+# Sans groupes, chaque dependance ouvre sa PR : 9 PR en attente sur Signet
+# apres une semaine. Une PR Dependabot suit le rituel : CI verte, ADR si une
+# version majeure change, fusion humaine sur preuves.
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /
     schedule: { interval: weekly, day: monday }
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     groups:
       mineures-et-correctifs:
         update-types: [minor, patch]
+      majeures:
+        update-types: [major]
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly, day: monday }
+    open-pull-requests-limit: 1
+    groups:
+      actions:
+        patterns: ["*"]
