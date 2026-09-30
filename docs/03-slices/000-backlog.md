@@ -70,7 +70,7 @@ Les identifiants ne sont jamais renumerotes (D-025) : une tranche inseree prend 
 - review-010 SUGGESTION-1 : les tests AC3 de 010 sur `organization_link_usage`, `subscription` et `app_user` n'assertent pas l'existence prealable des lignes (vraie aujourd'hui) ; ajouter cette precondition si une tranche change leur creation.
 - audit-010 INFO-4 / ADR-0011 : la RLS verifie l'appartenance, pas le role ; durcir `UPDATE organization` au role owner en RLS reste une option (hors D-022).
 - ~~Corriger `.claude/rules/drizzle-postgres.md:22`~~ : fait dans l'usine 1.4.0 (revocation sans `FOR ROLE` ni `IN SCHEMA`, visant le role qui cree les fonctions).
-- Reevaluer ESLint 10 (`latest`) au passage a Next 16 : ESLint reste en 9.39.5 parce que `eslint-config-next@15.5.26` echoue sous ESLint 10 (ADR-0009). A traiter avec la montee de Next, fin de vie de la ligne 15 en octobre 2026 (ADR-0008).
+- Reevaluer ESLint 10 : **reporte par la tranche 011** (ADR-0013). Next 16.3.7 est en place, mais ESLint reste en 9.39.5 : sous ESLint 10.11.0, `eslint-plugin-react@7.37.5` (derniere version, charge par `eslint-config-next@16.3.7`) echoue (`contextOrFilename.getFilename is not a function`) et `eslint-plugin-import`, `eslint-plugin-jsx-a11y`, `eslint-plugin-react` bornent leur pair `eslint` a 9. Declencheur : une version de ces greffons acceptant `eslint` 10, reprise par `eslint-config-next`. D'ici la, refuser les PR Dependabot qui montent `eslint` en 10.
 - Le detail complet de chaque tranche (perimetre fichiers, contrat de donnees, contrat d'API, criteres d'acceptation AC1-AC5, anti-regression) est ecrit au moment de son ouverture, au format `templates/SLICE.md`, dans `docs/03-slices/<id>-<nom>.md`.
 
 ## Questions d'architecture ouvertes
