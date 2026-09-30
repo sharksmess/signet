@@ -14,6 +14,11 @@ Delegue au sous-agent `slice-implementer`. Il travaille sur la branche `slice/NN
 
 Passe-lui dans le prompt de delegation : le chemin du fichier de tranche, le chemin du perimetre, et le rappel explicite des regles hors-perimetre. Un sous-agent demarre avec un contexte vierge : ce que tu ne lui dis pas, il ne le sait pas.
 
+## Regles d'orchestration (tirees du premier passage autonome, tranche 010 de Signet)
+- **Tests au premier plan.** Lance `pnpm test` et `pnpm run check` au premier plan, jamais en arriere-plan : attendre une notification de fin a deja endormi la session, et il a fallu un humain pour la relancer.
+- **Sous-agent bloque ou arrete sans rapport** : verifie ce qu'il a laisse (`git status`, `git log`), puis **relance-le une fois** avec l'etat constate. Si la relance echoue aussi, reprends son travail toi-meme **et ecris la reprise** dans la section « Decisions » du journal de tranche et dans `docs/DECISIONS.md` (qui, quoi, pourquoi, commits). Jamais de reprise silencieuse (decision D-034 de Signet).
+- **Base de test partagee** : une seule suite de tests a la fois. Les relecteurs lances en parallele ne lancent pas `pnpm test` ; ils lisent les resultats que tu leur transmets.
+
 ## 2. Controles de cloture
 Une fois les criteres d'acceptation passes, lance **en parallele** les trois relecteurs independants, chacun dans son propre contexte :
 - `security-auditor` sur le diff de la tranche
@@ -23,6 +28,8 @@ Une fois les criteres d'acceptation passes, lance **en parallele** les trois rel
 Enregistre le rapport final de chacun, **tel quel**, dans `docs/04-runbooks/audits/audit-NNN.md`, `contracts-NNN.md` et `review-NNN.md` (en ajoutant une section datee si le fichier existe deja). La derniere ligne doit etre le verdict exact (`AUDIT: PASS`, `CONTRACTS: PASS`, `REVIEW: PASS`). Ne reformule pas, ne resume pas : ces fichiers sont les preuves que l'humain et un auditeur externe liront.
 
 Avant la cloture, reporte dans `docs/DECISIONS.md` les decisions de la tranche (une ligne chacune, lien vers le journal ou l'ADR), ou une ligne « Tranche NNN : aucune decision hors contrat ». Regle : `.claude/rules/documentation.md`.
+
+Ecris le recapitulatif de l'etape dans le journal de projet : `docs/00-context/journal/NN-tranche-NNN-<nom>.md` (gabarit `docs/templates/JOURNAL-ENTREE.md`) et sa ligne dans `docs/00-context/JOURNAL.md`, en citant la fiche de preuves `docs/04-runbooks/evidence/NNN.md` qui sera produite a la cloture. Committe (`docs(slice-NNN): journal de projet`).
 
 Puis `bash scripts/close-slice.sh`. Il produit la fiche de preuves `docs/04-runbooks/evidence/NNN.md`.
 

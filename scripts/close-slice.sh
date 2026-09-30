@@ -79,6 +79,11 @@ if [ -f docs/DECISIONS.md ]; then
 else
   bad "registre docs/DECISIONS.md absent (gabarit : docs/templates/DECISIONS.md)."
 fi
+if [ -f docs/00-context/JOURNAL.md ]; then
+  grep -qiE "(tranche|slice)[ -]*$SLICE" docs/00-context/JOURNAL.md || bad "journal de projet : aucune entree pour la tranche $SLICE dans docs/00-context/JOURNAL.md (gabarit : docs/templates/JOURNAL-ENTREE.md)."
+else
+  bad "journal de projet docs/00-context/JOURNAL.md absent (gabarit : docs/templates/JOURNAL.md)."
+fi
 
 BASE=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main 2>/dev/null || echo "")
 if [ -n "$BASE" ]; then

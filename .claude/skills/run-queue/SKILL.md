@@ -17,8 +17,9 @@ Depuis `docs/03-slices/000-backlog.md`, retiens les tranches dont toutes les dep
 Les tranches s'executent **l'une apres l'autre**, chacune sur sa branche depuis `main`. Une tranche dont une dependance a une PR encore ouverte ne demarre pas : tu t'arretes et signales que la fusion humaine est attendue. Pas de parallelisme dans cette version de l'usine : il a produit plus de travail perdu que de temps gagne.
 
 ## 2. Boucle, par tranche
-1. `/saas-factory:slice` pour ouvrir et rediger le contrat.
-2. `test-writer` pour les tests.
+`/slice` et `/implement` sont reserves a l'humain (`disable-model-invocation`) : tu ne peux pas les invoquer. **Lis et applique toi-meme** `.claude/skills/slice/SKILL.md` puis `.claude/skills/implement/SKILL.md`, dans l'ordre, y compris leurs regles d'orchestration.
+1. Ouvrir la tranche et rediger le contrat (`skills/slice/SKILL.md`).
+2. `test-writer` pour les tests (s'il s'arrete sans rapport : regles d'orchestration de `skills/implement/SKILL.md`).
 3. `slice-implementer` sur la branche de la tranche.
 4. `security-auditor`, `contract-guardian` et `code-reviewer` en parallele ; decisions de la tranche reportees dans `docs/DECISIONS.md`.
 5. `scripts/close-slice.sh`.
