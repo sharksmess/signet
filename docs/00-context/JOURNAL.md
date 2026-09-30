@@ -1,0 +1,14 @@
+# Journal du projet Signet
+
+Historique du projet, **une entree par etape franchie**, redigee a la fin de l'etape par l'orchestrateur (Claude, via le pont desktop) et versionnee ici. Lecture en deux minutes : ce qui a ete fait, ce qui a ete decide, les preuves, et ou l'on en est.
+
+Complements : decisions detaillees dans `docs/DECISIONS.md`, incidents dans `docs/04-runbooks/FRICTION.md`, preuves de chaque tranche dans `docs/04-runbooks/evidence/`.
+
+| # | Dates | Etape | Resultat | Preuves |
+|---|---|---|---|---|
+| 01 | 22/09 | [Cadrage : usine installee, PRD et architecture approuves](journal/01-cadrage.md) | Gates 1 et 2 franchis, socle gele | commits fa76b01, b0e9cd7 |
+| 02 | 22/09 → 25/09 | [Tranche 001, premiere implementation](journal/02-tranche-001-implementation.md) | Code ecrit, suite instable, frictions consignees | ADR-0007, ADR-0008 |
+| 03 | 27/09 → 28/09 | [Usine 1.3 : rituel git, tests autonomes, GitHub](journal/03-usine-1.3-et-github.md) | Depot public, `main` protegee, CI | 65 scenarios d'usine |
+| 04 | 28/09 | [Tranche 001 livree](journal/04-tranche-001-livree.md) | PR #1 fusionnee | commit 55c3773, CI verte |
+| 05 | 28/09 → 29/09 | [Usine 1.4.0 : preuves, relecture, documentation](journal/05-usine-1.4.md) | Adoption fusionnee (PR #11) | commit d49fd3f, 97 scenarios |
+| 06 | 30/09 | [Tranche 010 en autonomie + point d'arret](journal/06-tranche-010-autonome.md) | PR #12 ouverte, 6 decisions en attente | fiche `evidence/010.md` |
