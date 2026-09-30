@@ -73,3 +73,63 @@
 - **Manquant** : le test de l'`INSERT INTO organization` sous contexte force, exige par AC2 et deja coche.
 
 REVIEW: CHANGES
+
+## Second passage — 2026-09-30
+
+- **Relecteur** : `code-reviewer`, meme agent, sans avoir vu les correctifs s'ecrire.
+- **Branche** : `slice/010-durcissement-isolation`, HEAD `8dfdefd` (premier passage sur `7320169`).
+- **Perimetre relu** : `git diff 7320169..HEAD` (commits `485d2e3`, `37c213f`, `bda76f9`, `8dfdefd`), `tests/isolation-hardening/rls-membership.test.ts` et `definer-functions.test.ts` en entier pour les parties modifiees, `tests/helpers/fixtures.ts`, `010-progress.md` (Etat, Blocages, Decisions), `000-backlog.md`, `autonomous-run-2026-09-29.md`, `audit-010.md`, `docs/DECISIONS.md`, fonctions de 0003/0005 qui creent `organization_link_usage` et `subscription`.
+
+### Preuves executees par le relecteur
+- `pnpm test` lance par le relecteur sur `8dfdefd` (aucun autre agent actif) : `Test Files 10 passed (10)`, `Tests 92 passed (92)`. Chiffre de l'implementeur confirme.
+- `pnpm run check` (typecheck + lint) : vert. Arbre de travail propre.
+- `git diff --stat 7320169..HEAD -- tests/organizations tests/_factory tests/helpers packages/db apps docs/02-architecture docs/03-slices/010-durcissement-isolation.md` : **vide**. `git diff --stat main...HEAD -- tests/organizations` : **vide**. Les migrations 0009/0010, les helpers, l'ERD, les ADR et le contrat n'ont pas change depuis le premier passage ; seuls les deux fichiers de `tests/isolation-hardening/` et des documents ont bouge.
+- `git grep TODO|FIXME` dans `tests/isolation-hardening` : aucun.
+- Commits : quatre, Conventional Commits, un par nature (tests, tests, journal, rapports), corps expliquant le pourquoi pour les deux commits de tests.
+
+### Suivi des constats du premier passage
+
+| Constat | Statut | Verification |
+|---|---|---|
+| BLOQUANT-1 (AC2 `INSERT` non teste) | **Traite** | Quatre tests AC2 (owner et member de A ; id de B, et id neuf pose comme contexte) + un AC3 (a) exigent `42501` exact. Precondition `has_table_privilege('signet_app','public.organization','INSERT') = true` avant chaque essai : le `42501` ne peut pas venir d'un `GRANT` manquant. Discrimination verifiee contre l'ancienne `current_org()` brute : l'id neuf aurait ete insere (`err` indefini, echec du `toBeDefined`), l'id de B aurait rendu `23505`. Slug unique a chaque essai : aucune contrainte d'unicite parasite. |
+| Ecart assume : pas de lecture de controle hors RLS apres l'`INSERT` refuse | **Justification acceptee** | `asTenant` annule toujours sa transaction : une lecture apres coup vaudrait 0 quelle que soit l'implementation (le defaut exact releve en A CORRIGER-2). La preuve tient a l'instruction qui echoue avec un code exact, atomiquement. Consigne au journal avec les options ecartees (`rejects.toThrow()`, test du message dependant de `lc_messages`). |
+| A CORRIGER-1 (concurrence, `STABLE`) | **Traite** | Scenario du contrat reproduit : une transaction sur la connexion d'administration, lectures sous `SET LOCAL ROLE signet_app` (verifie par `current_user`), `DELETE` du membre non owner entre deux (1 ligne), relecture `organization` et `member` vides ; `ROLLBACK` en `finally`. Test de catalogue `provolatile = 's'`, `prosecdef`, proprietaire `signet_definer` sur `signet.current_org()`. Ancien test conserve, commentaire corrige ; choix et option ecartee au journal. |
+| A CORRIGER-2 (AC4 « boite blanche » toujours vraie) | **Traite** | Utilisateurs reels (`signUp`, owner reel d'une autre fixture) : sans la garde, l'ancienne fonction reussirait, donc `SG002` discrimine. Le comptage est explicitement commente « controle de coherence, pas preuve » ; rectificatif ecrit au journal (§ Blocages et § Decisions) sans effacer l'historique. |
+| A CORRIGER-3 (journaux en retard) | **Traite** | `010-progress.md` § Etat : statut, dernier commit de code/tests, derniere suite 92/92 en tete, historique conserve. Journal du run : etapes 4 a 7 ajoutees (fin d'implementation, blocage `25P02` et sa levee par l'orchestrateur, relectures, renvoi des correctifs). |
+| SUGGESTION-1 (politiques `TO PUBLIC`) | Appliquee | `OR 0::oid = ANY(pol.polroles)` dans les deux invariants. |
+| SUGGESTION-2 (`22P02` exige) | Appliquee | Les trois tests AC3 (c) exigent `22P02` ; « 0 ligne » n'est plus accepte. Durcissement, pas affaiblissement. |
+| SUGGESTION-3 (AC3 sur les autres tables) | Appliquee | (a), (b), (c vide) sur `organization_link_usage`, `subscription`, `app_user`. Les lignes existent bien pour A : `create_organization` (0003 l. 345-348, 0005 l. 72-75) cree l'usage et l'abonnement. Voir SUGGESTION-1 ci-dessous. |
+| SUGGESTION-4 (tracabilite) | Ouverte, hors code | (b) et (c) restent a traiter a la livraison : D-027 « a valider par l'humain » a lister dans la PR ; AC6 ne vaut preuve CI qu'apres la CI. |
+
+**Aucune assertion affaiblie.** J'ai relu chaque hunk supprime : les seules assertions retirees sont les branches « 0 ligne ou `22P02` » d'AC3 (c), remplacees par une exigence plus stricte, et les identifiants fictifs d'AC4, remplaces par des utilisateurs reels. L'assertion `SG002` est intacte ; les assertions AC2/AC3 existantes sont inchangees.
+
+### Nouveaux constats
+
+#### A CORRIGER-1 — Backlog : deux constats deja traites y sont inscrits comme a faire
+- **Emplacement** : `docs/03-slices/000-backlog.md` l. 51 (audit-010 INFO-2) et l. 52 (audit-010 INFO-3), ajoutes par `8dfdefd`.
+- **Constat** : INFO-2 (politiques `TO PUBLIC` dans les invariants) et INFO-3 (owner reel dans le test AC4) sont realises par `37c213f`, commit anterieur a `8dfdefd`, et consignes comme tels au journal de tranche (§ Correctifs de relecture). Le backlog les presente pourtant comme travail restant.
+- **Consequence** : une tranche future reprendra un travail fait, ou un auditeur conclura que deux constats de securite sont ouverts alors qu'ils sont fermes et testes. Le backlog et le journal se contredisent.
+- **Direction** : barrer ces deux lignes avec renvoi a `37c213f` (convention deja utilisee l. 47 et l. 54 du backlog). Cout : deux lignes.
+
+#### A CORRIGER-2 — Le report des constats d'audit-010 au backlog, dont une priorite qui engage 002, n'a pas de ligne au registre
+- **Emplacement** : `docs/DECISIONS.md` (derniere entree D-028) ; `000-backlog.md` l. 48-53 ; `autonomous-run-2026-09-29.md` etape 6.
+- **Constat** : l'orchestrateur a decide de ne pas traiter dans 010 les MINEUR-1/MINEUR-2 et INFO-1/INFO-4 d'audit-010, et de placer MINEUR-2 « avant ou dans la tranche 002 ». C'est une decision de priorite qui contraint la tranche suivante. Elle est ecrite (backlog, journal du run) mais n'a pas de ligne D-NNN, alors que `documentation.md` exige « une ligne dans `docs/DECISIONS.md` » pour toute decision, avec decideur et options ecartees.
+- **Consequence** : l'humain qui fusionne sur preuves, ou un auditeur qui part du registre, ne voit pas qu'un risque residuel de securite (contexte brut vu par les fonctions definer) a ete accepte pour cette tranche, ni par qui, ni l'option ecartee (le traiter dans 010).
+- **Direction** : ajouter une ligne au registre (decideur orchestrateur, portee tranche 010 et 002, options : traiter dans 010 / reporter ; lien audit-010 et backlog), marquee « a valider par l'humain » comme D-027. Rien de bloquant : la decision est tracable dans le depot, c'est son entree au registre qui manque.
+
+#### SUGGESTION-1 — Tests AC3 sur les tables complementaires : pas de controle positif
+- **Emplacement** : `tests/isolation-hardening/rls-membership.test.ts`, test `AC3 %s : aucune ligne organization_link_usage, subscription ni app_user visible`.
+- **Constat** : le test verifie `[]` sans etablir que les lignes existent. Aujourd'hui elles existent (creees par `create_organization`), donc le test discrimine. Mais si une tranche future (002, Stripe) cesse de creer l'abonnement a la creation, le test resterait vert sans rien prouver.
+- **Direction** : lire les memes lignes par `asBypassRls` ou sous un contexte valide (owner de A) et exiger une ligne avant d'exiger `[]`, sur le modele de `expectAppCanInsertOrganization`.
+
+#### SUGGESTION-2 — Couplage a documenter entre la precondition `INSERT` et le backlog audit-010 MINEUR-1
+- **Emplacement** : `rls-membership.test.ts` (`expectAppCanInsertOrganization`) ; `000-backlog.md` l. 49.
+- **Constat** : la precondition exige que `signet_app` detienne `INSERT` sur `organization`. Le backlog prevoit de le revoquer. La tranche qui le fera verra cinq tests echouer sur la precondition. C'est le bon comportement (le test ne doit pas passer en silence), mais rien ne le signale a cette tranche.
+- **Direction** : ajouter a la ligne l. 49 du backlog que ces tests devront alors attendre `42501` par absence de privilege (ou etre remplaces par l'assertion de catalogue prevue).
+
+### Bilan du second passage
+- **Solide** : les cinq constats BLOQUANT/A CORRIGER du premier passage sont traites par des tests qui echoueraient sur l'ancienne implementation (code exact, precondition de privilege, utilisateurs reels, vrai retrait de membre, volatilite epinglee). Aucune assertion affaiblie, migrations et suite 001 intactes, 92/92 et `check` verts constates par le relecteur.
+- **Fragile** : les tests AC3 des tables complementaires reposent sur un effet de bord non verifie de `create_organization`. La precondition `INSERT` est couplee a une revocation prevue au backlog.
+- **Manquant** : backlog en contradiction avec le journal (INFO-2/INFO-3 marques ouverts) ; pas de ligne au registre pour le report des constats d'audit-010 ; validation humaine de D-027 et preuve CI d'AC6 a porter dans la PR.
+
+REVIEW: PASS
