@@ -36,12 +36,34 @@ Aucun travail maintenant, mais contraire a D-041 et a la fin de maintenance de l
 
 | Paquet | Manifeste | Avant | Apres | Publication (registre) | Remarque |
 |---|---|---|---|---|---|
-| `next` | `apps/web` | 15.5.26 (2026-09-22) | **16.3.7** | 2026-09-29T09:04Z | `latest` = 16.3.8, publiee le 2026-09-30T16:07Z : en quarantaine pnpm, non retenue |
-| `eslint-config-next` | racine | 15.5.26 (2026-09-22) | **16.3.7** | 2026-09-29T08:55Z | meme version que `next` ; 16.3.8 (2026-09-30T15:59Z) en quarantaine |
+| `next` | `apps/web` | 15.5.26 (2026-09-22) | **16.3.7** | 2026-09-29T09:04Z | `latest` = 16.3.8, publiee sur npm le 2026-09-30T16:07Z : **version de securite** (7 avis, voir « 16.3.8 : correctif de securite »), en quarantaine pnpm, non retenue dans cette tranche |
+| `eslint-config-next` | racine | 15.5.26 (2026-09-22) | **16.3.7** | 2026-09-29T08:55Z | meme version que `next` ; 16.3.8 (2026-09-30T15:59Z) en quarantaine, a monter avec `next` |
 | `@eslint/eslintrc` | racine | 3.3.7 (2026-09-01) | **retire** | — | ne servait qu'a `FlatCompat` ; reste present en dependance transitive d'`eslint@9` |
 | `eslint` | racine | 9.39.5 (2026-07-10) | **9.39.5** (inchange) | 2026-07-10T20:41Z | 10.11.0 (`latest`, 2026-09-18) essayee et ecartee, voir ci-dessous |
 
 Dependances transitives notables du lockfile : `@next/eslint-plugin-next` 15.5.26 -> 16.3.7 (2026-09-29), `eslint-plugin-react-hooks` 5.2.0 (2025-02-28) -> 7.1.1 (2026-04-17). Aucune autre ligne `"nom": "x.y.z"` ne change dans un `package.json`. `pnpm-workspace.yaml` est inchange (aucun `minimumReleaseAgeExclude`).
+
+`eslint-plugin-react-hooks` 7.1.1 (regles issues du React Compiler) tire une vingtaine de paquets transitifs : `@babel/*` 7.29.x, `browserslist`, `caniuse-lite`, `hermes-*` notamment. Cet arbre sert uniquement au developpement (lint), il est hors `pnpm audit --prod`, et aucun de ces paquets n'a de script d'installation (`preinstall`, `install`, `postinstall` : verifie par l'audit de securite, `docs/04-runbooks/audits/audit-011.md`).
+
+### 16.3.8 : correctif de securite
+
+`next@16.3.8` n'est pas une simple version en quarantaine : c'est une **version de securite**. Sa note de version (`gh release view v16.3.8 -R vercel/next.js`, publiee le 2026-09-30T16:13Z) corrige 7 avis qui touchent `next@16.3.7` (audit-011, MINEUR 1) :
+
+| Avis | Gravite | Sujet | Condition d'exposition | Signet expose ? |
+|---|---|---|---|---|
+| GHSA-cjq9-62q9-8jv4 | High | SSRF dans l'optimisation d'images | `images.remotePatterns` configure | Non : `apps/web/next.config.ts` ne contient que `reactStrictMode` |
+| GHSA-4jqv-mc3x-m676 | Medium | Empoisonnement du cache SSG/ISR | Pages Router | Non : aucune page |
+| GHSA-mcj8-r9mp-w47p | Medium | Empoisonnement du cache SSG/ISR | Page catch-all a la racine avec SSG/ISR | Non : `api/auth/[...all]` est un gestionnaire de route, pas une page racine |
+| GHSA-f87g-xv8r-7p7x | Medium | Divulgation via les routes d'image de metadonnees | Routes `opengraph-image` / `twitter-image` | Non : aucune |
+| GHSA-3w37-wq28-93x7 | Medium | Fuite du contenu Draft Mode | `use cache` avec Draft Mode | Non : ni `use cache` ni `draftMode` |
+| GHSA-h694-7cp9-m8p3 | Medium | Fuite de cache entre valeurs de root param | `cacheComponents: true` | Non |
+| GHSA-39w2-rjm5-chcv | Low | Endpoint MCP du serveur `next dev` sans controle d'origine | `next dev` uniquement | **Oui, sur les postes de developpement seulement** |
+
+- Les deux avis sur le cache SSG/ISR (GHSA-4jqv-mc3x-m676, GHSA-mcj8-r9mp-w47p) touchent aussi la ligne 15.5 de `main` : la tranche ne degrade rien sur ce point.
+- GHSA-39w2-rjm5-chcv (Low) est **introduit par la ligne 16** (plage vulnerable `>= 16.0.0`) et concerne les postes de developpement : une page malveillante visitee pendant `pnpm dev` peut interroger l'endpoint MCP local et lire le chemin du projet, les routes, des extraits de source et les journaux de developpement. `next start` (production) n'est pas concerne.
+- `pnpm audit` ne voit pas encore ces avis (« No known vulnerabilities found ») : ils ne sont publies que sur le depot `vercel/next.js`, pas encore dans la base mondiale des avis GitHub que lisent `pnpm audit` et les mises a jour de securite de Dependabot. Ni la CI ni Dependabot ne les signaleront avant que GitHub ne les ait relus.
+
+**Pourquoi 16.3.7 reste la version de cette tranche.** Prendre 16.3.8 aujourd'hui imposerait une exclusion `minimumReleaseAgeExclude`, c'est-a-dire deroger au garde-fou de chaine d'approvisionnement d'ADR-0012 (une version compromise est generalement retiree dans les heures qui suivent sa publication). Aucun des six avis qui visent la production ne touche le code actuel, et le seul avis applicable est Low et limite au developpement : moins d'une journee d'exposition ne justifie pas la derogation. La montee est planifiee dans les 48 h, voir « Consequences acceptees ».
 
 ### Essai ESLint 10 (reproduit dans la tranche)
 
@@ -141,12 +163,12 @@ Origine : `apps/web/src/lib/auth.ts` est evalue a l'import des Route Handlers pe
 
 ## Consequences acceptees
 
-- **ESLint 10 reporte.** Le depot reste sur `eslint@9.39.5`, que le registre marque deprecie. Le risque est borne : ESLint est un outil de developpement (hors `pnpm audit --prod`), il n'est pas execute en production. Tant qu'`eslint-plugin-react` ne declare pas la prise en charge d'ESLint 10, **Dependabot proposera `eslint` 10 et ces PR sont a refuser** : elles casseraient `pnpm run check`.
+- **Montee en `next` + `eslint-config-next` 16.3.8 dans les 48 h** (regle « correctif de securite » de `.claude/rules/dependencies.md`) : echeance **2026-10-02 vers 16:13Z** (48 h apres la note de version), a faire des la fin de la quarantaine pnpm (**2026-10-01 vers 16:07Z**), sans exclusion, sans attendre le passage hebdomadaire de Dependabot (lundi 2026-10-05). D'ici la, ne pas naviguer sur des sites non fiables pendant `pnpm dev` (GHSA-39w2-rjm5-chcv).
+- **ESLint 10 reporte.** Le depot reste sur `eslint@9.39.5`, que le registre marque deprecie. Le risque est borne : ESLint est un outil de developpement (hors `pnpm audit --prod`), il n'est pas execute en production. Effet reel sur Dependabot : tant qu'`eslint-plugin-react` ne declare pas la prise en charge d'ESLint 10, le groupe `majeures` (`.github/dependabot.yml`) contiendra `eslint` 10 **chaque semaine**. Refuser cette PR groupee fait perdre aussi les autres majeures du groupe ; l'accepter casse `pnpm run check`. Deux options sont remontees a l'humain, hors perimetre du contrat de la tranche 011 (qui limitait le changement Dependabot a `@types/node`) : un `ignore` `semver-major` pour `eslint`, sur le modele de `@types/node` (D-040), lie au signal de reexamen ci-dessous ; ou un refus manuel accepte et ecrit au registre (review-011, A CORRIGER 1).
 - `@eslint/eslintrc` reste installe en dependance transitive d'`eslint@9` : le retrait porte sur la dependance directe et l'usage de `FlatCompat`, pas sur l'arbre.
 - `eslint-plugin-react-hooks` passe de 5 a 7 (via `eslint-config-next`) : 16 regles `react-hooks/*` actives sur `apps/web`, dont les regles issues du React Compiler. Sans effet aujourd'hui (aucun composant) ; elles s'appliqueront aux premiers composants de la tranche 002.
 - Les objets `ignores` globaux d'`eslint-config-next` sont filtres : si une version future y ajoute un motif utile, il faudra le reporter a la main dans la liste du depot.
-- `next` et `eslint-config-next` doivent rester de meme version (test AC1 de la tranche 011) : un groupe Dependabot qui ne monterait que l'un des deux fera echouer la CI.
-- 16.3.8 (publiee le jour de la tranche) sera proposee par Dependabot une fois la quarantaine ecoulee.
+- `next` et `eslint-config-next` doivent rester de meme version (test AC1 de la tranche 011). Les PR groupees de Dependabot (`mineures-et-correctifs`, `majeures`) montent les deux ensemble. En revanche, **une PR de securite Dependabot ne monte que le paquet vise par l'avis** (`next`) : sa CI echouera sur AC1. Procedure : aligner `eslint-config-next` a la main sur la meme version, dans la meme PR, sans attendre (le correctif de securite prime, 48 h). Le choix d'une autre politique (groupe Dependabot dedie `next` + `eslint-config-next` couvrant les mises a jour de securite, ou test relache a la meme ligne majeure.mineure) est remonte a l'humain (audit-011 MINEUR 2, review-011 A CORRIGER 2).
 
 ## Signal de reexamen
 

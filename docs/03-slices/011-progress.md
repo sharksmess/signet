@@ -3,7 +3,7 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : implementation terminee, criteres locaux prouves ; en attente des trois relecteurs, du registre des decisions et de `close-slice.sh` (orchestrateur)
+- Statut : auditee, 3 PASS (`security-auditor`, `contract-guardian`, `code-reviewer` : `docs/04-runbooks/audits/audit-011.md`, `contracts-011.md`, `review-011.md`) ; correctifs de documentation appliques (ADR-0013, contrat, backlog) ; en attente du registre des decisions et de `close-slice.sh` (orchestrateur)
 - Branche : slice/011-montee-next16
 - Dernier commit de code/doc : 34c36ac `docs(slice-011): ADR-0013, statuts d'ADR-0008 et ADR-0009`
 - Verification finale (2026-09-30, au premier plan, une commande a la fois) :
@@ -14,9 +14,9 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
   - `pnpm audit --prod --audit-level=high` : « No known vulnerabilities found »
   - `pnpm peers check` : « No peer dependency issues found »
   - `git diff main --stat -- apps/web/src packages tests/organizations tests/isolation-hardening tests/_factory` : vide ; `pnpm-workspace.yaml` et `docs/02-architecture/api-contracts/` inchanges
-- AC coches dans le contrat : AC1 a AC6. AC2 : partie locale prouvee (suite, check, build, portee du lint) ; « CI verte » a constater sur la PR. AC3 : tests de la tranche 001 verts et inchanges ; verdict `contract-guardian` a obtenir.
+- AC coches dans le contrat : AC1 a AC6. AC2 : partie locale prouvee (suite, check, build, portee du lint) ; « CI verte » a constater sur la PR. AC3 : tests de la tranche 001 verts et inchanges ; `contract-guardian` PASS (`contracts-011.md`) ; reserves annotees sur les lignes AC2 et AC3 du contrat.
 - Fichiers crees par Next non committes : aucun (`AGENTS.md` n'est pas apparu ; `next-env.d.ts` et `.next/` deja ignores).
-- Prochaine etape : relecteurs (`security-auditor`, `contract-guardian`, `code-reviewer`), ligne(s) au registre `docs/DECISIONS.md`, journal de projet, `bash scripts/close-slice.sh`.
+- Prochaine etape (orchestrateur) : lignes au registre `docs/DECISIONS.md`, journal de projet, commit du runbook, `bash scripts/close-slice.sh`. Hors tranche, sous 48 h : montee 16.3.8 (securite), voir backlog.
 
 ## Couches
 - [x] Versions (`next`, `eslint-config-next` 16.3.7, retrait de `@eslint/eslintrc`) et lockfile : 814ff9d
@@ -42,3 +42,5 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 - Implementation : ADR-0013 redige d'apres le guide officiel livre avec `next@16.3.7` (`node_modules/next/dist/docs/01-app/02-guides/upgrading/version-16.md`, meme contenu que la page `nextjs.org/docs/app/guides/upgrading/version-16`), lu localement plutot que par le reseau : c'est la version exacte installee.
 - Implementation : dans ADR-0013, dependances transitives notables citees (`@next/eslint-plugin-next` 16.3.7, `eslint-plugin-react-hooks` 5.2.0 -> 7.1.1) en plus des paquets directs, pour que les relecteurs sachent d'ou viennent les 16 regles `react-hooks/*`.
 - Implementation : aucune ligne ajoutee a `docs/DECISIONS.md` par l'implementeur ; le registre revient a l'orchestrateur (etape « registre des decisions » du workflow). Decisions a y reporter : cible 16.3.7 (quarantaine), ESLint 10 reporte (erreur reproduite), filtrage des ignores globaux d'`eslint-config-next`, versions et configuration dans un seul commit.
+- Suites des relectures : `next@16.3.8` est une version de securite (7 avis, audit-011 MINEUR 1). 16.3.7 est gardee dans la tranche : aucun avis applicable en production, un seul avis Low limite a `next dev`, et prendre 16.3.8 exigerait une exclusion de quarantaine (derogation a ADR-0012, ecartee). Montee 16.3.8 planifiee dans les 48 h (des la fin de quarantaine le 2026-10-01 vers 16:07Z, echeance 2026-10-02 vers 16:13Z) ; ADR-0013 et backlog.
+- Suites des relectures : politique Dependabot pour `eslint` 10 (groupe `majeures`) et egalite `next` = `eslint-config-next` face aux PR de securite : non tranchees dans la tranche (hors perimetre du contrat), ecrites dans ADR-0013 et au backlog, remontees a l'humain. Suggestions de tests 3, 4, 5 de review-011 et le 405 de contracts-011 : au backlog ; aucun test ni code modifie apres les relectures.
