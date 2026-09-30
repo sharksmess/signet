@@ -41,22 +41,29 @@ describe("AC4 — organizations_for_user : identite de session obligatoire (SG00
   });
 });
 
+/** Lecture de controle sous la connexion d'administration (hors RLS). */
+async function countOrganizationsNamed(name: string): Promise<string | undefined> {
+  const { rows } = await asBypassRls((client) =>
+    client.query<{ c: string }>("SELECT count(*)::text AS c FROM organization WHERE name = $1", [name]),
+  );
+  return rows[0]?.c;
+}
+
 describe("AC4 — create_organization : identite de session obligatoire (SG002), aucune organisation creee", () => {
   it("AC4 : create_organization sans app.user_id leve SG002 et ne cree aucune organisation (boite blanche)", async () => {
     const orgName = `SG002 Sans Identite ${Date.now()}`;
     const someOwnerId = "00000000-0000-7000-8000-0000000000dd";
 
-    await asTenant({}, async (client) => {
-      await expect(
-        client.query<Record<string, unknown>>("SELECT * FROM signet.create_organization($1, $2)", [someOwnerId, orgName]),
-      ).rejects.toMatchObject({ code: "SG002" });
+    await expect(
+      asTenant({}, async (client) => {
+        await client.query<Record<string, unknown>>("SELECT * FROM signet.create_organization($1, $2)", [someOwnerId, orgName]);
+      }),
+    ).rejects.toMatchObject({ code: "SG002" });
 
-      // Boite blanche, dans la MEME transaction (avant le ROLLBACK d'asTenant) :
-      // meme si l'appel ci-dessus avait reussi a tort, l'organisation ne doit
-      // pas exister a cet instant.
-      const check = await client.query<Record<string, unknown>>("SELECT count(*)::text AS c FROM organization WHERE name = $1", [orgName]);
-      expect(check.rows[0]?.c).toBe("0");
-    });
+    // Boite blanche, hors RLS et apres la transaction : une lecture sous
+    // signet_app rendrait 0 ligne meme si l'organisation existait, et une
+    // lecture dans la transaction deja annulee par l'exception leverait 25P02.
+    expect(await countOrganizationsNamed(orgName)).toBe("0");
   });
 
   it("AC4 : create_organization avec p_owner_user_id different de app.user_id leve SG002 et ne cree aucune organisation", async () => {
@@ -64,14 +71,13 @@ describe("AC4 — create_organization : identite de session obligatoire (SG002),
     const sessionUserId = "00000000-0000-7000-8000-0000000000ee";
     const differentOwnerId = "00000000-0000-7000-8000-0000000000ff";
 
-    await asTenant({ userId: sessionUserId }, async (client) => {
-      await expect(
-        client.query<Record<string, unknown>>("SELECT * FROM signet.create_organization($1, $2)", [differentOwnerId, orgName]),
-      ).rejects.toMatchObject({ code: "SG002" });
+    await expect(
+      asTenant({ userId: sessionUserId }, async (client) => {
+        await client.query<Record<string, unknown>>("SELECT * FROM signet.create_organization($1, $2)", [differentOwnerId, orgName]);
+      }),
+    ).rejects.toMatchObject({ code: "SG002" });
 
-      const check = await client.query<Record<string, unknown>>("SELECT count(*)::text AS c FROM organization WHERE name = $1", [orgName]);
-      expect(check.rows[0]?.c).toBe("0");
-    });
+    expect(await countOrganizationsNamed(orgName)).toBe("0");
   });
 });
 
