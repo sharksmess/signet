@@ -1,6 +1,6 @@
 # ADR-0012 — Mises a jour Dependabot du 2026-09-30 : regroupees, majeures du socle reportees
 
-- **Statut** : accepte (2026-09-30, claude-code en application de la decision humaine D-035 ; aucune version du socle n'est changee de ligne majeure — contestable par l'humain a la revue de la PR)
+- **Statut** : accepte (2026-09-30, claude-code en application de la decision humaine D-035 ; aucune version du socle n'est changee de ligne majeure — contestable par l'humain a la revue de la PR) ; ligne `@types/node` amendee par la decision humaine D-040
 - **Date** : 2026-09-30
 - **Phase** : entretien hors tranche (branche `chore/dependances-2026-09-30`)
 - **Realise** : D-035 (regroupement des PR Dependabot #2 a #10 dans une seule branche `chore/`, avec un ADR). Consigne : `docs/04-runbooks/consigne-dependances-2026-09-30.md`.
@@ -45,7 +45,7 @@ Option B, avec une precision sur la quarantaine : **on prend la derniere version
 | #6 | `better-auth` | npm correctif | 1.7.5 -> 1.7.6 | 1.7.6 | **applique** 1.7.6 | |
 | #6 | `react`, `react-dom` | npm mineure | 19.0.0 -> 19.3.0 | 19.3.0 | **applique** 19.3.0 | Pair `^19.0.0` de `next@15.5.26` respecte |
 | #6 | `@types/react`, `@types/react-dom` | npm mineure | 19.0.2 -> 19.3.0 | 19.3.0 | **applique** 19.3.0 | |
-| #10 | `@types/node` (racine, `web`, `db`) | npm majeure hors socle | 22.19.21 -> 26.6.2 | 26.6.3 | **applique** 26.6.3 | `check`, tests et build verts sans toucher au code ; voir consequences |
+| #10 | `@types/node` (racine, `web`, `db`) | npm majeure hors socle | 22.19.21 -> 26.6.2 | 26.6.3 | **applique** 24.19.0 (D-040) | Aligne sur le runtime Node 24 (`.nvmrc`), derniere version de la ligne 24. La 26.6.3, appliquee d'abord, passait `check`, tests et build mais typait une API absente du runtime |
 | #8 | `dotenv` (racine, `db`) | npm majeure hors socle | 16.4.7 -> 18.0.4 | 18.0.5 (quarantaine) | **applique** 18.0.4 | Seul usage : `import "dotenv/config"` (drizzle, migration) ; 18.0.5 publiee le jour meme |
 | #7 | `eslint-config-next` | npm majeure | 15.5.26 -> 16.3.6 | 16.3.8 (quarantaine) | **reporte** | Essai en 16.3.7 : `pnpm lint` echoue, erreur ci-dessous |
 | #9 | `next` | npm majeure **du socle** | 15.5.26 -> 16.3.6 | 16.3.8 | **reporte** | Majeure du socle : hors d'une branche d'entretien (ADR-0008) |
@@ -80,7 +80,7 @@ La 16 publie une configuration plate native que `FlatCompat` ne sait plus charge
 ## Consequences acceptees
 
 - **Les PR #7 et #9 restent ouvertes** : elles attendent une decision humaine sur la migration Next 16. La ligne Next 15 arrive en fin de maintenance en **octobre 2026** (ADR-0008), c'est-a-dire maintenant. Au-dela, un correctif de securite pourrait ne plus etre publie en 15.5.x.
-- **`@types/node` 26 decrit une API plus recente que le runtime** (Node 24, `.nvmrc`). Le typage accepte donc des API de Node 25 et 26 qui n'existent pas a l'execution ; `check` ne les detectera pas. C'est ce qu'applique la regle « majeure hors socle qui passe », mais l'alternative `@types/node@24.19.0` (derniere de la ligne du runtime) serait plus exacte. Laisse a l'humain (voir signal de reexamen).
+- **`@types/node` suit la ligne majeure du Node reellement utilise, pas `latest`** (decision humaine D-040). La 26.6.3, appliquee d'abord selon la regle « majeure hors socle qui passe », typait des API de Node 25 et 26 absentes a l'execution sous Node 24 (`.nvmrc`), sans que `check` puisse le detecter. Options presentees a l'humain : garder 26.6.3 (regle generale) ou passer a 24.19.0 (derniere version de la ligne du runtime). Retenue : 24.19.0, pour que le typage decrive ce qui s'execute. `check` et tests (92/92) verts en 24.19.0. Consequence : Dependabot proposera encore `@types/node` 25 et 26 ; ces PR sont a refuser tant que le runtime reste en Node 24.
 - Les versions retenues pour `pg`, `vitest` et `dotenv` sont d'un correctif en retard sur `latest` : Dependabot les proposera a nouveau au prochain passage, une fois la quarantaine ecoulee.
 - Aucun paquet n'a ete ajoute ni retire ; `pnpm-workspace.yaml` (overrides, `allowBuilds`) est inchange.
 
@@ -88,5 +88,5 @@ La 16 publie une configuration plate native que `FlatCompat` ne sait plus charge
 
 - Decision humaine sur la migration Next 16 (ADR dedie, `/architect`) : y reprendre `eslint-config-next` 16, la reecriture de `eslint.config.mjs` et ESLint 10 (ADR-0009, backlog).
 - Un avis de securite sur `next` 15.5.x sans correctif publie sur la ligne 15 : la migration devient urgente (regle des 48 h).
-- Choix humain d'aligner `@types/node` sur le runtime (24.x) plutot que sur `latest`, ou passage du runtime a Node 26.
+- Changement de version de Node dans `.nvmrc` : `@types/node` passe a la meme ligne majeure (D-040).
 - Un paquet ou une action dont la version `latest` reste en quarantaine au moment d'une mise a jour : meme regle, pas d'exclusion sans decision.
