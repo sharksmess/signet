@@ -3,10 +3,13 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : ouverte
+- Statut : tests ecrits
 - Branche : slice/011-montee-next16
-- Dernier commit : ouverture de la tranche (`chore(slice-011): ouvrir la tranche`)
-- Prochaine etape : `test-writer` ecrit `tests/stack-upgrade/*` depuis AC1, AC2 (portee des regles de lint) et AC6
+- Dernier commit : dbe16c6 `test(slice-011): versions, portee du lint et Dependabot`
+- Etat des tests (`pnpm exec vitest run tests/stack-upgrade`, 15 tests) : 10 verts, 5 rouges attendus.
+  - Rouges (implementation absente) : AC1 `next` 15.5.26 au lieu de 16.x.y ; AC1 `eslint-config-next` idem ; AC1 `@eslint/eslintrc` present dans `package.json` ; AC1 `eslint.config.mjs` contient `FlatCompat` ; AC6 pas de section `ignore` pour `@types/node` dans le bloc npm.
+  - Verts : AC1 `eslint` 9.39.5, `minimumReleaseAgeExclude` absent, version installee = manifeste ; AC6 `.nvmrc` = 24, groupes et limites conserves ; AC2 (4 tests de non-regression, verts des maintenant, attendu).
+- Prochaine etape : implementation, couche par couche (versions et lockfile, ESLint natif, tsconfig, Dependabot, documentation)
 
 ## Couches
 - [ ] Versions (`next`, `eslint-config-next`, `eslint`, retrait de `@eslint/eslintrc`) et lockfile
