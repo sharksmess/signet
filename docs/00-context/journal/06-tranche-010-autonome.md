@@ -10,7 +10,7 @@
 ## Preuves (fiche `docs/04-runbooks/evidence/010.md`)
 Check PASS ; 92/92 tests sur Postgres ; audit des dependances PASS, aucune dependance ajoutee ; AUDIT: PASS ; CONTRACTS: PASS ; REVIEW: PASS (apres un premier CHANGES corrige) ; 6/6 criteres d'acceptation.
 
-## Decisions en attente de l'humain
+## Decisions en attente de l'humain (tranchees a l'etape 07 : D-031 a D-036)
 1. Fusion de la PR #12 (apres CI verte).
 2. D-027 : ADR-0011 et ses trois points contestables.
 3. D-029 : MINEUR-2 traite dans la tranche 002.
