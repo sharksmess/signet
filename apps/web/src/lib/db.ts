@@ -61,6 +61,12 @@ export interface TenantContext {
  * Ouvre une transaction sous `signet_app`, pose le contexte tenant exactement
  * comme l'exige l'ERD (`SET LOCAL app.organization_id`, `SET LOCAL
  * app.user_id`), execute `fn`, puis COMMIT si `fn` reussit ou ROLLBACK sinon.
+ *
+ * `organizationId` peut venir de la requete (parametre d'URL) : depuis la
+ * migration 0009 (ADR-0011), les politiques de `signet_app` ne rendent une
+ * ligne que si `userId` est membre de cette organisation. C'est une seconde
+ * barriere : le controle d'appartenance applicatif reste requis (reponse 404
+ * identique pour une organisation inexistante ou d'un autre tenant).
  */
 export async function withTenant<T>(
   ctx: TenantContext,
@@ -91,8 +97,11 @@ export async function withTenant<T>(
  * Variante sans organisation active : utilisee uniquement par la creation
  * d'organisation (POST /api/organizations), qui appelle
  * `signet.create_organization()` avant qu'aucun tenant n'existe pour cet
- * utilisateur. `app.user_id` reste pose (utile pour d'eventuelles politiques
- * futures), `app.organization_id` reste vide : fermeture par defaut (ERD §1).
+ * utilisateur. `app.user_id` est indispensable : depuis la migration 0009,
+ * `create_organization` leve `SG002` s'il est absent ou s'il differe de
+ * l'owner demande (ADR-0011 § e) — l'appelant passe donc le meme `userId` ici
+ * et a la fonction. `app.organization_id` reste vide : fermeture par defaut
+ * (ERD §1).
  */
 export async function withUserOnly<T>(
   userId: string,
