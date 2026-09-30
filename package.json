@@ -18,15 +18,15 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "3.3.7",
-    "@types/node": "22.19.21",
-    "@types/pg": "8.11.10",
-    "dotenv": "16.4.7",
+    "@types/node": "24.19.0",
+    "@types/pg": "8.23.1",
+    "dotenv": "18.0.4",
     "eslint": "9.39.5",
     "eslint-config-next": "15.5.26",
-    "pg": "8.13.1",
+    "pg": "8.23.0",
     "typescript": "6.0.3",
     "typescript-eslint": "8.70.1",
-    "vitest": "5.0.1",
+    "vitest": "5.0.2",
     "zod": "4.6.5"
   }
 }
