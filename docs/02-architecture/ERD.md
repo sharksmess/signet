@@ -2,10 +2,13 @@
 
 - **Phase** : 2 — architecture
 - **Date** : 2026-09-22
+- **Mise a jour** : 2026-09-29 — tranche 010 (§1, §2.1, §3, §4, §7, §8.1, matrice, migrations)
 - **Socle** : `stack.json` — Postgres, Drizzle, better-auth, Stripe, Inngest
 - **Isolation** : `shared-schema-rls` — voir [ADR-0001](ADR/0001-isolation-multitenant.md)
 - **Quota Free** : voir [ADR-0002](ADR/0002-quota-free-atomique.md)
 - **Token d'invitation** : voir [ADR-0003](ADR/0003-token-invitation-hache.md)
+- **Roles Postgres** : voir [ADR-0007](ADR/0007-roles-postgres.md)
+- **RLS par appartenance de l'utilisateur de session** : voir [ADR-0011](ADR/0011-rls-appartenance-utilisateur-session.md) (tranche 010, 2026-09-29)
 
 Ce document est la specification de reference du schema. Les migrations Drizzle
 (`pnpm db:generate`) couvrent les tables, colonnes, contraintes et index declaratifs ;
@@ -40,6 +43,10 @@ dans des migrations SQL versionnees, dans la meme tranche que la table qu'ils pr
   de `CHECK`, `40001` echec de serialisation), ce schema definit un SQLSTATE de classe utilisateur :
   `SG001` — quota Free depasse a l'ajout d'un lien (§7). La couche d'acces doit le traiter comme
   une erreur metier typee au meme titre que les codes standard, jamais comme un 500.
+  `SG002` — identite de session absente ou differente de l'identite demandee, leve par
+  `signet.create_organization()` et `signet.organizations_for_user()` (§1, ADR-0011). Ce n'est
+  **pas** une erreur metier : elle signale un defaut du serveur (contexte non pose ou incoherent)
+  et remonte en 500. Distinct de `42501` pour que le refus d'`EXECUTE` reste reconnaissable.
 
 ### Ecarts assumes par rapport aux defauts de better-auth
 
@@ -63,22 +70,64 @@ SET LOCAL app.organization_id = '<uuid de l organisation active>';
 SET LOCAL app.user_id         = '<uuid de l utilisateur authentifie>';
 ```
 
-Deux fonctions `STABLE`, propriete du role proprietaire du schema, servent de base a toutes les
+`app.user_id` est **toujours** pose par le serveur a partir de la session authentifiee
+(better-auth), jamais a partir de la requete. `app.organization_id` peut venir de la requete
+(parametre d'URL) : c'est pourquoi il n'est jamais utilise brut par les politiques de
+`signet_app` (ADR-0011, D-022).
+
+### Primitives de contexte (etat depuis la migration 0009)
+
+Trois fonctions `STABLE` du schema `signet`, sans parametre, servent de base a toutes les
 politiques :
 
-```sql
-CREATE FUNCTION signet.current_org() RETURNS uuid
-  LANGUAGE sql STABLE AS
-$$ SELECT nullif(current_setting('app.organization_id', true), '')::uuid $$;
+| Fonction | Renvoie | Nature | Proprietaire | `EXECUTE` | Utilisee par |
+|---|---|---|---|---|---|
+| `signet.current_user_id()` | `nullif(current_setting('app.user_id', true), '')::uuid` | `SECURITY INVOKER`, `LANGUAGE sql` (0001, inchangee) | role de migration | `signet_app`, `signet_definer` | politiques des deux roles |
+| `signet.context_org()` | `nullif(current_setting('app.organization_id', true), '')::uuid` — **valeur brute** | `SECURITY INVOKER`, `LANGUAGE sql` (0009, nouvelle) | `signet_definer` | **`signet_definer` seul** (proprietaire ; `PUBLIC` revoque, aucun `GRANT`) | politiques de `signet_definer` **uniquement** |
+| `signet.current_org()` | `context_org()` **si** une ligne `member (organization_id = context_org(), user_id = current_user_id())` existe, sinon `NULL` — **valeur verifiee** | `SECURITY DEFINER`, `LANGUAGE sql`, `SET search_path = pg_catalog, signet, public, pg_temp`, noms qualifies (`public.member`) (0009, remplace la version brute de 0001) | `signet_definer` | `signet_app` (+ proprietaire) ; `PUBLIC` revoque | politiques de `signet_app` **uniquement** |
 
-CREATE FUNCTION signet.current_user_id() RETURNS uuid
-  LANGUAGE sql STABLE AS
-$$ SELECT nullif(current_setting('app.user_id', true), '')::uuid $$;
+Corps attendu de `current_org()` (0009) :
+
+```sql
+SELECT m.organization_id
+  FROM public.member m
+ WHERE m.organization_id = signet.context_org()
+   AND m.user_id         = signet.current_user_id();
+-- au plus une ligne (member_org_user_idx UNIQUE) ; aucune ligne => NULL
 ```
 
-**Fermeture par defaut** : si `SET LOCAL` a ete oublie, `current_org()` retourne `NULL`, toute
+**Regles d'usage (invariants, verifies par test de catalogue de la tranche 010)** :
+- Une politique `TO signet_app` sur une table tenant s'ecrit `organization_id = signet.current_org()`.
+  Elle exige ainsi, sans rien ajouter, que l'utilisateur de session soit membre.
+- Une politique `TO signet_definer` n'appelle **jamais** `current_org()` : elle utilise
+  `context_org()` (contexte pose par la fonction elle-meme depuis une valeur de confiance) ou
+  `current_user_id()`. Appeler `current_org()` y rouvrirait la recursion sur `member` et casserait
+  les fonctions qui s'executent sans utilisateur de session.
+- Une politique `TO signet_app` n'appelle jamais `context_org()` ; si elle le fait, elle echoue
+  (`42501`, pas de droit `EXECUTE`) des la premiere requete.
+
+**Pas de recursion** : la politique `signet_app` de `member` appelle `current_org()`, dont la
+requete interne s'execute sous `signet_definer` ; les politiques de `signet_definer` sur `member`
+(`member_definer_context`, `member_definer_self_read`) n'appellent pas `current_org()`. La ligne
+cherchee (`user_id = current_user_id()`) est visible par `member_definer_self_read`.
+
+**Volatilite `STABLE`** : resultat constant dans une instruction, jamais mis en cache d'une
+instruction a l'autre. Un changement d'appartenance fait dans la transaction est vu par
+l'instruction suivante de cette transaction. Entre transactions concurrentes, la barriere suit
+`READ COMMITTED` : une instruction commencee avant le `COMMIT` d'un retrait s'acheve sur l'ancien
+etat. `IMMUTABLE` est interdit (pre-evaluation figee dans un plan prepare reutilise par le pool).
+
+**Cout** : une sonde de `member_org_user_idx` par evaluation ; aucun index supplementaire.
+
+**Fermeture par defaut** : si `app.organization_id` ou `app.user_id` est absent ou vide, ou si
+l'utilisateur n'est pas membre, ou s'il n'existe pas, `current_org()` retourne `NULL`, toute
 comparaison `organization_id = NULL` est `NULL`, donc fausse. La requete ne retourne rien et
-l'ecriture est refusee. Un oubli fait echouer, il ne fait pas fuiter.
+l'ecriture est refusee. Un oubli fait echouer, il ne fait pas fuiter. `current_org()` ne **leve
+pas** sur contexte absent : c'est une primitive de politique, pas une operation, et lever
+transformerait la fermeture par defaut en erreur.
+
+**Contexte malforme** : une valeur non vide qui n'est pas un UUID fait lever le cast
+(`22P02`). Une erreur, jamais une ligne : accepte (ADR-0011 g).
 
 Chaque table portant de la donnee client recoit :
 
@@ -96,20 +145,42 @@ Certaines operations ont lieu *avant* qu'un contexte tenant puisse exister. Elle
 a quatre fonctions `SECURITY DEFINER` explicitement listees ici. Toute cinquieme fonction de ce
 type est un signal de revue d'architecture, pas un detail d'implementation. S'y ajoutent les
 fonctions de trigger `SECURITY DEFINER` internes au schema (compteur de quota §7, invariant
-owner §4) : memes regles, memes exigences.
+owner §4) et, depuis ADR-0011, une primitive de politique (`current_org`) : memes regles, memes
+exigences.
 
 | Fonction | Pourquoi elle ne peut pas vivre sous RLS |
 |---|---|
-| `signet.create_organization(owner_user_id, org_name)` | US-01.1 : a l'inscription, l'organisation n'existe pas encore, il n'y a pas d'`organization_id` a poser. Cree `organization` + `member` (owner) + `organization_link_usage` + `subscription` (free) en une transaction. |
-| `signet.organizations_for_user(user_id)` | Un utilisateur appartient a plusieurs organisations (PRD §unite de compte). Lister ses organisations est le seul besoin legitime de lecture inter-tenant. La fonction force `user_id = signet.current_user_id()` et leve sinon. |
-| `signet.lookup_invitation(token_hash)` | L'invite n'est pas encore membre : il n'a aucun contexte tenant. Retourne uniquement le nom de l'organisation, l'e-mail cible et la validite — jamais le contenu de l'organisation. |
-| `signet.accept_invitation(token_hash, user_id)` | US-03 : consommation atomique du jeton + creation du `member`, hors contexte tenant. Voir §5. |
+| `signet.create_organization(owner_user_id, org_name)` | US-01.1 : a l'inscription, l'organisation n'existe pas encore, il n'y a pas d'`organization_id` a poser. Cree `organization` + `member` (owner) + `organization_link_usage` + `subscription` (free) en une transaction. **Depuis 0009** : leve `SG002` si `app.user_id` est absent ou si `owner_user_id` en differe (on ne cree pas d'organisation au nom d'un tiers). |
+| `signet.organizations_for_user(user_id)` | Un utilisateur appartient a plusieurs organisations (PRD §unite de compte). Lister ses organisations est le seul besoin legitime de lecture inter-tenant. **Depuis 0009** : leve `SG002` si `app.user_id` est absent ou si `user_id IS DISTINCT FROM current_user_id()` (avant 0009, un `app.user_id` absent ne levait pas). |
+| `signet.lookup_invitation(token_hash)` | L'invite n'est pas encore membre : il n'a aucun contexte tenant. Retourne uniquement le nom de l'organisation, l'e-mail cible et la validite — jamais le contenu de l'organisation. (Tranche 006, non encore ecrite.) |
+| `signet.accept_invitation(token_hash, user_id)` | US-03 : consommation atomique du jeton + creation du `member`, hors contexte tenant. Voir §5. (Tranche 006, non encore ecrite.) Devra, comme `create_organization`, lier `user_id` a `current_user_id()` et poser `app.organization_id` depuis la ligne d'invitation. |
+
+### Specification fonction par fonction (liste obligatoire `rules/drizzle-postgres.md`)
+
+Toutes : proprietaire `signet_definer` (`NOLOGIN NOBYPASSRLS`), `REVOKE ALL ... FROM PUBLIC`,
+`SET search_path = pg_catalog, signet, public, pg_temp` (`pg_temp` **en dernier** : sinon Postgres
+cherche les relations dans le schema temporaire **avant** les autres, et un role disposant de
+`TEMPORARY` sur la base pourrait masquer `member` ou `organization` par une table temporaire).
+Les fonctions ecrites ou remplacees a partir de 0009 qualifient en plus leurs tables (`public.xxx`).
+
+| Fonction | Premiere instruction (contexte) | Politiques qui la laissent agir | `ROW_COUNT` | `EXECUTE` | Test sans contexte |
+|---|---|---|---|---|---|
+| `current_org()` (0009) | aucune : lecture seule du couple de session | `member_definer_self_read` | sans objet (lecture) | `signet_app` | renvoie `NULL`, ne leve pas (exception documentee, ADR-0011) |
+| `create_organization` (0003, remplacee en 0009) | garde d'identite `SG002`, puis `set_config('app.organization_id', <id genere>, true)` | `organization_definer_context`, `member_definer_context` | `INSERT` seulement (un echec leve) | `signet_app` | `SG002` |
+| `organizations_for_user` (0003, remplacee en 0009) | garde d'identite `SG002` ; aucune organisation posee (axe utilisateur) | `organization_definer_self_read`, `member_definer_self_read` | sans objet (lecture) | `signet_app` | `SG002` |
+| `create_organization_counters` (trigger, 0005) | aucune : herite du contexte de `create_organization`, seul chemin d'`INSERT INTO organization` | `organization_link_usage_definer_write`, `subscription_definer_insert` | `INSERT` seulement | aucun (trigger) | sans objet |
+| `propagate_subscription_quota` (trigger, 0005) | `set_config(..., NEW.organization_id, true)` | `organization_link_usage_definer_write` | leve si `<> 1` | aucun (trigger) | pose le sien ; leve `P0001` si le compteur manque |
+| `assert_owner_remains` (trigger, 0004) | `set_config(..., OLD.organization_id, true)` | `organization_definer_context`, `member_definer_context` | sans objet (lecture) | aucun (trigger) | pose le sien |
+
+Les trois fonctions de trigger recoivent en 0009 `ALTER FUNCTION ... SET search_path = pg_catalog,
+signet, public, pg_temp` (corps inchange ; proposition d'ADR-0011, contestable).
 
 **Politique de durcissement (ADR-0002, etendue a toute fonction `SECURITY DEFINER` du schema,
 pas seulement au mecanisme de quota qui l'a motivee) :**
 
-1. `SET search_path = pg_catalog, signet, public` explicite sur chaque fonction — jamais le
-   `search_path` de session, jamais un schema ecrivible en tete.
+1. `SET search_path = pg_catalog, signet, public, pg_temp` explicite sur chaque fonction — jamais
+   le `search_path` de session, jamais un schema ecrivible en tete, `pg_temp` toujours nomme et
+   toujours en dernier.
 2. Chaque fonction appartient au role `signet_definer`, `NOLOGIN`, distinct de `signet_app` et
    `signet_auth`, qui ne detient que les `GRANT` strictement necessaires a ces fonctions (jamais
    de `GRANT` large en `public` ou en propriete du role de migration). `NOLOGIN` interdit toute
@@ -120,8 +191,35 @@ pas seulement au mecanisme de quota qui l'a motivee) :**
    appelant lui-meme — seule exception listee, deja bornee par `user_id = current_user_id()`).
    Un `SELECT` ou `UPDATE` sans predicat explicite sur `organization_id` (ou equivalent) est un
    defaut de revue, pas un detail.
+4. `CREATE OR REPLACE FUNCTION` **conserve le proprietaire**. Toute fonction creee par le role de
+   migration puis remplacee en `SECURITY DEFINER` doit etre suivie, dans la meme migration, de
+   `ALTER FUNCTION ... OWNER TO signet_definer` : une fonction `SECURITY DEFINER` possedee par le
+   role de migration (superutilisateur) s'executerait hors RLS, et le test de catalogue de l'usine
+   ne le voit pas (il exclut `current_user`). Un test de la tranche 010 verifie que toute fonction
+   `prosecdef` de `signet` appartient a `signet_definer`.
 
 Voir ADR-0002 pour le raisonnement complet et le critere de test associe.
+
+### Roles Postgres (ADR-0007, reimposes par la migration 0010)
+
+| Role | `LOGIN` | Attributs imposes | Appartenances | Proprietaire de |
+|---|---|---|---|---|
+| `signet_owner` | oui | `NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS` | aucune | toutes les tables de `public` |
+| `signet_app` | oui | idem | aucune | rien |
+| `signet_auth` | oui | idem | aucune | rien |
+| `signet_definer` | **non** | idem | aucune | schema `signet`, fonctions `SECURITY DEFINER`, `context_org()` |
+| role de migration (bootstrap) | — | superutilisateur, hors de ce tableau (ADR-0007) | — | `_signet_migrations`, `uuidv7()`, `current_user_id()`, `quota_for_tier()` |
+
+- Creation idempotente en 0001 (`DO $$ ... IF NOT EXISTS ... $$`), aucun mot de passe dans une
+  migration (pose par l'humain ou par la CI, `TEST_ROLE_PASSWORDS`).
+- **0010** reimpose les attributs par `ALTER ROLE` inconditionnel (idempotent), et **leve** si l'un
+  des quatre roles est membre d'un role quelconque (`pg_auth_members`) : une appartenance permet
+  `SET ROLE` vers le parent (membre de `signet_owner`, on peut desactiver la RLS ; membre d'un
+  superutilisateur, tout). On leve plutot que de revoquer : l'appartenance a ete accordee par un
+  administrateur sur un etat commun au cluster, la retirer en silence cacherait la mauvaise
+  configuration.
+- `NOREPLICATION` complete la liste d'ADR-0007 : un role `REPLICATION` lit toutes les donnees par
+  le protocole de replication, hors RLS.
 
 ---
 
@@ -163,7 +261,10 @@ USING (EXISTS (SELECT 1 FROM member m
 
 Une seule jointure, sur la table de membership qui porte elle-meme `organization_id`. C'est la
 politique minimale qui permet d'afficher l'auteur d'un lien (US-06.3) sans exposer l'annuaire
-global des comptes. Le role `signet_auth` a une politique distincte (`USING (true)`) car
+global des comptes. **Depuis 0009 (ADR-0011)**, texte inchange mais `current_org()` est verifiee :
+un compte n'est visible que si l'utilisateur de session est lui-meme membre de l'organisation du
+contexte (sinon `current_org()` vaut `NULL` et aucune ligne ne l'est). La sous-requete sur
+`member` passe en plus par `member_isolation` : double couverture, sans recursion. Le role `signet_auth` a une politique distincte (`USING (true)`) car
 l'authentification precede necessairement le contexte tenant.
 
 ### 2.2 `session`, `account`, `verification`
@@ -218,13 +319,35 @@ l'absence de politique maintient le refus.
 **RLS**
 
 ```sql
+-- signet_app : current_org() verifiee (utilisateur de session membre), ADR-0011
 CREATE POLICY organization_isolation ON organization TO signet_app
 USING (id = signet.current_org())
 WITH CHECK (id = signet.current_org());
+
+-- signet_definer : contexte brut pose par la fonction depuis une valeur de confiance (0009)
+CREATE POLICY organization_definer_context ON organization TO signet_definer
+USING (id = signet.context_org())
+WITH CHECK (id = signet.context_org());
+
+-- signet_definer, lecture sur l'axe utilisateur (organizations_for_user), 0003, inchangee
+CREATE POLICY organization_definer_self_read ON organization FOR SELECT TO signet_definer
+USING (EXISTS (SELECT 1 FROM member m
+               WHERE m.organization_id = organization.id
+                 AND m.user_id = signet.current_user_id()));
 ```
 
-L'`INSERT` d'une organisation passe exclusivement par `signet.create_organization()` (§1), la
-politique `WITH CHECK` refusant par construction une insertion sans contexte tenant prealable.
+Jusqu'a 0008, `organization_isolation` etait `TO signet_app, signet_definer` ; 0009 la restreint a
+`signet_app` et cree `organization_definer_context` (ADR-0011 d).
+
+L'`INSERT` d'une organisation passe exclusivement par `signet.create_organization()` (§1). Sous
+`signet_app`, le `WITH CHECK` exigerait que l'utilisateur de session soit deja membre d'une
+organisation qui n'existe pas encore (FK de `member`) : l'insertion directe est impossible par
+construction. Le `GRANT INSERT ON organization TO signet_app` de 0003 reste superflu (audit-001
+MINEUR-2, hors perimetre de 010).
+
+**La RLS verifie l'appartenance, pas le role** : tout membre de l'organisation passe
+`organization_isolation` en `UPDATE`. Le renommage reserve a l'owner (tranche 001, AC2) reste une
+garde applicative (ADR-0004 etape 3, amendement du 2026-09-29).
 
 **Trigger** : `AFTER INSERT` → cree la ligne `organization_link_usage` et la ligne `subscription`
 correspondantes. Ainsi aucune organisation ne peut exister sans compteur de quota ni sans palier :
@@ -254,7 +377,18 @@ l'invariant est garanti par la base, pas par l'ordre des appels applicatifs.
   « au plus un owner » au niveau base. Sert aussi le controle d'autorisation de `subscription`
   et `billing_event` (§8).
 
-**RLS** : `USING`/`WITH CHECK (organization_id = signet.current_org())`.
+**RLS** (etat depuis 0009, ADR-0011) :
+
+| Politique | Role | Commande | Predicat |
+|---|---|---|---|
+| `member_isolation` | `signet_app` | toutes (`GRANT SELECT` seul) | `organization_id = signet.current_org()` (verifiee) |
+| `member_definer_context` (0009) | `signet_definer` | toutes (`GRANT SELECT, INSERT`) | `organization_id = signet.context_org()` (brut) |
+| `member_definer_self_read` (0003) | `signet_definer` | `SELECT` | `user_id = signet.current_user_id()` |
+
+La politique `signet_app` de `member` depend de `member` a travers `current_org()` ; il n'y a pas
+de recursion parce que `current_org()` s'execute sous `signet_definer`, dont aucune politique
+n'appelle `current_org()` (§1). Toute politique future de `signet_definer` sur `member` doit
+respecter cette regle.
 
 **Owner unique et immuable (decision du 2026-09-22).** Le PRD suppose un seul owner par
 organisation ; le transfert de propriete (promotion d'un member, retrogradation de l'owner) est
@@ -541,6 +675,13 @@ UPDATE organization_link_usage
   `SELECT` (via politique RLS `organization_id = current_org()`) pour afficher « 32 / 50 » a tous
   les membres — sans leur donner acces a la table `subscription`, reservee aux owners (US-08.2).
 
+**RLS** (etat depuis 0009, ADR-0011) : `organization_link_usage_read_only` (`FOR SELECT TO
+signet_app`, `organization_id = signet.current_org()`, texte inchange, verifiee) ;
+`organization_link_usage_definer_write` (`FOR ALL TO signet_definer`, passee en 0009 de
+`current_org()` a `organization_id = signet.context_org()` en `USING` et `WITH CHECK`, pour que
+`propagate_subscription_quota` fonctionne sans utilisateur de session : webhook Stripe, test
+d'invariant sous `BYPASSRLS`).
+
 **Pourquoi c'est atomique** — scenario du risque #3, deux ajouts concurrents a 49 liens, quota 50 :
 
 | | Transaction A | Transaction B |
@@ -625,6 +766,11 @@ WITH CHECK (same);
 ```
 Une jointure unique, sur `member`, servie par l'index partiel `member_single_owner_idx`. US-08.2 devient
 une propriete de la base : meme une route qui oublierait le controle de role ne verra rien.
+**Depuis 0009 (ADR-0011)** : texte inchange. Cette politique exigeait deja que l'utilisateur de
+session soit owner, donc membre ; `current_org()` etant desormais verifiee, la condition est
+double. `subscription_definer_insert` (`FOR INSERT TO signet_definer`) passe en 0009 a
+`WITH CHECK (organization_id = signet.context_org())` : au moment ou `create_organization_counters`
+insere la ligne, le membership owner n'existe pas encore.
 Le webhook Stripe, lui, n'a pas d'utilisateur : il ecrit via une fonction dediee du role
 proprietaire, apres verification de signature (et non via `signet_app`).
 
@@ -728,22 +874,29 @@ erDiagram
 
 ### Matrice d'isolation
 
-| Table | `organization_id` | Politique RLS | Jointures dans la politique |
-|---|---|---|---|
-| `app_user` | non (hors tenant) | visible si co-membre de l'organisation courante | 1 (`member`) |
-| `session`, `account`, `verification` | non (hors tenant) | aucun acces pour `signet_app` | — |
-| `organization` | `id` (lui-meme) | `id = current_org()` | 0 |
-| `member` | direct | `organization_id = current_org()` | 0 |
-| `invitation` | direct | `organization_id = current_org()` | 0 |
-| `collection` | direct | `organization_id = current_org()` | 0 |
-| `link` | **direct** (denormalise, verrouille par FK composite) | `organization_id = current_org()` | 0 |
-| `organization_link_usage` | `organization_id` (PK) | `organization_id = current_org()`, lecture seule | 0 |
-| `subscription` | `organization_id` (PK) | `current_org()` **et** role owner | 1 (`member`) |
-| `billing_event` | direct, **sans FK** (§8.2) | `current_org()` **et** role owner | 1 (`member`) |
+Depuis 0009 (ADR-0011), `current_org()` dans une politique `signet_app` signifie : « organisation
+du contexte, **si l'utilisateur de session en est membre** ». Chaque ligne de la colonne
+« Politique RLS (`signet_app`) » exige donc l'appartenance de l'utilisateur de session, sans
+jointure ecrite dans la politique (la sonde `member` est dans la fonction).
+
+| Table | `organization_id` | Politique RLS (`signet_app`) | Jointures dans la politique | Politiques `signet_definer` |
+|---|---|---|---|---|
+| `app_user` | non (hors tenant) | visible si co-membre de l'organisation courante | 1 (`member`) | aucune |
+| `session`, `account`, `verification` | non (hors tenant) | aucun acces pour `signet_app` | — | aucune |
+| `organization` | `id` (lui-meme) | `id = current_org()` | 0 | `context_org()` ; axe `current_user_id()` en lecture |
+| `member` | direct | `organization_id = current_org()` | 0 | `context_org()` ; `user_id = current_user_id()` en lecture |
+| `invitation` | direct | `organization_id = current_org()` | 0 | a definir en 003/006, sur `context_org()` |
+| `collection` | direct | `organization_id = current_org()` | 0 | — |
+| `link` | **direct** (denormalise, verrouille par FK composite) | `organization_id = current_org()` | 0 | triggers de compteur : `context_org()` sur `organization_link_usage` |
+| `organization_link_usage` | `organization_id` (PK) | `organization_id = current_org()`, lecture seule | 0 | `context_org()` en ecriture |
+| `subscription` | `organization_id` (PK) | `current_org()` **et** role owner | 1 (`member`) | `context_org()` en `INSERT` |
+| `billing_event` | direct, **sans FK** (§8.2) | `current_org()` **et** role owner | 1 (`member`) | a definir en 002, sur `context_org()` |
 
 Aucune politique ne depasse une jointure, et cette jointure porte toujours sur `member`, table
 elle-meme filtree par `organization_id`. C'est la condition posee par ADR-0001 : une politique
 qu'on peut lire en dix secondes est une politique qu'on ne desactivera pas « pour debugger ».
+Aucune politique `signet_definer` n'appelle `current_org()` ; aucune politique `signet_app`
+n'appelle `context_org()` (§1).
 Seule exception a « chaque table de donnee client cascade avec son organisation » : `billing_event`
 n'a pas de cle etrangere sur `organization_id`, precisement pour ne pas cascader (§8.2).
 
@@ -759,6 +912,27 @@ n'a pas de cle etrangere sur `organization_id`, precisement pour ne pas cascader
 
 Chaque etape comprend, dans la **meme migration**, la table et sa politique RLS. Une table livree
 sans politique est une table ouverte le temps que la migration suivante arrive.
+
+### Migrations appliquees (etat au 2026-09-29)
+
+Les fichiers de `packages/db/migrations/` presents dans `main` sont immuables (`migrate.ts`
+enregistre un nom, jamais une somme de controle : une modification ne serait jamais rejouee).
+
+| Fichier | Contenu | Tranche |
+|---|---|---|
+| `0001_roles_schema_context.sql` | quatre roles (creation idempotente), schema `signet`, `uuidv7()`, `current_org()`/`current_user_id()` (version brute) | 001 |
+| `0002_auth_tables_and_policies.sql` | tables d'authentification, RLS `signet_auth` | 001 |
+| `0003_organizations_and_policies.sql` | `organization`, `member`, `organization_link_usage`, `subscription`, politiques, fonctions `SECURITY DEFINER`, triggers | 001 |
+| `0004_fix_assert_owner_remains_context.sql` | `assert_owner_remains` pose son contexte | 001 |
+| `0005_execute_grants_and_quota_context.sql` | `propagate_subscription_quota` pose son contexte + `ROW_COUNT` ; compteur cree a 50 ; `REVOKE EXECUTE ... FROM PUBLIC` | 001 |
+| `0006_default_privileges_no_public_execute.sql` | privileges par defaut par schema (sans effet, voir 0008) | 001 |
+| `0007_signet_migrations_rls.sql` | `_signet_migrations` fermee | 001 |
+| `0008_default_privileges_global_revoke.sql` | revocation globale d'`EXECUTE` a `PUBLIC` pour les fonctions futures | 001 |
+| **`0009_rls_session_user_membership.sql`** | ADR-0011 : `context_org()` (brute, `signet_definer` seul) ; `current_org()` remplacee (`SECURITY DEFINER`, verifiee, proprietaire `signet_definer`) ; `organization_isolation`/`member_isolation` restreintes a `signet_app` ; `organization_definer_context`/`member_definer_context` creees ; `organization_link_usage_definer_write`/`subscription_definer_insert` sur `context_org()` ; `create_organization`/`organizations_for_user` remplacees (garde `SG002`, `pg_temp`, noms qualifies) ; `search_path` des trois fonctions de trigger complete par `pg_temp` | 010 |
+| **`0010_reimpose_role_attributes.sql`** | MINEUR-10 : leve si un role `signet_*` est membre d'un role ; `ALTER ROLE` des quatre roles (attributs du tableau « Roles Postgres », §1) | 010 |
+
+Aucune de ces deux migrations ne touche une table, une colonne ou un index : `pnpm db:generate`
+ne produit aucune difference, `packages/db/src/schema/*` est inchange.
 
 ---
 

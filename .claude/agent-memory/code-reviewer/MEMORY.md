@@ -1,0 +1,1 @@
+- [No pnpm test in parallel reviews](feedback_parallel_reviews_no_pnpm_test.md) — shared test DB/port; use orchestrator's result, `pnpm run check` is safe

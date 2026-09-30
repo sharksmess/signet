@@ -1,0 +1,5 @@
+packages/db/migrations/0009_rls_session_user_membership.sql
+packages/db/migrations/0010_reimpose_role_attributes.sql
+apps/web/src/lib/db.ts
+tests/isolation-hardening/*
+tests/helpers/db.ts

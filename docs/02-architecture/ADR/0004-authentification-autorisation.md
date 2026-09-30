@@ -28,6 +28,23 @@ Ordre de verification impose pour toute route touchant une ressource d'organisat
 3. Role suffisant pour l'action demandee — sinon 403 (le 403 ne fuit rien de plus que "vous etes membre mais pas autorise", ce que l'utilisateur sait deja puisqu'il est membre).
 4. Le filtre `organization_id` explicite dans la requete (regle absolue de `CLAUDE.md`) et la politique RLS (ADR-0001) restent la defense de dernier recours si une des etapes precedentes est contournee par une erreur de code.
 
+> **Amendement du 2026-09-29 (point 4) — D-022, [ADR-0011](0011-rls-appartenance-utilisateur-session.md).**
+> Le texte ci-dessus est conserve tel qu'accepte le 2026-09-22. Il etait inexact jusqu'a la
+> migration 0008 : le contexte `app.organization_id` etant pose depuis le parametre d'URL, les
+> politiques `organization_id = signet.current_org()` validaient l'organisation demandee par
+> l'appelant et ne constituaient pas une defense independante de l'etape 2 (audit-001 MINEUR-1).
+> A partir de la migration 0009, `signet.current_org()` ne renvoie l'organisation du contexte que
+> si l'utilisateur de session (`app.user_id`, pose par le serveur depuis la session authentifiee)
+> en est membre. Portee exacte de la defense de dernier recours, desormais :
+> - **Etape 2 (appartenance)** : couverte par la RLS sous `signet_app`. Une route qui oublie le
+>   controle d'appartenance ne voit ni ne modifie aucune ligne d'une organisation dont
+>   l'utilisateur de session n'est pas membre.
+> - **Etape 3 (role)** : **non** couverte par la RLS, sauf pour `subscription` (owner uniquement,
+>   ERD §8.1). Le controle de role reste applicatif et doit etre teste route par route.
+> - **Limite** : la RLS fait confiance a `app.user_id`. Elle protege contre un oubli du code
+>   applicatif, pas contre l'execution de SQL arbitraire sous `signet_app`, qui peut forger ce
+>   parametre (ADR-0011, « Modele de menace retenu »).
+
 ## Consequences acceptees
 
 - Chaque route/Server Action doit resoudre explicitement "de quelle organisation s'agit-il" avant toute logique metier — pas de raccourci "l'utilisateur a un seul role, je le lis une fois en session". Cela ajoute une requete d'appartenance systematique, acceptable vu la charge negligeable du PRD.

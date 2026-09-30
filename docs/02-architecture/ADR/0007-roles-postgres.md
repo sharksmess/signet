@@ -3,6 +3,7 @@
 - **Statut** : accepte
 - **Date** : 2026-09-22
 - **Phase** : 3 — tranche 001 (creation d'organisation et compte owner)
+- **Amende le 2026-09-29 par ADR-0011** (tranche 010) : les politiques `organization_isolation` et `member_isolation`, decrites en Partie 2 comme « elargies a `signet_definer` », sont desormais separees — `signet_app` sur `current_org()` (verifiee par appartenance de l'utilisateur de session), `signet_definer` sur `context_org()` (contexte brut pose depuis une valeur de confiance). Le principe de cette ADR (definer sans `BYPASSRLS`) est inchange. Les attributs des quatre roles sont reimposes par la migration 0010 (audit-001 MINEUR-10).
 
 ## Contexte
 
