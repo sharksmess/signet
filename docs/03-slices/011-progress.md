@@ -5,17 +5,17 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 ## Etat
 - Statut : implementation en cours
 - Branche : slice/011-montee-next16
-- Dernier commit : beb2de1 `build(slice-011): reecritures tsconfig imposees par next 16`
+- Dernier commit : 610d736 `ci(slice-011): ignorer les majeures de @types/node`
 - Etat des tests (`pnpm exec vitest run tests/stack-upgrade`, 15 tests) : 10 verts, 5 rouges attendus.
   - Rouges (implementation absente) : AC1 `next` 15.5.26 au lieu de 16.x.y ; AC1 `eslint-config-next` idem ; AC1 `@eslint/eslintrc` present dans `package.json` ; AC1 `eslint.config.mjs` contient `FlatCompat` ; AC6 pas de section `ignore` pour `@types/node` dans le bloc npm.
   - Verts : AC1 `eslint` 9.39.5, `minimumReleaseAgeExclude` absent, version installee = manifeste ; AC6 `.nvmrc` = 24, groupes et limites conserves ; AC2 (4 tests de non-regression, verts des maintenant, attendu).
-- Prochaine etape : Dependabot, puis documentation, puis verification finale
+- Prochaine etape : documentation (ADR-0013, statuts d'ADR-0008 et ADR-0009, backlog), puis verification finale
 
 ## Couches
 - [x] Versions (`next`, `eslint-config-next` 16.3.7, retrait de `@eslint/eslintrc`) et lockfile : 814ff9d
 - [x] Configuration ESLint native (`eslint.config.mjs`) : 814ff9d (meme commit que les versions, voir Decisions)
 - [x] Reecritures imposees par `next build` 16 (`apps/web/tsconfig.json`) : beb2de1 (`jsx: react-jsx`, `include` de `.next/dev/types/**/*.ts`, rien d'autre ; aucun `AGENTS.md` ni autre fichier suivi cree par le build)
-- [ ] Dependabot (`.github/dependabot.yml`)
+- [x] Dependabot (`.github/dependabot.yml`) : 610d736 ; `tests/stack-upgrade` 15/15 verts ; fichier relu par `js-yaml` (transitif, sans ajout) : `ignore` bien rattache au bloc npm
 - [ ] Documentation (ADR-0013, statuts d'ADR-0008 et ADR-0009, backlog)
 - [ ] Suite complete verte + `pnpm run check` + `pnpm run build`
 
