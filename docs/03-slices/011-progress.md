@@ -3,21 +3,28 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : implementation en cours
+- Statut : implementation terminee, criteres locaux prouves ; en attente des trois relecteurs, du registre des decisions et de `close-slice.sh` (orchestrateur)
 - Branche : slice/011-montee-next16
-- Dernier commit : 610d736 `ci(slice-011): ignorer les majeures de @types/node`
-- Etat des tests (`pnpm exec vitest run tests/stack-upgrade`, 15 tests) : 10 verts, 5 rouges attendus.
-  - Rouges (implementation absente) : AC1 `next` 15.5.26 au lieu de 16.x.y ; AC1 `eslint-config-next` idem ; AC1 `@eslint/eslintrc` present dans `package.json` ; AC1 `eslint.config.mjs` contient `FlatCompat` ; AC6 pas de section `ignore` pour `@types/node` dans le bloc npm.
-  - Verts : AC1 `eslint` 9.39.5, `minimumReleaseAgeExclude` absent, version installee = manifeste ; AC6 `.nvmrc` = 24, groupes et limites conserves ; AC2 (4 tests de non-regression, verts des maintenant, attendu).
-- Prochaine etape : documentation (ADR-0013, statuts d'ADR-0008 et ADR-0009, backlog), puis verification finale
+- Dernier commit de code/doc : 34c36ac `docs(slice-011): ADR-0013, statuts d'ADR-0008 et ADR-0009`
+- Verification finale (2026-09-30, au premier plan, une commande a la fois) :
+  - `pnpm install --frozen-lockfile` : OK (« Lockfile is up to date »)
+  - `pnpm run check` : OK (typecheck des trois projets, `eslint .`)
+  - `pnpm test` : 13 fichiers, **107/107 verts** (92 existants inchanges + 15 `tests/stack-upgrade`)
+  - `pnpm run build` (variables factices de `ci.yml`) : OK, `Next.js 16.3.7 (Turbopack)`, code 0 ; messages Better Auth identiques a la 15 (voir Decisions)
+  - `pnpm audit --prod --audit-level=high` : « No known vulnerabilities found »
+  - `pnpm peers check` : « No peer dependency issues found »
+  - `git diff main --stat -- apps/web/src packages tests/organizations tests/isolation-hardening tests/_factory` : vide ; `pnpm-workspace.yaml` et `docs/02-architecture/api-contracts/` inchanges
+- AC coches dans le contrat : AC1 a AC6. AC2 : partie locale prouvee (suite, check, build, portee du lint) ; « CI verte » a constater sur la PR. AC3 : tests de la tranche 001 verts et inchanges ; verdict `contract-guardian` a obtenir.
+- Fichiers crees par Next non committes : aucun (`AGENTS.md` n'est pas apparu ; `next-env.d.ts` et `.next/` deja ignores).
+- Prochaine etape : relecteurs (`security-auditor`, `contract-guardian`, `code-reviewer`), ligne(s) au registre `docs/DECISIONS.md`, journal de projet, `bash scripts/close-slice.sh`.
 
 ## Couches
 - [x] Versions (`next`, `eslint-config-next` 16.3.7, retrait de `@eslint/eslintrc`) et lockfile : 814ff9d
 - [x] Configuration ESLint native (`eslint.config.mjs`) : 814ff9d (meme commit que les versions, voir Decisions)
 - [x] Reecritures imposees par `next build` 16 (`apps/web/tsconfig.json`) : beb2de1 (`jsx: react-jsx`, `include` de `.next/dev/types/**/*.ts`, rien d'autre ; aucun `AGENTS.md` ni autre fichier suivi cree par le build)
 - [x] Dependabot (`.github/dependabot.yml`) : 610d736 ; `tests/stack-upgrade` 15/15 verts ; fichier relu par `js-yaml` (transitif, sans ajout) : `ignore` bien rattache au bloc npm
-- [ ] Documentation (ADR-0013, statuts d'ADR-0008 et ADR-0009, backlog)
-- [ ] Suite complete verte + `pnpm run check` + `pnpm run build`
+- [x] Documentation (ADR-0013, statuts d'ADR-0008 et ADR-0009, backlog) : 34c36ac
+- [x] Suite complete verte + `pnpm run check` + `pnpm run build` (voir Etat)
 
 ## Blocages
 <!-- cause, essais, options. Vide = aucun. -->
@@ -32,3 +39,6 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 - Implementation : les objets `{ ignores }` globaux des exports `core-web-vitals` et `typescript` de `eslint-config-next` 16 (`.next/**`, `out/**`, `build/**`, `next-env.d.ts`, relatifs a la racine) sont filtres : la liste d'ignores du depot reste seule et identique. Option ecartee : les garder (ajout silencieux de `out/**` et `build/**` a la racine) ou leur ajouter `files` (objet vide de sens).
 - Implementation : ESLint 10 reporte, `eslint` reste en 9.39.5. Essai `eslint@10.11.0` (latest, publie le 2026-09-18) avec la configuration native : `pnpm lint` echoue sur `TypeError: Error while loading rule 'react/display-name': contextOrFilename.getFilename is not a function` (`eslint-plugin-react@7.37.5`, `lib/util/version.js:31`, sur `apps/web/next.config.ts`) ; `pnpm peers check` : `unmet peer eslint` pour `eslint-plugin-import@2.32.0`, `eslint-plugin-jsx-a11y@6.10.2`, `eslint-plugin-react@7.37.5` (bornes a ^9). `eslint-plugin-react@7.37.5` est sa derniere version (2025-04-03). Retour a 9.39.5 par `git restore package.json pnpm-lock.yaml` + `pnpm install` : lockfile identique a celui du commit 814ff9d, `--frozen-lockfile` et `pnpm peers check` propres. Option ecartee : forcer ESLint 10 (lint casse, pairs non satisfaits).
 - Implementation : `pnpm build` sous 16.3.7 (Turbopack) : memes messages Better Auth qu'en 15.5.26 (3+1 `Base URL is not set`, 3+1 `Could not validate the database schema`), code de sortie 0. Le build ne lance plus le lint ni ne l'annonce ; la route `/404` (pages) devient `/_not-found` (app), generee par Next.
+- Implementation : ADR-0013 redige d'apres le guide officiel livre avec `next@16.3.7` (`node_modules/next/dist/docs/01-app/02-guides/upgrading/version-16.md`, meme contenu que la page `nextjs.org/docs/app/guides/upgrading/version-16`), lu localement plutot que par le reseau : c'est la version exacte installee.
+- Implementation : dans ADR-0013, dependances transitives notables citees (`@next/eslint-plugin-next` 16.3.7, `eslint-plugin-react-hooks` 5.2.0 -> 7.1.1) en plus des paquets directs, pour que les relecteurs sachent d'ou viennent les 16 regles `react-hooks/*`.
+- Implementation : aucune ligne ajoutee a `docs/DECISIONS.md` par l'implementeur ; le registre revient a l'orchestrateur (etape « registre des decisions » du workflow). Decisions a y reporter : cible 16.3.7 (quarantaine), ESLint 10 reporte (erreur reproduite), filtrage des ignores globaux d'`eslint-config-next`, versions et configuration dans un seul commit.
