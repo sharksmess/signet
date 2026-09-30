@@ -3,10 +3,11 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : ouverte
+- Statut : tests ecrits
 - Branche : slice/010-durcissement-isolation
-- Dernier commit : (ouverture) chore(slice-010): ouvrir la tranche
-- Prochaine etape : `test-writer` ecrit les tests de `tests/isolation-hardening/` depuis AC1-AC6 et ADR-0011 § Tests exiges
+- Dernier commit : e3b4dff test(slice-010): ecrire les tests d'acceptation
+- Prochaine etape : migration 0009 (ADR-0011), jusqu'a ce que AC2-AC4 et les tests de catalogue de la tranche passent
+- Etat des tests a l'ecriture : 28 echecs attendus (AC2, AC3, AC4, catalogue ADR-0011, concurrence, AC6 i-ii), 54 verts (suite 001, catalogue usine, AC5 API, AC6 iii, recursion, member non owner)
 
 ## Couches
 - [ ] Migration 0009 (RLS par appartenance, fonctions `signet.*`)
