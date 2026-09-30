@@ -14,7 +14,7 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "incremental": true,
     "noEmit": true,
     "plugins": [
@@ -36,7 +36,8 @@
     "next-env.d.ts",
     "src/**/*.ts",
     "src/**/*.tsx",
-    ".next/types/**/*.ts"
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"
