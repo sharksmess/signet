@@ -17,12 +17,11 @@
     "db:migrate": "pnpm --filter @signet/db run migrate"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "3.3.7",
     "@types/node": "24.19.0",
     "@types/pg": "8.23.1",
     "dotenv": "18.0.4",
     "eslint": "9.39.5",
-    "eslint-config-next": "15.5.26",
+    "eslint-config-next": "16.3.7",
     "pg": "8.23.0",
     "typescript": "6.0.3",
     "typescript-eslint": "8.70.1",
