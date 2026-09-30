@@ -153,6 +153,42 @@ export async function asTenant<T>(
 }
 
 /**
+ * Comme `asTenant`, mais pose `app.organization_id`/`app.user_id` avec
+ * exactement la valeur fournie, **meme une chaine vide** — la ou `asTenant`
+ * (comportement inchange, AC1) traite toute valeur falsy comme "ne rien
+ * poser du tout". Necessaire au cas limite AC3 (c) : "`app.user_id` [...]
+ * est vide" est un scenario distinct de "absent", et le test doit pouvoir
+ * poser explicitement `SET LOCAL app.user_id = ''` plutot que de s'appuyer
+ * sur `asTenant` qui ne ferait tout simplement pas l'appel `set_config`.
+ * Une cle absente du `ctx` (`undefined`) n'est, elle, jamais posee — distinct
+ * d'une chaine vide explicitement fournie. Reserve aux tests de contexte
+ * malforme ; les tests d'isolation "normaux" continuent d'utiliser `asTenant`.
+ */
+export async function asTenantRaw<T>(
+  ctx: { organizationId?: string; userId?: string },
+  fn: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  const pool = getAppPool();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    if (ctx.organizationId !== undefined) {
+      await client.query("SELECT set_config('app.organization_id', $1, true)", [
+        ctx.organizationId,
+      ]);
+    }
+    if (ctx.userId !== undefined) {
+      await client.query("SELECT set_config('app.user_id', $1, true)", [ctx.userId]);
+    }
+    const result = await fn(client);
+    return result;
+  } finally {
+    await client.query("ROLLBACK").catch(() => undefined);
+    client.release();
+  }
+}
+
+/**
  * Execute `fn` avec un role `BYPASSRLS`, hors de tout contexte RLS applicatif.
  * Reserve a l'arrangement de fixtures et aux lectures de verification decrites
  * en tete de fichier — jamais a une assertion d'isolation ou d'autorisation.
