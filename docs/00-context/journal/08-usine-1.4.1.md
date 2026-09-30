@@ -14,8 +14,8 @@
 - Adoption dans Signet par Claude Code (consigne `docs/04-runbooks/consigne-adoption-1.4.1.md`).
 
 ## Decisions
-- Usine D-014 a D-018 (registre de l'usine), issues de Signet D-034, D-035, D-037.
-- D-038 : adoption de l'usine 1.4.1 dans Signet (cowork, en application des decisions humaines ci-dessus).
+- Usine D-014, D-015 et D-018 (registre de l'usine), issues respectivement de Signet D-037, D-034 et D-035 ; usine D-016 et D-017, decisions de cowork tirees des incidents de la tranche 010.
+- D-038 : adoption de l'usine 1.4.1 dans Signet (cowork, en application de D-034 et D-037 ; prepare D-035 par la configuration groupee sans le realiser : le regroupement des PR #2 a #10 reste a faire).
 
 ## Preuves
 Tests de l'usine 98/98 ; PR d'adoption : hook pre-push (check + tests) et CI.
