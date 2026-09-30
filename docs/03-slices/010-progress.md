@@ -3,10 +3,10 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : implementation terminee — BLOQUE sur deux tests AC4 defectueux (voir « Blocages »), decision du proprietaire des tests attendue
+- Statut : tests verts
 - Branche : slice/010-durcissement-isolation
 - Dernier commit : 42e5f83 docs(db): commentaires de withTenant et withUserOnly
-- Prochaine etape : correction des deux tests AC4 (hors mandat de l'implementeur), puis `pnpm test` complet, cocher AC4, relecteurs, `close-slice.sh`
+- Prochaine etape : trois relecteurs independants, registre, `close-slice.sh`
 - Etat des tests a l'ecriture : 28 echecs attendus (AC2, AC3, AC4, catalogue ADR-0011, concurrence, AC6 i-ii), 54 verts (suite 001, catalogue usine, AC5 API, AC6 iii, recursion, member non owner). Rejoue a l'implementation (baseline) : identique, 28 echecs / 54 verts.
 - Apres 0009 : 78 verts / 4 echecs (AC6 i-ii : 0010 absente ; AC4 create_organization x2 : defaut de test, voir « Blocages »)
 - Apres 0010 + commentaires (derniere suite) : `Test Files 1 failed | 9 passed (10)`, `Tests 2 failed | 80 passed (82)` ; les 2 echecs sont les tests AC4 defectueux (`25P02`). Aucun test ignore.
@@ -20,7 +20,7 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 - [x] Logique metier — sans objet (aucune)
 - [x] API — sans objet (aucune route modifiee)
 - [x] UI — sans objet
-- [ ] Suite complete verte + `pnpm run check` — `check` vert ; suite : 80/82, 2 echecs = defaut de test (Blocages)
+- [x] Suite complete verte + `pnpm run check` — `Test Files 10 passed (10)`, `Tests 82 passed (82)` apres correction des deux tests AC4
 
 ## Blocages
 <!-- cause, essais, options. Vide = aucun. -->
@@ -29,6 +29,8 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
   - Pourquoi c'est le test : si la fonction leve, la requete suivante echoue toujours en `25P02` ; si elle ne leve pas, la premiere assertion echoue. Aucune migration ne satisfait les deux. En outre, cette lecture passe par `signet_app` (RLS), elle rendrait 0 ligne meme si une organisation avait ete creee : ce n'est pas une verification boite blanche.
   - Non fait : modifier le test (interdit a l'implementeur par l'orchestrateur), contourner par la migration (impossible).
   - Options pour le proprietaire des tests : (a) encadrer l'appel par `SAVEPOINT s` / `ROLLBACK TO SAVEPOINT s` avant la verification ; (b) faire la verification apres `asTenant`, par `asBypassRls` (vraie boite blanche ; le nom contient `Date.now()`, donc unique) ; (b) est plus fidele a « verifie en boite blanche » d'AC4.
+
+- **Leve (orchestrateur, 2026-09-30)** : option (b) appliquee aux deux tests — verification apres la transaction, sous la connexion d'administration (vraie boite blanche, hors RLS). Assertion `SG002` inchangee. Suite complete : 82/82.
 
 ## Decisions
 - Ouverture (orchestrateur) : conception confiee a `db-architect` avant de figer le perimetre de fichiers, pour savoir si un index ou le schema Drizzle devaient changer (reponse : non). ADR-0011 acceptee, y compris la correction `pg_temp` des trois fonctions de trigger, la garde `SG002` de `create_organization` et la levee sur appartenance de role (D-027, D-028).
@@ -41,3 +43,4 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 - 0010, implementeur : pas de controle d'existence des roles avant `ALTER ROLE` : 0001 les cree toujours ; un role absent ferait echouer la migration bruyamment, ce qui est le comportement voulu.
 - `db.ts`, implementeur : en plus du commentaire de `withUserOnly` (ADR-0011 § i), une phrase ajoutee au commentaire de `withTenant` (la RLS verifie desormais l'appartenance ; le controle applicatif et le 404 uniforme restent requis). Commentaire seulement, dans le perimetre declare ; ecarte : laisser `withTenant` muet sur le changement de sens de la barriere.
 - AC cochees dans le contrat : AC1, AC2, AC3, AC5, AC6 (tests verts). AC4 **non cochee** : ses assertions `SG002` et de catalogue passent, mais deux de ses tests echouent (defaut de test).
+- AC4, orchestrateur : les deux tests « create_organization ... ne cree aucune organisation » verifient desormais l'absence d'organisation apres `asTenant`, par `asBypassRls`. Ecarte : option (a) `SAVEPOINT`, qui garde une lecture sous `signet_app` filtree par la RLS, donc aveugle a une creation erronee. AC4 cochee.
