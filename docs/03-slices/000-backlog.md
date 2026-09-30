@@ -14,12 +14,13 @@ Ordre de dependance technique d'abord, risque decroissant en departage a profond
 | 008 | Retrait d'un membre | US-04 | 006 | Depend d'un membre reel obtenu par acceptation d'invitation (006), pour tester le retrait sur un membre effectif plutot que sur une donnee de fixture. Contient l'invariant "dernier owner protege" (US-04.3). |
 | 009 | Consultation des collections et des liens | US-07 | 004, 005 | Depend de collections et de liens existants pour verifier le tri et l'isolation en lecture sur des donnees reelles. Risque le plus bas du backlog : lecture seule, patron d'isolation deja eprouve par les tranches precedentes. |
 | 010 | Durcissement de l'isolation tenant (tranche technique) | US-09 (transverse) | 001 | Decision humaine D-022 (audit-001 MINEUR-1, option A) + MINEUR-10. **Executee avant 002** (D-024) : toutes les tranches suivantes copient le patron `withTenant` et les politiques RLS ; il doit etre juste avant d'etre reproduit. |
+| 011 | Montee Next 16 et ESLint 10 (tranche technique) | transverse | 010 | Decision humaine D-041 : Next 15 arrive en fin de maintenance en octobre 2026 (ADR-0008) ; la migration ne coutera jamais moins cher qu'avec 3 routes. **Executee avant 002.** |
 
 ## Ordre d'execution
 
 Les identifiants ne sont jamais renumerotes (D-025) : une tranche inseree prend le prochain numero libre, et l'ordre d'execution est ecrit ici.
 
-001 (close) -> **010** -> 002 -> 003 -> 004 -> 005 -> 006 -> 007 -> 008 -> 009
+001 (close) -> 010 (close) -> **011** -> 002 -> 003 -> 004 -> 005 -> 006 -> 007 -> 008 -> 009
 
 ## Tranche 010 — cadrage (decision D-022)
 
@@ -38,6 +39,22 @@ Les identifiants ne sont jamais renumerotes (D-025) : une tranche inseree prend 
 - AC6 — roles : attributs des quatre roles reimposes par migration ; test de catalogue vert, en local et en CI.
 
 **NE touche PAS.** Aucune capacite utilisateur nouvelle, aucune route nouvelle, aucune forme de requete ou de reponse modifiee (`contract-guardian` doit rendre PASS), rien de Stripe, des invitations ni des liens.
+
+## Tranche 011 — cadrage (decision D-041)
+
+**Objectif.** Passer le socle web sur la ligne maintenue : `next` 16 (derniere stable du registre, pas de pre-version), `eslint-config-next` de la meme ligne, ESLint 10 si compatible (sinon la derniere 9.x, avec l'erreur reproduite dans l'ADR), `eslint.config.mjs` reecrit dans le format natif de la ligne 16. Les PR Dependabot #7 et #9 deviennent sans objet.
+
+**Documentation.** ADR-0013 : versions retenues (registre a l'instant, date de publication), liste des changements cassants du guide officiel de migration de Next 16 et traitement de chacun, compatibilite verifiee de `better-auth`, de React et de `drizzle`. Il remplace la partie « ligne Next 15 » d'ADR-0008 et la partie ESLint d'ADR-0009.
+
+**Criteres d'acceptation attendus** (a reprendre dans `docs/03-slices/011-*.md`) :
+- AC1 — versions : `next` et `eslint-config-next` 16.x stables, epinglage exact, ADR-0013 ; aucune exception a la regle de pnpm sur les versions de moins d'un jour.
+- AC2 — non-regression : suite complete verte **sans modifier aucune assertion**, `pnpm run check` et `pnpm run build` verts, CI verte.
+- AC3 — contrats : reponses de `/api/auth/*` et `/api/organizations*` inchangees (`contract-guardian` PASS).
+- AC4 — securite : `pnpm audit --prod` propre ; les regles de securite existantes (limiteur ADR-0010, en-tetes, validation) intactes.
+- AC5 — isolation tenant : les tests d'isolation des tranches 001 et 010 restent verts, inchanges.
+- AC6 — Dependabot : `.github/dependabot.yml` ignore les montees majeures de `@types/node` tant que `.nvmrc` reste sur 24 (D-040).
+
+**NE touche PAS.** Aucune capacite nouvelle, aucune migration de base, aucun changement de contrat d'API. Pas de montee majeure de React sauf si Next 16 l'exige (alors ADR).
 
 ## Notes
 
