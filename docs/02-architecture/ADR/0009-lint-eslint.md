@@ -1,6 +1,6 @@
 # ADR-0009 — Lint reel : ESLint 9 (ligne de maintenance), eslint-config-next 15.5, typescript-eslint
 
-- **Statut** : accepte
+- **Statut** : accepte ; partie « ESLint / `eslint-config-next` / `FlatCompat` » remplacee par ADR-0013 (tranche 011)
 - **Date** : 2026-09-28
 - **Phase** : 3 — tranche 001, adoption de l'usine 1.3 (`docs/04-runbooks/consigne-adoption-1.3.md`, etape 3)
 

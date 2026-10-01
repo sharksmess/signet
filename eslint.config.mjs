@@ -1,12 +1,23 @@
-// Lint du depot (ADR-0009) : regles Next (core-web-vitals + typescript) sur
-// apps/web, typescript-eslint en mode type-aware sur tout le TypeScript.
+// Lint du depot (ADR-0009, ADR-0013) : regles Next (core-web-vitals +
+// typescript) sur apps/web, typescript-eslint en mode type-aware sur tout le
+// TypeScript.
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { FlatCompat } from "@eslint/eslintrc";
+import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
+import nextTypescript from "eslint-config-next/typescript";
 import tseslint from "typescript-eslint";
 
 const root = dirname(fileURLToPath(import.meta.url));
-const compat = new FlatCompat({ baseDirectory: root });
+
+// eslint-config-next 16 exporte des tableaux de configurations plates, dont
+// des objets `{ ignores }` globaux relatifs a la racine (`.next/**`, `out/**`,
+// `build/**`, `next-env.d.ts`). Ils sont retires : les ignores du depot, plus
+// bas, restent la seule liste, comme avec la ligne 15 (ADR-0013).
+function isGlobalIgnores(config) {
+  return Object.keys(config).every((key) => key === "ignores" || key === "name");
+}
+
+const nextConfigs = [...nextCoreWebVitals, ...nextTypescript].filter((config) => !isGlobalIgnores(config));
 
 export default tseslint.config(
   {
@@ -40,7 +51,7 @@ export default tseslint.config(
       "@typescript-eslint/ban-ts-comment": ["error", { "ts-expect-error": true, "ts-ignore": true, "ts-nocheck": true }],
     },
   },
-  ...compat.extends("next/core-web-vitals", "next/typescript").map((config) => ({
+  ...nextConfigs.map((config) => ({
     ...config,
     files: ["apps/web/**/*.{ts,tsx}"],
     settings: { ...config.settings, next: { rootDir: "apps/web" } },

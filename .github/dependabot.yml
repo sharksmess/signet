@@ -8,6 +8,11 @@ updates:
     directory: /
     schedule: { interval: weekly, day: monday }
     open-pull-requests-limit: 3
+    ignore:
+      # D-040 : @types/node suit la ligne majeure du runtime (.nvmrc = 24).
+      # A retirer ou ajuster quand .nvmrc change.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
       mineures-et-correctifs:
         update-types: [minor, patch]

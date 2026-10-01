@@ -1,0 +1,8 @@
+apps/web/package.json
+apps/web/tsconfig.json
+apps/web/next.config.ts
+tests/stack-upgrade/*
+package.json
+pnpm-lock.yaml
+eslint.config.mjs
+.github/dependabot.yml

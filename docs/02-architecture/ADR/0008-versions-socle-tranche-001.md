@@ -1,6 +1,6 @@
 # ADR-0008 — Versions du socle a la reprise de la tranche 001 : ligne Next 15, epinglage exact, fin de vie octobre 2026
 
-- **Statut** : accepte
+- **Statut** : accepte ; partie « ligne Next 15 » remplacee par ADR-0013 (tranche 011)
 - **Date** : 2026-09-24
 - **Phase** : 3 — tranche 001 (creation d'organisation et compte owner), reprise apres interruption
 
