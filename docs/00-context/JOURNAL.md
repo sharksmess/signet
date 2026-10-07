@@ -16,4 +16,5 @@ Complements : decisions detaillees dans `docs/DECISIONS.md`, incidents dans `doc
 | 08 | 30/09 | [Usine 1.4.1 : journal de projet et orchestration autonome](journal/08-usine-1.4.1.md) | Adoption fusionnee (PR #14, commit 09415e2) | usine v1.4.1, 98 scenarios |
 | 09 | 30/09 | [Mises a jour Dependabot regroupees](journal/09-dependances-groupees.md) | PR #16 fusionnee (commit 192dd46) | ADR-0012, D-039, D-040 |
 | 10 | 30/09 | [Tranche 011 : montee Next 16 en autonomie](journal/10-tranche-011-montee-next16.md) | Next 16.3.7, ESLint natif (ESLint 10 reporte) ; PR #17 fusionnee (commit f43d55b) | fiche `evidence/011.md`, ADR-0013, D-042 a D-045 |
-| 11 | 02/10 → 07/10 | [Next 16.3.8 : correctifs de securite](journal/11-next-16.3.8.md) | Next 16.3.8, overrides sharp et source-map-js, Dependabot ignore les majeures d'eslint et typescript ; PR ouverte | ADR-0013, D-046 a D-050 |
+| 11 | 02/10 → 07/10 | [Next 16.3.8 : correctifs de securite](journal/11-next-16.3.8.md) | Next 16.3.8, overrides sharp et source-map-js, Dependabot ignore les majeures d'eslint et typescript ; PR #21 fusionnee (commit 24be181) | ADR-0013, D-046 a D-050 |
+| 12 | 07/10 | [Mises a jour Dependabot #19, dont better-auth 1.7.7](journal/12-dependances-2026-10-07.md) | better-auth 1.7.7 (avis de securite, exposition nulle) et cinq correctifs ou mineures ; PR ouverte | ADR-0014, D-051 a D-053 |
