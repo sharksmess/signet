@@ -90,8 +90,12 @@ if [ -n "$BASE" ]; then
   # Dependance ajoutee => un ADR la nomme.
   NEWDEPS=$(git diff "$BASE"...HEAD -- package.json '*/package.json' 2>/dev/null \
     | grep -E '^\+ +"(@?[a-z0-9][a-z0-9._/-]*)": *"[~^]?[0-9]' | sed -E 's/^\+ +"([^"]+)".*/\1/' | grep -vxE 'version|name|node|pnpm|npm' | sort -u)
+  # Distinguer ajout et changement de version : present dans un package.json de la base = changement.
+  BASEPKG=$(git diff --name-only "$BASE"...HEAD -- package.json '*/package.json' 2>/dev/null | while read -r f; do git show "$BASE:$f" 2>/dev/null; done)
+  ADDED=""; CHANGED=""
   for d in $NEWDEPS; do
-    grep -rqF -- "$d" docs/02-architecture/ADR/ 2>/dev/null || bad "dependance '$d' ajoutee sans ADR qui la nomme (docs/02-architecture/ADR/)."
+    grep -rqF -- "$d" docs/02-architecture/ADR/ 2>/dev/null || bad "dependance '$d' ajoutee ou modifiee sans ADR qui la nomme (docs/02-architecture/ADR/)."
+    if printf '%s' "$BASEPKG" | grep -qF "\"$d\":"; then CHANGED="$CHANGED $d"; else ADDED="$ADDED $d"; fi
   done
   # Migration ajoutee => ERD mis a jour dans la meme tranche.
   if git diff --name-only --diff-filter=A "$BASE"...HEAD | grep -qE '(^|/)migrations/[^/]+\.sql$'; then
@@ -125,7 +129,8 @@ NB_AC=$(grep -cE '^- \[x\] AC' "$DOC" 2>/dev/null || echo 0)
   printf '| Contrats (`contract-guardian`) | %s |\n' "$(tail -1 "$CONTRACT" | tr -d '\r')"
   printf '| Relecture de code (`code-reviewer`) | %s |\n' "$(tail -1 "$REVIEW" | tr -d '\r')"
   printf '| Criteres d acceptation coches | %s |\n' "$NB_AC"
-  printf '| Dependances ajoutees | %s |\n' "$(printf '%s' "${NEWDEPS:-aucune}" | tr '\n' ' ')"
+  printf '| Dependances ajoutees | %s |\n' "${ADDED:- aucune}"
+  printf '| Dependances changees de version | %s |\n' "${CHANGED:- aucune}"
   printf '\nLa CI rejoue check, tests, build, audit et recherche de secrets sur un serveur neutre ; son resultat est attache a la PR.\n'
 } > "$EVID"
 rm -rf "$LOG"

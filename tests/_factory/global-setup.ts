@@ -7,8 +7,10 @@
 // Aucun serveur a lancer a la main, aucun secret a synchroniser entre fenetres.
 import { spawn, execSync, type ChildProcess } from "node:child_process";
 import net from "node:net";
+import path from "node:path";
 import pg from "pg";
 import { ROOT, envOrigin, loadTestEnv, requireEnv, testDbUrl } from "./env";
+import { checkNextNativeBinding } from "./preflight";
 
 const log = (m: string) => process.stdout.write(`[tests] ${m}\n`);
 
@@ -109,6 +111,10 @@ async function startServer(): Promise<ChildProcess | undefined> {
     fail(`le port ${port} est deja occupe. Arrete le serveur qui l'utilise : il pointe peut-etre sur la base de dev.`);
   }
   const env = serverEnv();
+  // Composant natif de Next : un blocage du systeme (Smart App Control) se nomme
+  // ici en une phrase, au lieu d'un build en echec au message obscur.
+  const nativeProblem = checkNextNativeBinding(path.join(ROOT, process.env.TEST_NEXT_APP_DIR ?? "apps/web"));
+  if (nativeProblem) fail(nativeProblem);
   if (process.env.TEST_SKIP_BUILD !== "1") {
     const build = process.env.TEST_SERVER_BUILD_CMD ?? "pnpm run build";
     log(`build : ${build}`);
