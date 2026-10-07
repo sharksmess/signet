@@ -13,6 +13,17 @@ updates:
       # A retirer ou ajuster quand .nvmrc change.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
+      # D-043 / D-048 : eslint-plugin-react (via eslint-config-next) est
+      # incompatible avec ESLint 10. A retirer quand eslint-config-next
+      # declare ESLint 10 dans ses peerDependencies.
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      # D-048 : typescript 7 (portage Go) supprime l'API compilateur dont
+      # depend le chargeur next.config.ts : `next dev` ne demarre plus
+      # (commit 948df22). A retirer quand Next annonce la prise en charge de
+      # TypeScript 7 et que `next dev` demarre avec.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     groups:
       mineures-et-correctifs:
         update-types: [minor, patch]
