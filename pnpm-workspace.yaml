@@ -12,3 +12,7 @@ overrides:
   postcss: ">=8.5.23"
   kysely: ">=0.28.17"
   esbuild: ">=0.25.0"
+  # GHSA-68fv-2mgg-jv7q : deni de service par offsets de sections (via postcss).
+  source-map-js: ">=1.2.2"
+  # GHSA-wq5f-xc86-pv6w : CVE-2026-96889 dans librsvg embarque (via next).
+  sharp: ">=0.35.5"
