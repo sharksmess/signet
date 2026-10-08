@@ -24,3 +24,12 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 ## Decisions
 <!-- Toute decision prise sans l'humain, avec sa raison. Reprise dans la PR. -->
 - Gate d'ouverture : D-057 (humain), D-058 a D-064 (claude-code), voir `002-abonnement-palier.md` § Decisions du gate d'ouverture.
+
+## Tests ecrits (test-writer, avant implementation)
+Chemins et noms que les tests supposent (a respecter ou a renegocier avec l'orchestrateur, pas a contourner dans les tests) :
+- Fonction Inngest : `apps/web/src/lib/inngest/process-stripe-event.ts`, export nomme `processStripeEvent`.
+- Connexion `signet_billing` : `apps/web/src/lib/inngest/billing-db.ts` (AC16).
+- Schema d'environnement : `apps/web/src/lib/env.ts`, export `parseServerEnv(raw: Record<string, string | undefined>)` qui leve une `Error` sans citer de valeur.
+- Point de service : `apps/web/src/app/api/inngest/route.ts` (exports `GET`, `POST`, `PUT`).
+- Fonction definer d'application d'etat Stripe : decouverte par le catalogue (seul `EXECUTE` explicite de `signet_billing`), appelee avec UN argument `jsonb` (cles : `stripe_event_id`, `occurred_at`, `event_type`, `stripe_subscription_id`, `stripe_customer_id`, `stripe_status`, `is_pro_price`, `cancel_at_period_end`, `current_period_end`, `metadata_organization_id`, `metadata_requested_by`). Voir `ApplyInput` dans `tests/helpers/billing-db.ts`.
+- Les modules importes par les tests (`lib/env.ts`, `lib/inngest/*`, `app/api/inngest/route.ts`) utilisent des imports relatifs : vitest n'a pas d'alias `@/`.
