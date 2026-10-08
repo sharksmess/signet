@@ -36,9 +36,13 @@ jobs:
       TEST_APP_SCHEMAS: signet,public
       # Mots de passe des roles, poses par le globalSetup apres migration. Meme
       # valeur que PGPASSWORD : les URL ci-dessous n'en portent aucun.
-      TEST_ROLE_PASSWORDS: signet_owner:ci_only_not_a_secret,signet_app:ci_only_not_a_secret,signet_auth:ci_only_not_a_secret
+      TEST_ROLE_PASSWORDS: signet_owner:ci_only_not_a_secret,signet_app:ci_only_not_a_secret,signet_auth:ci_only_not_a_secret,signet_billing:ci_only_not_a_secret
       TEST_DATABASE_URL_TABLE_OWNER: postgresql://signet_owner@localhost:5432/signet_test
       TEST_DATABASE_URL_APP: postgresql://signet_app@localhost:5432/signet_test
+      # Role signet_billing (tranche 002, migration 0011) : connexion de la suite
+      # et du serveur de test (fonction Inngest seule, AC16).
+      TEST_DATABASE_URL_BILLING: postgresql://signet_billing@localhost:5432/signet_test
+      TEST_SERVER_ENV_DATABASE_URL_BILLING: postgresql://signet_billing@localhost:5432/signet_test
       TEST_APP_BASE_URL: http://localhost:3100
       TEST_SERVER_ENV_DATABASE_URL_APP: postgresql://signet_app@localhost:5432/signet_test
       TEST_SERVER_ENV_DATABASE_URL_AUTH: postgresql://signet_auth@localhost:5432/signet_test
