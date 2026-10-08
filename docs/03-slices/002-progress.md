@@ -3,10 +3,10 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : ouverte
+- Statut : tests ecrits
 - Branche : slice/002-abonnement-palier
-- Dernier commit : chore(slice-002): ouvrir la tranche
-- Prochaine etape : `test-writer` ecrit les tests de AC1 a AC17 dans `tests/billing/` (doublures `tests/billing/fakes/`), avant toute implementation
+- Dernier commit : df5d435 test(billing): ecrire les tests de la tranche 002
+- Prochaine etape : `/implement`, en commencant par la migration de roles (`signet_billing`) ; trancher d'abord avec l'humain les ambiguites listees par test-writer (signature de la fonction definer, codes SQLSTATE, delais Stripe et file)
 
 ## Couches
 - [ ] Migration (role `signet_billing` + INFO-1 ; `billing_event`, politiques, trigger, fonction definer)
