@@ -200,14 +200,15 @@ pas seulement au mecanisme de quota qui l'a motivee) :**
 
 Voir ADR-0002 pour le raisonnement complet et le critere de test associe.
 
-### Roles Postgres (ADR-0007, reimposes par la migration 0010)
+### Roles Postgres (ADR-0007, reimposes par les migrations 0010 puis 0011)
 
 | Role | `LOGIN` | Attributs imposes | Appartenances | Proprietaire de |
 |---|---|---|---|---|
-| `signet_owner` | oui | `NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS` | aucune | toutes les tables de `public` |
-| `signet_app` | oui | idem | aucune | rien |
-| `signet_auth` | oui | idem | aucune | rien |
-| `signet_definer` | **non** | idem | aucune | schema `signet`, fonctions `SECURITY DEFINER`, `context_org()` |
+| `signet_owner` | oui | `NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS` | aucune, dans aucun sens | toutes les tables de `public` |
+| `signet_app` | oui | idem | aucune, dans aucun sens | rien |
+| `signet_auth` | oui | idem | aucune, dans aucun sens | rien |
+| `signet_definer` | **non** | idem | aucune, dans aucun sens | schema `signet`, fonctions `SECURITY DEFINER`, `context_org()` |
+| `signet_billing` | oui | idem | aucune, dans aucun sens | rien ; aucun droit de table ; seul privilege : `EXECUTE` sur la fonction d'application d'etat Stripe (§8.1, ADR-0016), accorde par la migration de `billing_event` |
 | role de migration (bootstrap) | — | superutilisateur, hors de ce tableau (ADR-0007) | — | `_signet_migrations`, `uuidv7()`, `current_user_id()`, `quota_for_tier()` |
 
 - Creation idempotente en 0001 (`DO $$ ... IF NOT EXISTS ... $$`), aucun mot de passe dans une
@@ -220,6 +221,12 @@ Voir ADR-0002 pour le raisonnement complet et le critere de test associe.
   configuration.
 - `NOREPLICATION` complete la liste d'ADR-0007 : un role `REPLICATION` lit toutes les donnees par
   le protocole de replication, hors RLS.
+- **0011** (tranche 002, D-064) cree `signet_billing` (idempotent), reimpose les attributs des
+  **cinq** roles, et etend l'assertion de 0010 (audit-010 INFO-1) : elle leve aussi si un role
+  quelconque est **membre** d'un role `signet_*` (`pg_auth_members.roleid`), et si un reglage par
+  role existe pour l'un d'eux (`pg_db_role_setting`, toutes bases). Meme principe : lever, ne
+  jamais revoquer ni effacer en silence. Aucun reglage par role n'est attendu : tout parametre de
+  session est pose par le code (`set_config`), jamais par `ALTER ROLE ... SET`.
 
 ---
 
@@ -771,8 +778,13 @@ session soit owner, donc membre ; `current_org()` etant desormais verifiee, la c
 double. `subscription_definer_insert` (`FOR INSERT TO signet_definer`) passe en 0009 a
 `WITH CHECK (organization_id = signet.context_org())` : au moment ou `create_organization_counters`
 insere la ligne, le membership owner n'existe pas encore.
-Le webhook Stripe, lui, n'a pas d'utilisateur : il ecrit via une fonction dediee du role
-proprietaire, apres verification de signature (et non via `signet_app`).
+Le webhook Stripe, lui, n'a pas d'utilisateur. **Depuis la tranche 002 (Q-1, D-057)** : la route
+webhook verifie la signature et met l'evenement en file sans lire la base ; la fonction Inngest
+de traitement se connecte sous le role dedie **`signet_billing`** (§1, migration 0011 ; ni
+`signet_app`, ni `signet_owner`), qui n'a aucun droit de table et n'ecrit `subscription` et
+`billing_event` que par la fonction `SECURITY DEFINER` d'application d'etat Stripe (proprietaire
+`signet_definer`, `EXECUTE` accorde au seul `signet_billing`, ADR-0016). Cette fonction et ses
+politiques `TO signet_definer` arrivent avec la migration de `billing_event`.
 
 **Trigger de propagation du quota** — `AFTER INSERT OR UPDATE OF tier ON subscription`,
 `SECURITY DEFINER`, role `signet_definer`, `search_path` fixe, lecture/ecriture bornees a
@@ -930,8 +942,9 @@ enregistre un nom, jamais une somme de controle : une modification ne serait jam
 | `0008_default_privileges_global_revoke.sql` | revocation globale d'`EXECUTE` a `PUBLIC` pour les fonctions futures | 001 |
 | **`0009_rls_session_user_membership.sql`** | ADR-0011 : `context_org()` (brute, `signet_definer` seul) ; `current_org()` remplacee (`SECURITY DEFINER`, verifiee, proprietaire `signet_definer`) ; `organization_isolation`/`member_isolation` restreintes a `signet_app` ; `organization_definer_context`/`member_definer_context` creees ; `organization_link_usage_definer_write`/`subscription_definer_insert` sur `context_org()` ; `create_organization`/`organizations_for_user` remplacees (garde `SG002`, `pg_temp`, noms qualifies) ; `search_path` des trois fonctions de trigger complete par `pg_temp` | 010 |
 | **`0010_reimpose_role_attributes.sql`** | MINEUR-10 : leve si un role `signet_*` est membre d'un role ; `ALTER ROLE` des quatre roles (attributs du tableau « Roles Postgres », §1) | 010 |
+| **`0011_billing_role.sql`** | Q-1 : role `signet_billing` (creation idempotente, aucun droit) ; INFO-1 : leve sur toute appartenance impliquant un des cinq roles (deux sens) et sur tout reglage `pg_db_role_setting` ; `ALTER ROLE` des cinq roles | 002 |
 
-Aucune de ces deux migrations ne touche une table, une colonne ou un index : `pnpm db:generate`
+Aucune de ces trois migrations (0009 a 0011) ne touche une table, une colonne ou un index : `pnpm db:generate`
 ne produit aucune difference, `packages/db/src/schema/*` est inchange.
 
 ---

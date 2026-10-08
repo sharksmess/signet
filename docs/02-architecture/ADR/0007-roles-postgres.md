@@ -4,6 +4,7 @@
 - **Date** : 2026-09-22
 - **Phase** : 3 — tranche 001 (creation d'organisation et compte owner)
 - **Amende le 2026-09-29 par ADR-0011** (tranche 010) : les politiques `organization_isolation` et `member_isolation`, decrites en Partie 2 comme « elargies a `signet_definer` », sont desormais separees — `signet_app` sur `current_org()` (verifiee par appartenance de l'utilisateur de session), `signet_definer` sur `context_org()` (contexte brut pose depuis une valeur de confiance). Le principe de cette ADR (definer sans `BYPASSRLS`) est inchange. Les attributs des quatre roles sont reimposes par la migration 0010 (audit-001 MINEUR-10).
+- **Amende le 2026-10-08 par la tranche 002** (Q-1, D-057, D-064) : cinquieme role `signet_billing`, cree par la migration 0011, qui etend aussi l'assertion de 0010 (appartenances dans les deux sens, `pg_db_role_setting`). Voir « Amendement 2026-10-08 » en fin de document.
 
 ## Contexte
 
@@ -136,6 +137,46 @@ elle-meme). `BYPASSRLS` n'est donc necessaire pour aucune d'entre elles.
   declenche le `DELETE` sous un role `BYPASSRLS` de test sans poser de contexte tenant, continue de
   passer : c'est precisement le scenario que le `set_config` interne a `assert_owner_remains`
   couvre, independamment du contexte (ou de l'absence de contexte) de l'appelant.
+
+## Amendement 2026-10-08 — role `signet_billing` (tranche 002)
+
+Decision humaine Q-1 (D-057, `docs/03-slices/002-decisions-humaines.md`) ; mecanique D-064.
+
+### Contexte
+Le traitement des evenements Stripe (fonction Inngest, ADR-0005, ADR-0006) doit changer le palier
+d'une organisation sans utilisateur de session. L'ecriture passe par une fonction `SECURITY
+DEFINER` d'application d'etat (ADR-0016) ; il faut un role de connexion pour l'appeler.
+
+### Options
+- `signet_app` : ecarte. Toute route, par erreur de variable, pourrait changer le palier de
+  n'importe quelle organisation (D-033 l'interdit).
+- `signet_owner` : ecarte. Proprietaire des tables, il peut desactiver la RLS.
+- **Role dedie `signet_billing`** : retenu.
+
+### Decision
+| Role | LOGIN | Attributs | Role |
+|---|---|---|---|
+| `signet_billing` | oui | `NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS` | Connexion de la seule fonction Inngest de traitement des evenements Stripe (`DATABASE_URL_BILLING`, module dedie, AC16). **Aucun droit de table**, aucune politique RLS ; son unique privilege est `EXECUTE` sur la fonction d'application d'etat Stripe, accorde par la migration qui cree cette fonction. |
+
+- Creation idempotente (`IF NOT EXISTS`) dans une **migration de roles separee**
+  (`0011_billing_role.sql`), distincte de celle de `billing_event` : les roles sont communs au
+  cluster, la RLS est propre a la base (precedent ADR-0011 § h).
+- 0011 reimpose les attributs des **cinq** roles et leve (sans rien revoquer ni effacer) si :
+  - un role `signet_*` est membre d'un role, **ou** un role quelconque est membre d'un role
+    `signet_*` (audit-010 INFO-1, sens inverse : un membre de `signet_billing` pourrait changer le
+    palier de toute organisation, un membre de `signet_owner` desactiver la RLS) ;
+  - un reglage par role existe dans `pg_db_role_setting` pour l'un des cinq roles, dans n'importe
+    quelle base (audit-010 INFO-1 : un `search_path` ou un autre parametre pose hors migration).
+- Aucun mot de passe dans la migration : l'humain le fixe (`\password signet_billing`,
+  `docs/04-runbooks/stripe-facturation-locale.md`), la CI par `TEST_ROLE_PASSWORDS`.
+
+### Consequences
+- Une connexion de plus a configurer (dev : `DATABASE_URL_BILLING` ; test :
+  `TEST_DATABASE_URL_BILLING`, `TEST_SERVER_ENV_DATABASE_URL_BILLING`).
+- Le role est atteignable par connexion directe (`LOGIN`) : sa surface se limite a ce que la
+  fonction d'application d'etat accepte. AC6 (b) le verifie en catalogue (aucun privilege de
+  table, de colonne, de sequence ni de creation de schema ; un seul `EXECUTE` explicite).
+- La fonction d'application d'etat et son `GRANT` relevent d'ADR-0016.
 
 ## Signal de reexamen
 
