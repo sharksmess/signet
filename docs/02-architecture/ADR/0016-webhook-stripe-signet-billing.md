@@ -1,9 +1,9 @@
 # ADR-0016 — Traitement du webhook Stripe, role `signet_billing` et fonction `apply_stripe_subscription`
 
-- **Statut** : accepte pour le role et le circuit (D-057, Q-1, Q-2, A1 a A4) ; details de la fonction valides par l'humain le 2026-10-15 (D-067, D-068). Revue d'architecture exigee par ERD §1 (cinquieme fonction `SECURITY DEFINER` hors triggers).
+- **Statut** : accepte pour le role et le circuit (D-057, Q-1, Q-2, A1 a A4) ; details de la fonction valides par l'humain le 2026-10-15 (D-067, D-068). 503 au contrat et refus de demarrer par `instrumentation.ts` : D-070. Revue d'architecture exigee par ERD §1 (cinquieme fonction `SECURITY DEFINER` hors triggers).
 - **Date** : 2026-10-15
 - **Phase** : 3 — tranche 002
-- **Decisions du registre** : D-057, D-058, D-060, D-061, D-062, D-065, D-067, D-068
+- **Decisions du registre** : D-057, D-058, D-060, D-061, D-062, D-065, D-067, D-068, D-069, D-070
 
 ## Contexte
 
@@ -96,23 +96,25 @@ superutilisateur peuvent l'executer, et la remise a zero de la base de test en a
 - Arguments types plutot qu'un `jsonb` (D-067).
 - Un seul pas Inngest pour la relecture et l'ecriture (D-061).
 - Traiter aussi `checkout.session.completed` (D-060).
-- Reponse du webhook en `500` generique : `503 SERVICE_UNAVAILABLE` dit a Stripe de renvoyer. Ce
-  code n'est pas au contrat `subscriptions.ts`, dont l'interface `_contract.ts` ne prevoit pas 503
-  et que la tranche ne modifie que pour `409` (anti-regression) : point remonte a l'humain.
+- Reponse du webhook en `500` generique : confondue avec un bug. Retenu : `503 SERVICE_UNAVAILABLE`,
+  qui dit a Stripe de renvoyer, ajoute au contrat `subscriptions.ts` et au type des statuts de
+  `_contract.ts` (decision humaine D-070). Ecarte : le laisser hors contrat comme reponse
+  d'infrastructure.
 
 ## Consequences
 
 - Le serveur n'expose aucune ecriture du palier : une route compromise ne peut pas changer le
   palier d'une organisation (aucune connexion `signet_billing` hors de la fonction Inngest).
 - Une connexion de plus a configurer et a superviser.
-- L'environnement est valide au chargement du premier module de facturation
-  (`lib/env.ts`), pas au demarrage du processus Next : un serveur mal configure demarre, mais
-  toute route de facturation echoue. Voir le signal de reexamen.
+- L'environnement est valide au demarrage du processus (`apps/web/src/instrumentation.ts`, D-070) :
+  un environnement de facturation invalide arrete `next start` en erreur, en nommant les variables
+  sans leurs valeurs (`tests/billing/startup.test.ts`). L'arret passe par `process.exit` car Next
+  16.3.8 ne fait que journaliser une erreur levee par `register()` et continue d'ecouter. Il vit
+  dans `lib/env.ts`, importe seulement sous le runtime Node (pas d'API Node dans le bundle Edge).
+  `getServerEnv()` reste appele par chaque module de facturation (meme validation, mise en cache).
 
 ## Signal de reexamen
 
-- Une tranche ajoute un fichier `instrumentation.ts` (crochet de demarrage de Next) : y appeler
-  `getServerEnv()` pour refuser le demarrage lui-meme.
 - Stripe introduit un statut d'abonnement inconnu de la liste fermee : `SG003`, evenement non
   traite et journalise ; decision humaine pour la correspondance.
 - Plusieurs prix Pro (mensuel, annuel) : `is_pro_price` doit devenir une liste.
