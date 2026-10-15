@@ -12,19 +12,19 @@ La migration `packages/db/migrations/0011_billing_role.sql` cree le role Postgre
 Les roles sont communs a tout le cluster Postgres : un seul mot de passe vaut pour la base de developpement et pour la base de test si elles sont sur la meme instance (cas du poste local, port 5432).
 
 ### Etape 1 — Creer le role (jouer la migration)
-Depuis la racine du depot, sur la branche `slice/002-abonnement-palier` a jour :
+**Voie principale** — depuis la racine du depot, sur la branche `slice/002-abonnement-palier` a jour :
 
 ```powershell
-pnpm db:migrate
+pnpm test
 ```
 
-Comme pour les migrations precedentes, la commande joue `0011_billing_role.sql` sur la base de developpement avec la connexion de migration (`DATABASE_URL_MIGRATE`). La ligne attendue : `applique : 0011_billing_role.sql`.
+Le globalSetup recree la base de test et y joue toutes les migrations, dont `0011_billing_role.sql` : le role est cree sur le cluster (les roles sont communs a toutes les bases de l'instance). Les tests de la tranche 002 qui se connectent sous `signet_billing` echouent tant que l'etape 2 n'est pas faite : c'est attendu.
 
-Si la migration leve :
+**Variante, base de developpement** : `pnpm db:migrate` joue la migration sur la base de developpement, mais exige `DATABASE_URL_MIGRATE` dans `.env` (modele `.env.example`). Sans elle, la commande s'arrete sur « DATABASE_URL_MIGRATE n'est pas definie » (constate le 2026-10-15 sur le poste de developpement, dont le `.env` ne porte que `DATABASE_URL`). Ligne attendue quand elle est definie : `applique : 0011_billing_role.sql`.
+
+Si la migration leve (dans l'une ou l'autre voie) :
 - « appartenance impliquant un role signet_* » : un role du cluster est membre d'un role `signet_*`, ou l'inverse. Revoquer l'appartenance citee (`REVOKE <role parent> FROM <role membre>;` sous le superutilisateur), puis rejouer.
 - « reglage par role sur un role signet_* » : un `ALTER ROLE ... SET` existe pour ce role. Le retirer (`ALTER ROLE <role> RESET ALL;` ou `ALTER ROLE <role> IN DATABASE <base> RESET ALL;` selon la base citee), puis rejouer.
-
-Variante sans base de developpement migree : un premier `pnpm test` cree aussi le role (le globalSetup migre la base de test) ; les tests de la tranche 002 echoueront jusqu'a l'etape 2, c'est attendu.
 
 ### Etape 2 — Fixer le mot de passe (vous seul)
 Ouvrir `psql` sous le superutilisateur du cluster local :
@@ -59,8 +59,17 @@ Ajouter a `.env.test.local` (a la racine, ignore par git) les deux lignes `TEST_
 
 Modele : `.env.test.example` (noms et valeurs factices).
 
-### Etape 4 — Fichier de developpement
-Ajouter au fichier d'environnement de developpement (`.env`, celui qui porte deja `DATABASE_URL_APP`) la ligne `DATABASE_URL_BILLING` du modele `.env.example` : la meme URL que votre `DATABASE_URL_APP`, en changeant l'utilisateur `signet_app` en `signet_billing` et le mot de passe. Lue par la seule fonction Inngest de traitement des evenements Stripe (AC16).
+### Etape 4 — Fichier de developpement (avant tout essai manuel de Stripe)
+Non requise pour `pnpm test` ni pour livrer la tranche : seulement pour lancer `pnpm dev` et essayer le parcours Stripe a la main.
+
+Etat constate le 2026-10-15 sur le poste de developpement : `.env` ne porte qu'une variable, `DATABASE_URL`, sous le superutilisateur `postgres`, et **aucune URL de role**. Or le serveur lit `DATABASE_URL_APP`, `DATABASE_URL_AUTH` et `DATABASE_URL_BILLING`, chacune sous son role (ADR-0007) : avec ce `.env`, `pnpm dev` refuse de demarrer, et une URL superutilisateur placee sous un de ces noms contournerait la RLS. Avant tout essai manuel :
+
+1. Aligner `.env` sur le modele `.env.example` : `DATABASE_URL_MIGRATE` (superutilisateur, migrations seulement), `DATABASE_URL_APP`, `DATABASE_URL_AUTH`, `DATABASE_URL_BILLING` (chacune sous son role `signet_*`, avec le mot de passe de ce role), `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `APP_ENV=development`.
+2. `DATABASE_URL_BILLING` : la meme URL que `DATABASE_URL_APP`, en changeant l'utilisateur `signet_app` en `signet_billing` et le mot de passe. Lue par la seule fonction Inngest de traitement des evenements Stripe (AC16).
+3. Retirer `DATABASE_URL` si aucun outil ne la lit plus.
+4. `pnpm db:migrate` pour amener la base de developpement a jour.
+
+Suivi au backlog (`docs/03-slices/000-backlog.md`, Notes).
 
 ### Etape 5 — Signaler
 Indiquer a l'agent que le mot de passe est fixe et que les deux fichiers sont completes, sans jamais lui transmettre la valeur. L'agent reprend alors l'implementation (`docs/03-slices/002-progress.md`).

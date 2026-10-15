@@ -3,15 +3,15 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : implementation, phase 1 terminee (role `signet_billing` + runbook) ; **point d'arret D-065 regle 1**
+- Statut : implementation, phase 2 (migration `billing_event`) ; point d'arret D-065 regle 1 leve le 2026-10-15 (D-067)
 - Branche : slice/002-abonnement-palier
 - Dernier commit : e0f825c docs(billing): runbook du mot de passe de signet_billing (avant : 42711ed feat(db): creer le role signet_billing et etendre l'assertion de roles)
-- Prochaine etape : quand l'humain a fixe le mot de passe et complete ses fichiers locaux (runbook `docs/04-runbooks/stripe-facturation-locale.md` § 1) **et** repondu aux questions ouvertes de D-065 (signature de la fonction definer : un `jsonb` ou des arguments types ; codes d'erreur `SGxxx` ou `P0001` ; delai et relances des appels Stripe), migration `billing_event` (`pnpm db:generate` + SQL des politiques, trigger, fonction definer, `GRANT EXECUTE` a `signet_billing`), puis acces donnees. Premier `pnpm test` a ce moment-la (AC6 e attendu vert).
+- Prochaine etape : migration `billing_event` (`pnpm db:generate` + SQL des politiques, trigger `billing_event_immutable`, fonction definer `signet.apply_stripe_subscription(jsonb)` qui valide son entree, `GRANT EXECUTE` a `signet_billing`), puis premier `pnpm test` (AC6, AC9 g, AC12 attendus verts), puis acces donnees.
 
 ## Couches
 - [ ] Migration
   - [x] role `signet_billing` + INFO-1 : `0011_billing_role.sql` (42711ed), ADR-0007 amende, ERD §1, §8.1 et table des migrations, backlog INFO-1 barre
-  - [ ] `billing_event`, politiques, trigger, fonction definer (attend les reponses humaines de D-065)
+  - [ ] `billing_event`, politiques, trigger, fonction definer
 - [ ] Acces donnees (connexion `signet_billing` isolee, lecture `subscription`)
 - [ ] Logique metier (client Stripe, correspondance des statuts, fonction Inngest)
 - [ ] API (`subscription` GET/POST, webhook Stripe, `/api/inngest`)
@@ -21,8 +21,8 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 
 ## Blocages
 <!-- cause, essais, options. Vide = aucun. -->
-- **Attente humaine (D-065 regle 1)** : fixer le mot de passe de `signet_billing` et ajouter `TEST_DATABASE_URL_BILLING`, `TEST_SERVER_ENV_DATABASE_URL_BILLING` a `.env.test.local` et `DATABASE_URL_BILLING` a `.env` (runbook `stripe-facturation-locale.md` § 1, noms dans `.env.test.example` / `.env.example`). Aucun `pnpm test` lance en phase 1 (consigne) : 0011 n'a pas encore ete jouee contre une base.
-- **Questions humaines ouvertes (D-065)** : signature de la fonction definer, codes d'erreur, delai et relances Stripe. Bloquent la suite de la couche Migration.
+- ~~Attente humaine (D-065 regle 1)~~ : levee le 2026-10-15 (D-067). Mot de passe fixe, `.env.test.local` complete (15 variables). `.env` non aligne (ne porte que `DATABASE_URL`) : non bloquant pour la tranche, suivi au backlog et au runbook etape 4.
+- ~~Questions humaines ouvertes (D-065)~~ : tranchees le 2026-10-15 (D-067) : `jsonb` valide par la fonction elle-meme, codes `SGxxx`, Stripe 10 s et une relance.
 - `pnpm run check` rouge **avant et apres** la phase 1, pour une cause attendue : les tests ecrits en df5d435 importent des modules encore absents (`lib/env.ts`, `api/inngest/route.ts`, `lib/inngest/process-stripe-event.ts`, `@inngest/test`), d'ou TS2307 et des erreurs de lint `no-unsafe-*` dans `tests/billing/environment.test.ts` et `tests/helpers/billing.ts` seulement. `@signet/web` et `@signet/db` passent leur typecheck.
 
 ## Decisions
