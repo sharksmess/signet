@@ -15,6 +15,13 @@
       "when": 1790085585601,
       "tag": "0003_organizations_and_policies",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792071247558,
+      "tag": "0012_billing_event",
+      "breakpoints": true
     }
   ]
 }
