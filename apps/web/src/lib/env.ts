@@ -98,3 +98,18 @@ export function getServerEnv(): ServerEnv {
 export function isInngestDevMode(env: ServerEnv): boolean {
   return env.INNGEST_DEV !== undefined;
 }
+
+/**
+ * Refus de demarrer (D-070) : appelee par `instrumentation.ts`, runtime Node
+ * seulement. Next 16 ne fait que journaliser une erreur levee par
+ * `register()` et continue d'ecouter : le processus est donc arrete ici. Le
+ * message ne cite que des noms de variables.
+ */
+export function assertServerEnvOrExit(raw: Record<string, string | undefined>): void {
+  try {
+    parseServerEnv(raw);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : "Environnement du serveur invalide, demarrage refuse.");
+    process.exit(1);
+  }
+}
