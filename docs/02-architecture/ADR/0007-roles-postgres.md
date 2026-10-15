@@ -177,6 +177,9 @@ DEFINER` d'application d'etat (ADR-0016) ; il faut un role de connexion pour l'a
   fonction d'application d'etat accepte. AC6 (b) le verifie en catalogue (aucun privilege de
   table, de colonne, de sequence ni de creation de schema ; un seul `EXECUTE` explicite).
 - La fonction d'application d'etat et son `GRANT` relevent d'ADR-0016.
+- Precision de la migration 0012 (2026-10-15) : `signet_billing` recoit aussi `USAGE` sur le schema
+  `signet`, sans lequel le nom qualifie de la fonction ne se resout pas ; jamais `CREATE`.
+  `signet_definer` recoit `UPDATE` sur `subscription` et `INSERT` sur `billing_event`, rien d'autre.
 
 ## Signal de reexamen
 

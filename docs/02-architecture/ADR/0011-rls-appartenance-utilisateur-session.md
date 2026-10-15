@@ -191,6 +191,23 @@ l'attaquant) et casserait trois invariants de 001. Politiques concernees :
 | `subscription_definer_insert` | `current_org()` | `context_org()` |
 | `member_definer_self_read`, `organization_definer_self_read` | `current_user_id()` | inchangees |
 
+#### Regle generale (tranche 002, audit-010 MINEUR-2, D-033, AC6 a)
+
+**Toute fonction `SECURITY DEFINER` executable par un role applicatif (`signet_app`, `signet_auth`,
+`signet_billing`, ou tout role `LOGIN` futur) pose son contexte depuis une valeur de confiance, ou
+filtre sur `current_user_id()`, en premiere instruction.** Le contexte deja pose par l'appelant
+(`app.organization_id`, et pour une fonction sans utilisateur, `app.user_id`) n'est jamais lu tel
+quel : `context_org()` le rendrait brut, et les politiques de `signet_definer` valideraient ce que
+l'appelant a choisi. Chaque nouvelle fonction de ce type recoit un test sous contexte etranger
+force (modele d'AC2 de 010, AC6 c de 002) et une ligne dans le tableau ci-dessous.
+
+Tableau « source du contexte » complete par la tranche 002 :
+
+| Fonction | Executable par | Source du contexte |
+|---|---|---|
+| `apply_stripe_subscription(jsonb)` (0012) | `signet_billing` seul | efface `app.organization_id` en premiere instruction ; puis organisation de la ligne `subscription` deja rattachee a l'identifiant d'abonnement Stripe (lecture par `subscription_definer_stripe_lookup`), a defaut `metadata.organization_id` de l'abonnement relu chez Stripe avec la cle secrete, posee par le serveur au Checkout apres controle du role owner ; une metadonnee contraire a la ligne deja rattachee leve `SG004` (ADR-0016) |
+| `reject_mutation()` (0012, trigger, `SECURITY INVOKER`) | aucun (trigger) | sans objet : ne lit aucune table |
+
 ### e) Fonctions dependant de l'utilisateur de session (AC4)
 
 **`signet.organizations_for_user(p_user_id)`.** La garde actuelle `p_user_id IS NULL OR p_user_id

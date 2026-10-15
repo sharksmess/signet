@@ -2,7 +2,7 @@
 
 Runbook de la tranche 002 (AC18, Q-1, Q-9, A6). Destinataire : l'humain. Les agents ne lisent, n'ecrivent ni n'affichent aucun mot de passe ni aucun fichier d'environnement local ; ils ecrivent ce runbook, l'humain execute.
 
-Etat au 2026-10-08 : la section 1 (role `signet_billing`) est complete et doit etre executee **avant** le premier `pnpm test` de la tranche. Les sections Stripe (valeurs du mode test, reglage « annuler l'abonnement » apres echec des relances, A6) et Inngest en local (Q-9) sont ajoutees a ce fichier par les couches suivantes de la tranche 002, avec le code qui les lit.
+Etat au 2026-10-15 : section 1 (role `signet_billing`) faite ; section 2 (variables de test de la facturation) a faire une fois, avant le prochain `pnpm test` ; sections 3 a 5 (Stripe en mode test, reglage A6, Inngest en local) facultatives, seulement pour un essai manuel du parcours reel.
 
 ## 1. Mot de passe du role `signet_billing`
 
@@ -76,3 +76,42 @@ Indiquer a l'agent que le mot de passe est fixe et que les deux fichiers sont co
 
 ### En CI
 Rien a faire : le workflow `.github/workflows/ci.yml` pose le mot de passe factice de la base jetable par `TEST_ROLE_PASSWORDS` (`signet_billing:ci_only_not_a_secret`), et les URL de `signet_billing` n'en portent aucun (`PGPASSWORD`).
+
+## 2. Variables de test de la facturation (`.env.test.local`)
+
+Les tests de la tranche 002 demarrent un faux Stripe et un faux point d'evenements Inngest sur deux ports locaux, et le serveur de test leur parle (D-059). Toutes les valeurs sont **inventees** : aucune vraie cle Stripe n'est jamais utilisee par les tests, ni en local ni en CI.
+
+Copier dans `.env.test.local` le bloc « Facturation (tranche 002) » de `.env.test.example`, tel quel (neuf lignes : `TEST_FAKE_STRIPE_PORT`, `TEST_FAKE_INNGEST_PORT`, `TEST_STRIPE_WEBHOOK_SECRET`, `TEST_SERVER_ENV_STRIPE_WEBHOOK_SECRET`, `TEST_SERVER_ENV_STRIPE_SECRET_KEY`, `TEST_SERVER_ENV_STRIPE_PRICE_ID_PRO`, `TEST_SERVER_ENV_STRIPE_API_BASE_URL`, `TEST_SERVER_ENV_INNGEST_DEV`, `TEST_SERVER_ENV_APP_URL`). Contraintes verifiees par les tests au demarrage :
+
+- `TEST_STRIPE_WEBHOOK_SECRET` et `TEST_SERVER_ENV_STRIPE_WEBHOOK_SECRET` ont la meme valeur ;
+- `TEST_SERVER_ENV_STRIPE_API_BASE_URL` vise le port `TEST_FAKE_STRIPE_PORT`, `TEST_SERVER_ENV_INNGEST_DEV` le port `TEST_FAKE_INNGEST_PORT` ;
+- formes attendues par le schema d'environnement (`apps/web/src/lib/env.ts`) : `whsec_...`, `sk_test_...`, `price_...` (lettres, chiffres, `_`).
+
+Si un des deux ports est deja pris sur le poste, en choisir un autre et l'utiliser aux deux endroits.
+
+## 3. Stripe en mode test (facultatif, essai manuel)
+
+Prerequis : `.env` aligne sur les roles (section 1, etape 4). Dans le tableau de bord Stripe, **mode test** uniquement :
+
+1. Creer un produit « Signet Pro » avec un prix recurrent ; noter son identifiant `price_...`.
+2. Ajouter a `.env` (modele `.env.example`, bloc « Facturation ») : `APP_URL`, `STRIPE_SECRET_KEY` (cle secrete du mode test, `sk_test_...`), `STRIPE_PRICE_ID_PRO`, et `STRIPE_WEBHOOK_SECRET` (etape 3). Ne jamais mettre de cle `sk_live_` dans un fichier du poste de developpement.
+3. Recevoir les webhooks en local : `stripe listen --forward-to localhost:3100/api/webhooks/stripe` (Stripe CLI) ; la commande affiche un secret `whsec_...` a placer dans `STRIPE_WEBHOOK_SECRET`. Seuls `customer.subscription.created`, `.updated` et `.deleted` sont traites (D-060) ; les autres sont acquittes et ignores.
+4. `STRIPE_API_BASE_URL` reste **absente** : elle est refusee hors `APP_ENV=test`.
+
+## 4. Reglage Stripe obligatoire avant la production (A6)
+
+Dans le tableau de bord Stripe (mode test, puis mode production), parametres de facturation des abonnements, rubrique de gestion des paiements en echec (« Manage failed payments » dans l'interface anglaise ; l'emplacement exact du menu peut changer, chercher « failed payments ») : pour le cas ou toutes les tentatives de paiement ont echoue, choisir **« Annuler l'abonnement »** (« Cancel the subscription »).
+
+Pourquoi : Signet garde Pro un abonnement `past_due` ou `unpaid` (Q-8, Stripe n'a pas encore resilie). Si Stripe laissait l'abonnement `unpaid` indefiniment, l'organisation resterait Pro sans payer. Avec ce reglage, Stripe resilie l'abonnement a la fin des relances, emet `customer.subscription.deleted`, et Signet repasse l'organisation en Free avec un `subscription_canceled` sans auteur (`actor_user_id` NULL).
+
+A verifier a nouveau a chaque nouveau compte Stripe (le reglage n'est pas copie du mode test au mode production).
+
+## 5. Inngest en local (facultatif, Q-9)
+
+Rien n'est impose : les tests n'utilisent jamais le serveur Inngest (D-059). Pour voir la fonction tourner pendant un essai manuel :
+
+1. Dans `.env` : `INNGEST_DEV=1`, et **aucune** `INNGEST_EVENT_KEY` ni `INNGEST_SIGNING_KEY` (mode developpement, accepte seulement avec `APP_ENV=development` ou `test`).
+2. Lancer le serveur de developpement Inngest (`npx inngest-cli@latest dev -u http://localhost:3100/api/inngest`), puis `pnpm dev`. Interface sur `http://localhost:8288`.
+3. Sans serveur Inngest, le webhook repond `503` a Stripe (file indisponible) et Stripe renverra l'evenement plus tard : c'est le comportement voulu (A1).
+
+En production : `INNGEST_DEV` absente (refusee avec `APP_ENV=production`), `INNGEST_EVENT_KEY` et `INNGEST_SIGNING_KEY` exigees au demarrage ; un appel non signe a `/api/inngest` recoit 401 (A2).
