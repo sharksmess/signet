@@ -3,8 +3,8 @@
  * attendues sont des valeurs de retour typees. `throw` est reserve aux
  * invariants qui ne devraient jamais arriver."). Chaque code correspond
  * exactement a un `errors[]` de `docs/02-architecture/api-contracts/organizations.ts`
- * ou `subscriptions.ts` (tranche 002), sauf `SERVICE_UNAVAILABLE` (webhook,
- * AC14 : file d'attente indisponible, voir ADR-0016).
+ * ou `subscriptions.ts` (tranche 002 ; `SERVICE_UNAVAILABLE` : webhook,
+ * AC14, file d'attente indisponible, D-070).
  */
 
 export type ApiErrorCode =

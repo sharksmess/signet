@@ -105,6 +105,7 @@ export const stripeWebhook: ApiContract<typeof stripeWebhookInput, typeof stripe
   output: stripeWebhookOutput,
   errors: [
     { status: 400, code: "INVALID_SIGNATURE", trigger: "signature absente ou ne correspondant pas au secret webhook configure — payload rejete avant tout traitement" },
+    { status: 503, code: "SERVICE_UNAVAILABLE", trigger: "evenement valide mais la file d'attente (Inngest) refuse la transmission ou ne repond pas dans le delai (5 s) — aucune ecriture, Stripe renverra l'evenement (A1, AC14, D-070)" },
   ],
   idempotency:
     "idempotente sur event.id (identifiant d'evenement Stripe) : un evenement deja traite est acquitte (200) sans reappliquer son effet ni redupliquer l'ecriture du journal.",
