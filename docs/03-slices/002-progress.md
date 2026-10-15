@@ -3,28 +3,29 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : implementation, couche Migration ecrite (3399cd1) ; **arret : serveur de test sans mot de passe pour `signet_app`** (voir Blocages)
+- Statut : implementation terminee, suite complete verte (242 tests, 21 fichiers) et `pnpm run check` vert ; **attente humaine** : deux questions (503 hors contrat, `instrumentation.ts`) et copie du bloc de variables de test (runbook § 2), avant les trois relecteurs
 - Branche : slice/002-abonnement-palier
-- Dernier commit : 3399cd1 feat(db): billing_event, RLS et fonction apply_stripe_subscription (avant : db0adee docs(slice-002): reponses D-067, runbook et backlog sur .env)
-- Prochaine etape : quand l'humain a corrige la connexion `signet_app` du serveur de test (Blocages), relancer `pnpm test tests/billing/database.test.ts tests/organizations tests/isolation-hardening tests/_factory` (attendu vert), puis couche Acces donnees (`lib/inngest/billing-db.ts`, lecture `subscription`) et ERD §0 (codes SG003 a SG007), §1, §8.
+- Dernier commit : ee43428 docs(billing): ADR-0016, ADR-0011, ERD et runbook Stripe (avant : 115a813 ci, 07cead4 api, 316c9c6 billing, d1e5051 deps, 0b792b0, 3399cd1 migration)
+- Prochaine etape : reponses humaines (Blocages), puis `security-auditor`, `contract-guardian`, `code-reviewer`, journal de projet 14, `bash scripts/close-slice.sh`, `bash scripts/ship-slice.sh`.
 
 ## Couches
-- [ ] Migration
+- [x] Migration
   - [x] role `signet_billing` + INFO-1 : `0011_billing_role.sql` (42711ed), ADR-0007 amende, ERD §1, §8.1 et table des migrations, backlog INFO-1 barre
-  - [~] `billing_event`, politiques, triggers, fonction definer : `0012_billing_event.sql` (3399cd1). Sonde manuelle sous `signet_billing` verte (transitions, idempotence, SG003 a SG007, `ON DELETE SET NULL`, mutation directe refusee) ; tests AC6 b et e verts ; tests a fixture HTTP bloques (Blocages)
-- [ ] Acces donnees (connexion `signet_billing` isolee, lecture `subscription`)
-- [ ] Logique metier (client Stripe, correspondance des statuts, fonction Inngest)
-- [ ] API (`subscription` GET/POST, webhook Stripe, `/api/inngest`)
+  - [x] `billing_event`, politiques, triggers, fonction definer : `0012_billing_event.sql` (3399cd1), suites base, 001 et 010 vertes (D-068)
+- [x] Acces donnees : `lib/inngest/billing-db.ts` (316c9c6), regle de lint AC16
+- [x] Logique metier : `lib/env.ts`, `lib/stripe.ts`, `lib/inngest/*`, `lib/billing/subscriptions.ts` (316c9c6, 07cead4)
+- [x] API : `subscription` GET/POST, webhook Stripe, `/api/inngest` (07cead4)
 - [ ] UI — sans objet (Q-6, D-057)
-- [ ] Documentation (ADR-0015, ADR-0016, ADR-0007, ADR-0011, ERD, contrat `subscriptions.ts`, runbook, `.env*.example`, CI)
-- [ ] Suite complete verte + `pnpm run check`
+- [x] Documentation : ADR-0015 (d1e5051), ADR-0016, ADR-0011, ADR-0007, ERD, runbook (ee43428), contrat `subscriptions.ts` (07cead4), `.env*.example` et CI (115a813) ; reste : journal de projet 14
+- [x] Suite complete verte (242 tests) + `pnpm run check`
 
 ## Blocages
 <!-- cause, essais, options. Vide = aucun. -->
 - ~~Attente humaine (D-065 regle 1)~~ : levee le 2026-10-15 (D-067). Mot de passe fixe, `.env.test.local` complete (15 variables). `.env` non aligne (ne porte que `DATABASE_URL`) : non bloquant pour la tranche, suivi au backlog et au runbook etape 4.
 - ~~Questions humaines ouvertes (D-065)~~ : tranchees le 2026-10-15 (D-067) : `jsonb` valide par la fonction elle-meme, codes `SGxxx`, Stripe 10 s et une relance.
-- **Attente humaine (2026-10-15) : le serveur de test ne peut pas ouvrir sa connexion `signet_app`.** Symptome : toute creation d'organisation par l'API renvoie 500 ; journal du serveur : `SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string` (10 occurrences, aucune autre erreur). Ce message de `pg` signifie que l'URL lue par le serveur sous le nom `DATABASE_URL_APP` (fournie par `TEST_SERVER_ENV_DATABASE_URL_APP` de `.env.test.local`) ne porte pas de mot de passe exploitable : absent, vide, ou rendu illisible par un caractere non encode dans l'URL (`@`, `#`, `/`, `:`, `%` doivent etre encodes en `%40`, `%23`, `%2F`, `%3A`, `%25`). Preuves que la cause n'est pas le code de la tranche : (1) les suites de 001, non modifiees, echouent pareil (`tests/organizations` : 8 echecs, meme 500) ; (2) `signet.create_organization` appelee directement en base sous `signet_app` reussit ; (3) l'inscription (connexion `signet_auth` du serveur) reussit ; (4) les tests qui se connectent sous `signet_billing` et les tests de catalogue passent. Essais : relance apres retrait du trigger `TRUNCATE` (premiere cause, corrigee, voir Decisions) ; meme symptome. Aucun fichier local lu (regle). Action humaine : verifier dans `.env.test.local` que `TEST_SERVER_ENV_DATABASE_URL_APP` (et `TEST_DATABASE_URL_APP`) portent le mot de passe de `signet_app`, encode si besoin, sous la forme de `TEST_DATABASE_URL_BILLING` qui, elle, fonctionne.
-- `pnpm run check` rouge **avant et apres** la phase 1, pour une cause attendue : les tests ecrits en df5d435 importent des modules encore absents (`lib/env.ts`, `api/inngest/route.ts`, `lib/inngest/process-stripe-event.ts`, `@inngest/test`), d'ou TS2307 et des erreurs de lint `no-unsafe-*` dans `tests/billing/environment.test.ts` et `tests/helpers/billing.ts` seulement. `@signet/web` et `@signet/db` passent leur typecheck.
+- ~~Serveur de test sans mot de passe `signet_app`~~ : corrige par l'humain le 2026-10-15 (mot de passe vide sur les deux URL `_APP`), suites vertes (D-068).
+- ~~`pnpm run check` rouge (modules absents)~~ : vert depuis 316c9c6.
+- **Attente humaine (2026-10-15)** : (1) `503 SERVICE_UNAVAILABLE` du webhook hors contrat `subscriptions.ts` : l'ajouter (avec 503 dans `_contract.ts`) ou le laisser hors contrat ? (2) validation de l'environnement au demarrage par `apps/web/src/instrumentation.ts` : l'ajouter au perimetre de 002 ou au backlog ? (3) copier dans `.env.test.local` le bloc « Facturation (tranche 002) » de `.env.test.example` (runbook § 2) : sans lui, `pnpm test` et `close-slice.sh` echouent sur les tests de facturation.
 
 ## Decisions
 <!-- Toute decision prise sans l'humain, avec sa raison. Reprise dans la PR. -->
@@ -46,6 +47,19 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
   - `reject_mutation` laisse passer l'action referentielle `ON DELETE SET NULL` d'`actor_user_id` (sinon la suppression d'un compte echoue, contraire a ERD §8.2 et a AC12) : `pg_trigger_depth() > 1` et seule colonne modifiee = `actor_user_id` vers NULL.
   - Trigger `TRUNCATE` ajoute puis retire dans le meme travail : `resetDatabase` des tests fait `TRUNCATE app_user ... CASCADE`, qui atteint `billing_event` par la FK ; l'ERD ne prevoit que UPDATE et DELETE, `signet_app` n'a pas `TRUNCATE`. Limite acceptee (proprietaire et superutilisateur peuvent vider la table), a ecrire dans ADR-0016.
   - `GRANT USAGE ON SCHEMA signet TO signet_billing` (resolution du nom de la fonction ; jamais `CREATE`).
+  - Valide par l'humain le 2026-10-15 (D-068), avec la condition : SG003 a SG006 non rejouables dans la fonction Inngest.
+- Phase 3, code applicatif (registre D-069) :
+  - `inngest` epingle en **4.23.0** et non 4.24.0 (`latest`) : 4.24.0 publiee le 2026-10-14 13:54Z, encore en quarantaine pnpm a l'ajout (2026-10-15 13:51Z) ; aucune exclusion. ADR-0015.
+  - `protobufjs` (postinstall, tire par `inngest` via OpenTelemetry gRPC) refuse dans `allowBuilds` : il ne sert que l'outillage CLI de protobufjs. ADR-0015.
+  - Environnement valide au chargement du premier module de facturation (`lib/env.ts`, `getServerEnv`), pas au demarrage du processus Next : le crochet de demarrage (`instrumentation.ts`) est hors perimetre de la tranche. Un serveur mal configure demarre, mais toute route de facturation echoue. Question a l'humain : ajouter `apps/web/src/instrumentation.ts` au perimetre (tranche 002 ou backlog) ? Ecarte : valider dans `db.ts` (charge par toutes les routes, y compris celles de 001 qui n'ont pas besoin de Stripe).
+  - Webhook : `503 SERVICE_UNAVAILABLE` si la file echoue ou ne repond pas en 5 s (AC14). Code **absent du contrat** `subscriptions.ts` : `_contract.ts` ne prevoit pas 503 et l'anti-regression limite la tranche a l'ajout de `409`. Question a l'humain : l'ajouter au contrat (avec 503 dans `_contract.ts`) ou le laisser hors contrat comme reponse d'infrastructure ? Ecarte : `500` generique (meme effet pour Stripe, mais confondu avec un bug).
+  - Client Inngest : `fetch` borne a 2 s par tentative (le SDK n'a aucun delai, 5 tentatives) ; le webhook abandonne a 5 s. Mesure : 503 en environ 5 s quand le faux Inngest ne repond pas.
+  - Gestionnaires de `/api/inngest` enveloppes dans la signature standard `(request) => Response` : celle du SDK (`(NextRequest, res)`) refusait l'appel a un argument du test AC15 (TS2554). Le test n'est pas modifie.
+  - `is_pro_price` : vrai seulement pour un abonnement a un seul article au prix `STRIPE_PRICE_ID_PRO` ; tout autre montage donne SG006 (D-068).
+  - Abonnement introuvable a la relecture (`resource_missing`) : journalise et non rejoue, comme SG003 a SG006.
+  - URL de retour Checkout : `APP_URL/organizations/<id>/billing?checkout=success|cancel` (chemin qui n'a pas besoin d'exister, Q-6).
+  - Journal serveur : prefixe `[facturation]`, identifiants Stripe et code de refus seulement (AC9 a).
+  - Execution locale des tests : les neuf variables de test inventees de `.env.test.example` ont ete passees par le terminal (le globalSetup trace leur provenance), en attendant que l'humain les copie dans `.env.test.local` (runbook § 2). Aucun fichier local lu ni modifie.
 
 ## Tests ecrits (test-writer, avant implementation)
 Chemins et noms que les tests supposent (a respecter ou a renegocier avec l'orchestrateur, pas a contourner dans les tests) :
