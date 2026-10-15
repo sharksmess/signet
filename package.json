@@ -17,6 +17,7 @@
     "db:migrate": "pnpm --filter @signet/db run migrate"
   },
   "devDependencies": {
+    "@inngest/test": "1.0.0",
     "@types/node": "24.19.1",
     "@types/pg": "8.23.1",
     "dotenv": "18.0.5",

@@ -3,6 +3,10 @@ packages:
   - "packages/*"
 allowBuilds:
   esbuild: true
+  # ADR-0015 : postinstall de protobufjs (tire par inngest via OpenTelemetry
+  # gRPC) ; il ne sert que l'outillage en ligne de commande de protobufjs,
+  # inutile ici. Refuse.
+  protobufjs: false
   sharp: true
   # ADR-0009 : postinstall de repli qui telecharge le binding natif si la
   # dependance optionnelle de plateforme manque ; elle est installee, le
