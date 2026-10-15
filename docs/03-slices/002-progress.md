@@ -25,7 +25,8 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 - ~~Questions humaines ouvertes (D-065)~~ : tranchees le 2026-10-15 (D-067) : `jsonb` valide par la fonction elle-meme, codes `SGxxx`, Stripe 10 s et une relance.
 - ~~Serveur de test sans mot de passe `signet_app`~~ : corrige par l'humain le 2026-10-15 (mot de passe vide sur les deux URL `_APP`), suites vertes (D-068).
 - ~~`pnpm run check` rouge (modules absents)~~ : vert depuis 316c9c6.
-- **Attente humaine (2026-10-15)** : (1) `503 SERVICE_UNAVAILABLE` du webhook hors contrat `subscriptions.ts` : l'ajouter (avec 503 dans `_contract.ts`) ou le laisser hors contrat ? (2) validation de l'environnement au demarrage par `apps/web/src/instrumentation.ts` : l'ajouter au perimetre de 002 ou au backlog ? (3) copier dans `.env.test.local` le bloc « Facturation (tranche 002) » de `.env.test.example` (runbook § 2) : sans lui, `pnpm test` et `close-slice.sh` echouent sur les tests de facturation.
+- ~~Questions 503 et `instrumentation.ts`~~ : tranchees le 2026-10-15 (D-070) : 503 au contrat, `instrumentation.ts` dans le perimetre avec un test. `.env.test.local` complete par l'humain (bloc Facturation).
+- **Attente humaine (2026-10-15) : perimetre fige.** Le hook `gate-check.sh` refuse toute ecriture de `.gates/scope-002.txt` pendant la tranche (« son perimetre est fige jusqu'a sa cloture… arrete-toi et signale-le a l'humain »). Ecrire depuis le shell contournerait la protection : non fait. Lignes a ajouter par l'humain a `.gates/scope-002.txt` : `apps/web/src/instrumentation.ts` et `docs/02-architecture/api-contracts/_contract.ts` (503 absent du type `status` des erreurs ; sans lui `subscriptions.ts` ne compile pas). Les trois relectures attendent ces deux changements, pour relire le code final.
 
 ## Decisions
 <!-- Toute decision prise sans l'humain, avec sa raison. Reprise dans la PR. -->
