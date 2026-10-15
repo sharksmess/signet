@@ -37,3 +37,5 @@ eslint.config.mjs
 tests/billing/**
 tests/helpers/db.ts
 tests/helpers/billing*.ts
+apps/web/src/instrumentation.ts
+docs/02-architecture/api-contracts/_contract.ts
