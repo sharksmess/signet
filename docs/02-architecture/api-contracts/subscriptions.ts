@@ -74,6 +74,7 @@ export const changeTier: ApiContract<typeof changeTierInput, typeof changeTierOu
     { status: 401, code: "UNAUTHENTICATED", trigger: "aucune session valide" },
     { status: 404, code: "ORGANIZATION_NOT_FOUND", trigger: "organizationId inexistant, ou appelant non membre" },
     { status: 403, code: "INSUFFICIENT_ROLE", trigger: "appelant membre mais role = member (US-08.2)" },
+    { status: 409, code: "ALREADY_ON_TIER", trigger: "le palier demande est deja actif (pro sur un Pro, annulation programmee ou non ; free sur un Free), ou free demande sur un Pro dont l'annulation est deja programmee — aucun appel Stripe (Q-3, A5, D-057)" },
     { status: 502, code: "STRIPE_UNAVAILABLE", trigger: "l'appel a l'API Stripe echoue (timeout, 5xx) — aucun etat local modifie" },
   ],
   idempotency:
