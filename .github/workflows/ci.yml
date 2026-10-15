@@ -48,6 +48,18 @@ jobs:
       TEST_SERVER_ENV_DATABASE_URL_AUTH: postgresql://signet_auth@localhost:5432/signet_test
       TEST_SERVER_ENV_BETTER_AUTH_SECRET: ci-only-better-auth-secret-not-a-real-secret-0001
       TEST_SERVER_ENV_BETTER_AUTH_URL: http://localhost:3100
+      # Tranche 002 (D-059) : aucun secret Stripe ni Inngest en CI. Valeurs
+      # inventees ; le serveur parle au faux Stripe et au faux point
+      # d'evenements Inngest, demarres par les tests sur ces ports.
+      TEST_FAKE_STRIPE_PORT: "12111"
+      TEST_FAKE_INNGEST_PORT: "12112"
+      TEST_STRIPE_WEBHOOK_SECRET: whsec_ci_only_invente_0001
+      TEST_SERVER_ENV_STRIPE_WEBHOOK_SECRET: whsec_ci_only_invente_0001
+      TEST_SERVER_ENV_STRIPE_SECRET_KEY: sk_test_ci_only_invente_0001
+      TEST_SERVER_ENV_STRIPE_PRICE_ID_PRO: price_ci_only_pro_0001
+      TEST_SERVER_ENV_STRIPE_API_BASE_URL: http://localhost:12111
+      TEST_SERVER_ENV_INNGEST_DEV: http://localhost:12112
+      TEST_SERVER_ENV_APP_URL: http://localhost:3100
       # Limiteur de debit better-auth coupe pour la suite de tests : accepte
       # seulement avec APP_ENV=test, sinon le serveur refuse de demarrer (ADR-0010).
       AUTH_RATE_LIMIT: "off"
