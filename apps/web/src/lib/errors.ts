@@ -2,17 +2,23 @@
  * Erreurs metier typees (regle absolue CLAUDE.md : "les erreurs metier
  * attendues sont des valeurs de retour typees. `throw` est reserve aux
  * invariants qui ne devraient jamais arriver."). Chaque code correspond
- * exactement a un `errors[]` de `docs/02-architecture/api-contracts/organizations.ts`.
+ * exactement a un `errors[]` de `docs/02-architecture/api-contracts/organizations.ts`
+ * ou `subscriptions.ts` (tranche 002), sauf `SERVICE_UNAVAILABLE` (webhook,
+ * AC14 : file d'attente indisponible, voir ADR-0016).
  */
 
 export type ApiErrorCode =
   | "UNAUTHENTICATED"
   | "VALIDATION_FAILED"
   | "ORGANIZATION_NOT_FOUND"
-  | "INSUFFICIENT_ROLE";
+  | "INSUFFICIENT_ROLE"
+  | "ALREADY_ON_TIER"
+  | "STRIPE_UNAVAILABLE"
+  | "INVALID_SIGNATURE"
+  | "SERVICE_UNAVAILABLE";
 
 export interface ApiError {
-  status: 401 | 403 | 404 | 422;
+  status: 400 | 401 | 403 | 404 | 409 | 422 | 502 | 503;
   code: ApiErrorCode;
   message: string;
 }
@@ -49,4 +55,32 @@ export const insufficientRole = (): ApiError => ({
   status: 403,
   code: "INSUFFICIENT_ROLE",
   message: "Role insuffisant pour cette action.",
+});
+
+/** Q-3, A5 : palier deja actif, ou annulation deja programmee (AC17). */
+export const alreadyOnTier = (): ApiError => ({
+  status: 409,
+  code: "ALREADY_ON_TIER",
+  message: "L'organisation est deja sur ce palier, ou son annulation est deja programmee.",
+});
+
+/** AC10 : aucun detail de l'erreur Stripe n'est renvoye au client. */
+export const stripeUnavailable = (): ApiError => ({
+  status: 502,
+  code: "STRIPE_UNAVAILABLE",
+  message: "Le service de paiement est indisponible. Reessayer plus tard.",
+});
+
+/** AC7 : ni le secret, ni la signature attendue, ni le corps. */
+export const invalidSignature = (): ApiError => ({
+  status: 400,
+  code: "INVALID_SIGNATURE",
+  message: "Signature invalide.",
+});
+
+/** AC14 : 5xx pour que l'emetteur renvoie l'evenement ; aucun detail interne. */
+export const serviceUnavailable = (): ApiError => ({
+  status: 503,
+  code: "SERVICE_UNAVAILABLE",
+  message: "Service momentanement indisponible. Reessayer plus tard.",
 });

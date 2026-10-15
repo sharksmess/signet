@@ -60,4 +60,28 @@ export default tseslint.config(
     files: ["**/*.mjs", "**/*.js"],
     ...tseslint.configs.disableTypeChecked,
   },
+  // AC16 (A3, D-058) : la connexion signet_billing n'est importable que par le
+  // module de la fonction Inngest. Expression reguliere plutot que motif de
+  // chemin : elle couvre l'alias `@/`, les chemins relatifs et l'extension.
+  {
+    files: ["apps/web/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              regex: "(^|/)inngest/billing-db(\\.ts)?$|^\\./billing-db(\\.ts)?$",
+              message:
+                "La connexion signet_billing n'est importable que par lib/inngest/process-stripe-event.ts (AC16, ADR-0016).",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["apps/web/src/lib/inngest/process-stripe-event.ts"],
+    rules: { "no-restricted-imports": "off" },
+  },
 );
