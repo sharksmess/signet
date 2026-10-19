@@ -57,11 +57,12 @@ export const insufficientRole = (): ApiError => ({
   message: "Role insuffisant pour cette action.",
 });
 
-/** Q-3, A5 : palier deja actif, ou annulation deja programmee (AC17). */
+/** Q-3, A5, D-071 : palier deja actif, annulation deja programmee, ou abonnement `incomplete` rattache a un Free (AC17). */
 export const alreadyOnTier = (): ApiError => ({
   status: 409,
   code: "ALREADY_ON_TIER",
-  message: "L'organisation est deja sur ce palier, ou son annulation est deja programmee.",
+  message:
+    "L'organisation est deja sur ce palier, son annulation est deja programmee, ou un abonnement est deja en cours de paiement.",
 });
 
 /** AC10 : aucun detail de l'erreur Stripe n'est renvoye au client. */
