@@ -25,6 +25,22 @@ function getBillingPool(): Pool {
   return billingPool;
 }
 
+/**
+ * Horloge de la base (D-077) : instant pris juste apres la relecture Stripe et
+ * transmis comme `stripe_read_at`. Une seule horloge pour toutes les instances :
+ * l'ordre des marques ne depend plus de l'horloge de chaque serveur, et la garde
+ * monotone n'a plus besoin de borne haute. `clock_timestamp()` (pas `now()`,
+ * fige au debut de la transaction), hors transaction, aucune table lue.
+ */
+export async function databaseNow(): Promise<string> {
+  const { rows } = await getBillingPool().query<{ now: string }>(
+    `SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS now`,
+  );
+  const now = rows[0]?.now;
+  if (!now) throw new Error("databaseNow : aucune ligne retournee");
+  return now;
+}
+
 /** Entree de `signet.apply_stripe_subscription` : exactement les cles que la fonction accepte (ADR-0016). */
 export interface ApplyStripeSubscriptionInput {
   stripe_event_id: string;
@@ -48,9 +64,7 @@ export interface ApplyStripeSubscriptionInput {
 /**
  * Codes leves par la fonction pour un evenement qui ne doit rien ecrire
  * (ERD §0, D-067, D-068). Tous sont definitifs : rejouer l'evenement donnerait
- * le meme refus. `SG008` (marque de relecture plus de 5 minutes dans le futur,
- * D-076) n'y figure PAS : il est leve comme une erreur ordinaire, et Inngest
- * rejoue le pas jusqu'a ce que l'horloge de la base rattrape la marque.
+ * le meme refus.
  */
 export const REJECTION_CODES = {
   SG003: "entree invalide",

@@ -13,7 +13,9 @@
  * Refus definitifs (D-068, condition de l'humain) : SG003 a SG006 sont
  * journalises puis signales par `NonRetriableError`, sans nouvelle tentative
  * (AC9 a, b, f ; AC5 c). Un abonnement introuvable chez Stripe aussi. Toute
- * autre erreur (Stripe ou base indisponible) est rejouee par Inngest.
+ * autre erreur (Stripe ou base indisponible) est rejouee par Inngest ; si elle
+ * persiste apres les relances, l'evenement est abandonne et journalise en erreur
+ * par `reportAbandonedEvent` (`onFailure`, D-077).
  *
  * Journal : identifiants Stripe et code de refus seulement ; jamais le corps de
  * l'evenement, l'objet Stripe ni une cle (AC9 a).
@@ -24,7 +26,7 @@ import { NonRetriableError } from "inngest";
 import type Stripe from "stripe";
 import { getServerEnv } from "../env";
 import { getStripe, isStripeError } from "../stripe";
-import { applyStripeSubscription, REJECTION_CODES, type ApplyStripeSubscriptionInput } from "./billing-db";
+import { applyStripeSubscription, databaseNow, REJECTION_CODES, type ApplyStripeSubscriptionInput } from "./billing-db";
 import { inngest, STRIPE_SUBSCRIPTION_EVENT, stripeSubscriptionEventData } from "./client";
 
 type ReadOutcome = { kind: "found"; input: ApplyStripeSubscriptionInput } | { kind: "missing" };
@@ -42,7 +44,7 @@ function toApplyInput(
   event: { stripeEventId: string; type: string; created: number },
   subscription: Stripe.Subscription,
   priceIdPro: string,
-  readAt: Date,
+  readAt: string,
 ): ApplyStripeSubscriptionInput {
   const items = subscription.items.data;
   const [item] = items;
@@ -55,7 +57,7 @@ function toApplyInput(
   const author = leavesPro ? subscription.metadata?.canceled_by : subscription.metadata?.requested_by;
   return {
     stripe_event_id: event.stripeEventId,
-    stripe_read_at: readAt.toISOString(),
+    stripe_read_at: readAt,
     occurred_at: new Date(event.created * 1000).toISOString(),
     event_type: event.type,
     stripe_subscription_id: subscription.id,
@@ -81,10 +83,29 @@ function logRejection(stripeEventId: string, subscriptionId: string, reason: str
   else console.warn(message);
 }
 
+/**
+ * Evenement abandonne par Inngest (D-077) : appele quand la fonction echoue pour
+ * de bon, apres ses relances (3 par pas, defaut du SDK) ou sur un refus non
+ * rejouable. Niveau erreur, identifiant de l'evenement Stripe et de l'execution,
+ * nom de l'erreur ; jamais le corps de l'evenement ni le message complet d'une
+ * erreur de base ou de Stripe (AC9 a). Exportee pour etre testee directement.
+ */
+export function reportAbandonedEvent(originalEvent: { data?: unknown }, runId: string, error: { name?: string }): void {
+  const parsed = stripeSubscriptionEventData.safeParse(originalEvent.data);
+  const stripeEventId = parsed.success ? parsed.data.stripeEventId : "inconnu (donnees mal formees)";
+  const subscriptionId = parsed.success ? parsed.data.subscriptionId : "inconnu";
+  console.error(
+    `[facturation] evenement Stripe ${stripeEventId} (abonnement ${subscriptionId}) ABANDONNE apres les tentatives d'Inngest (execution ${runId}, erreur ${error.name ?? "inconnue"}) : etat non applique, a reprendre a la main`,
+  );
+}
+
 export const processStripeEvent = inngest.createFunction(
   {
     id: "process-stripe-event",
     triggers: { event: STRIPE_SUBSCRIPTION_EVENT },
+    onFailure: ({ event, error }) => {
+      reportAbandonedEvent(event.data.event, event.data.run_id, error);
+    },
     // Un seul pas a la fois par abonnement Stripe (D-072) : ferme la fenetre ou
     // deux executions concurrentes du meme abonnement s'entrecroisent. Inngest
     // limite les pas en cours, pas les executions en attente de relance : le
@@ -102,9 +123,10 @@ export const processStripeEvent = inngest.createFunction(
     const read = await step.run("relire-abonnement", async (): Promise<ReadOutcome> => {
       try {
         const subscription = await getStripe().subscriptions.retrieve(data.subscriptionId);
-        // Instant de la relecture, pris APRES la reponse de Stripe : la garde monotone
+        // Instant de la relecture, pris APRES la reponse de Stripe et sur l'horloge
+        // de la BASE (D-077), commune a toutes les instances : la garde monotone
         // (D-071) refuse un etat relu avant le dernier applique.
-        const readAt = new Date();
+        const readAt = await databaseNow();
         return { kind: "found", input: toApplyInput(data, subscription, getServerEnv().STRIPE_PRICE_ID_PRO, readAt) };
       } catch (error) {
         if (isStripeError(error) && error.code === "resource_missing") return { kind: "missing" };
