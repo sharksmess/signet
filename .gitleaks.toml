@@ -1,0 +1,22 @@
+# Configuration gitleaks du depot (D-081), lue par l'etape « Secrets dans
+# l'historique de la PR » de la CI (gitleaks-action, gitleaks 8.24.3).
+#
+# Toutes les regles par defaut restent actives. La liste d'autorisation ne
+# couvre que deux valeurs INVENTEES exactes, signalees par la regle
+# generic-api-key sur la PR #26 ; aucun chemin ni dossier n'est exclu, pour
+# qu'un vrai secret colle dans un test ou un modele reste detecte.
+# Toute nouvelle valeur ajoutee ici passe par une ligne du registre.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Valeurs inventees des tests et des modeles .env (D-081)"
+regexTarget = "secret"
+regexes = [
+  # INNGEST_SIGNING_KEY de test : suite hexadecimale 0123456789abcdef repetee
+  # (tests/billing/environment.test.ts, tests/billing/review-corrections.test.ts).
+  '''^signkey-test-0123456789abcdef0123456789abcdef$''',
+  # BETTER_AUTH_SECRET de .env.example : consigne a remplacer, pas une valeur.
+  '''^au-moins-32-caracteres-aleatoires-a-generer$''',
+]
