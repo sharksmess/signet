@@ -24,10 +24,12 @@
 - D-066, D-069 : decisions locales des phases 1 et 3 (claude-code).
 - D-068, D-070, D-071, D-072, D-076 (remplacee), D-077 : validations et arbitrages de l'humain (refus non rejouables, 503 au contrat, `instrumentation.ts`, corrections des relectures successives, perimetre elargi deux fois).
 - D-073 a D-075 (projet) : explications en langage courant avant chaque commande ; plan de la semaine (toutes les fonctionnalites d'ici vendredi, mise en ligne visee le week-end, aucun controle supprime) ; abonnement payant conserve, vrais paiements actives apres validation du compte Stripe.
+- D-078 : suggestions de la cinquieme relecture reportees au backlog ; fiche de preuves a 0 critere coche, correction de `close-slice.sh` dans l'usine 1.6 (humain).
+- D-079 : reouverture apres une CI rouge a l'etape Build de la PR #26 ; environnement du serveur lu au premier usage, plus au chargement des modules (humain, option B).
 Le detail est dans `docs/DECISIONS.md`.
 
 ## Preuves
-- `pnpm test` : 277/277 en 24 fichiers apres la phase 5, `pnpm run check` vert, `pnpm audit --prod --audit-level=high` propre.
+- `pnpm test` : 283/283 en 25 fichiers apres D-079, `pnpm run check` vert, `pnpm audit --prod --audit-level=high` propre ; etape Build de la CI rejouee en local avec ses seules trois variables : code 0.
 - Fiche de preuves `docs/04-runbooks/evidence/002.md` : produite par `scripts/close-slice.sh`, apres des verdicts PASS.
 - Rapports des relecteurs : `docs/04-runbooks/audits/audit-002.md`, `contracts-002.md`, `review-002.md`.
 
@@ -35,9 +37,10 @@ Le detail est dans `docs/DECISIONS.md`.
 - Runbook § 1 inapplicable (`pnpm db:migrate` sans `DATABASE_URL_MIGRATE` sur le poste) ; `.env` de developpement sans URL de role (backlog) ; serveur de test sans mot de passe `signet_app` apres une modification de `.env.test.local`. Voir `docs/04-runbooks/FRICTION.md` (2026-10-15).
 - Perimetre fige par le hook `gate-check.sh` : deux elargissements ecrits par l'humain (D-070, D-071), jamais contournes.
 - Un trigger `BEFORE TRUNCATE` sur `billing_event` cassait la remise a zero de la base de test : retire, limite ecrite dans ADR-0016.
+- CI de la PR #26 rouge a l'etape Build apres des tests verts : `lib/inngest/client.ts` validait tout l'environnement du serveur au chargement, donc pendant `next build`. Les tests locaux ne reproduisent pas l'etape Build (FRICTION 2026-10-19). Tranche rouverte (D-079), corrigee, test `tests/billing/build-env.test.ts`.
 
 ## Etat a la fin
-Code, migrations 0011 a 0013, tests (280/280) et documentation sur la branche `slice/002-abonnement-palier`. Trois verdicts PASS (securite et contrats a la seconde serie, code a la cinquieme relecture). Cloture et livraison enchainees sur accord de l'humain (D-077).
+Code, migrations 0011 a 0013, tests (283/283) et documentation sur la branche `slice/002-abonnement-palier`. Trois verdicts PASS (securite et contrats a la seconde serie, code a la cinquieme relecture). Cloture, PR #26, reouverture apres CI Build rouge (D-079), correction, nouvelle relecture de code et nouvelle cloture.
 
 ## Etape suivante
-`bash scripts/close-slice.sh` (fiche de preuves), `bash scripts/ship-slice.sh` (PR), puis fusion par l'humain sur preuves.
+Push sur la PR #26 existante apres la nouvelle cloture, CI verte attendue, puis fusion par l'humain sur preuves.
