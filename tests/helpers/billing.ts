@@ -368,17 +368,15 @@ export async function deliverEvent(
 // ---------------------------------------------------------------------------
 
 /**
- * Chemin suppose de la fonction (a confirmer, voir rapport) :
- * `apps/web/src/lib/inngest/process-stripe-event.ts`, export nomme
- * `processStripeEvent`. L'import est dynamique : l'environnement du serveur doit
- * etre pose AVANT l'evaluation du module (schema d'environnement valide a
- * l'import).
+ * Fonction de `apps/web/src/lib/inngest/process-stripe-event.ts`, construite
+ * par `getProcessStripeEvent()` au premier usage (D-079) : l'environnement du
+ * serveur doit etre pose AVANT cet appel, qui le valide.
  */
 export async function loadProcessorEngine(): Promise<InngestTestEngine> {
   applyServerEnvToProcess();
   const { InngestTestEngine: Engine } = await import("@inngest/test");
-  const { processStripeEvent } = await import("../../apps/web/src/lib/inngest/process-stripe-event");
-  return new Engine({ function: processStripeEvent });
+  const { getProcessStripeEvent } = await import("../../apps/web/src/lib/inngest/process-stripe-event");
+  return new Engine({ function: getProcessStripeEvent() });
 }
 
 /** Sortie d'une execution de la fonction (sous-ensemble de ce que rend `InngestTestEngine.execute`). */

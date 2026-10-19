@@ -10,6 +10,11 @@
  * sans delai, un point d'entree muet suspendrait le webhook indefiniment, alors
  * qu'il doit repondre 5xx en quelques secondes pour que Stripe renvoie
  * l'evenement (A1, AC14, D-065 regle 3).
+ *
+ * Client construit au premier usage, comme `getStripe()` (D-079) : `next build`
+ * charge les routes qui importent ce module, et une lecture de l'environnement
+ * au chargement validerait tout l'environnement du serveur pendant la
+ * construction. Le refus de demarrer reste assure par `instrumentation.ts`.
  */
 import { Inngest } from "inngest";
 import { z } from "zod";
@@ -17,13 +22,20 @@ import { getServerEnv, isInngestDevMode } from "../env";
 
 export const SEND_ATTEMPT_TIMEOUT_MS = 2_000;
 
-const env = getServerEnv();
+function createInngest() {
+  return new Inngest({
+    id: "signet",
+    isDev: isInngestDevMode(getServerEnv()),
+    fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(SEND_ATTEMPT_TIMEOUT_MS) }),
+  });
+}
 
-export const inngest = new Inngest({
-  id: "signet",
-  isDev: isInngestDevMode(env),
-  fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(SEND_ATTEMPT_TIMEOUT_MS) }),
-});
+let client: ReturnType<typeof createInngest> | null = null;
+
+export function getInngest(): ReturnType<typeof createInngest> {
+  client ??= createInngest();
+  return client;
+}
 
 /** Nom de l'evenement mis en file pour `customer.subscription.created|updated|deleted` (D-060). */
 export const STRIPE_SUBSCRIPTION_EVENT = "stripe/customer.subscription.changed";

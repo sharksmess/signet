@@ -432,8 +432,8 @@ describe("D-077 — marque prise sur l'horloge de la base, pas sur celle du serv
 describe("D-077 — evenement abandonne par Inngest journalise en erreur", () => {
   it("la fonction declare onFailure, et reportAbandonedEvent journalise en erreur l'evenement Stripe, l'abonnement et l'execution, sans le corps", async () => {
     applyServerEnvToProcess();
-    const { processStripeEvent, reportAbandonedEvent } = await import("../../apps/web/src/lib/inngest/process-stripe-event");
-    expect(processStripeEvent.opts.onFailure, "crochet onFailure declare").toBeTypeOf("function");
+    const { getProcessStripeEvent, reportAbandonedEvent } = await import("../../apps/web/src/lib/inngest/process-stripe-event");
+    expect(getProcessStripeEvent().opts.onFailure, "crochet onFailure declare").toBeTypeOf("function");
 
     const lines: string[] = [];
     const errors = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
@@ -461,10 +461,10 @@ describe("D-077 — evenement abandonne par Inngest journalise en erreur", () =>
 describe("D-072 — limite de concurrence Inngest par abonnement", () => {
   it("la fonction n'execute qu'un pas a la fois par abonnement Stripe (cle = champ subscriptionId de l'evenement)", async () => {
     applyServerEnvToProcess();
-    const { processStripeEvent } = await import("../../apps/web/src/lib/inngest/process-stripe-event");
+    const { getProcessStripeEvent } = await import("../../apps/web/src/lib/inngest/process-stripe-event");
     const { stripeSubscriptionEventData } = await import("../../apps/web/src/lib/inngest/client");
 
-    expect(processStripeEvent.opts.concurrency).toEqual({ key: "event.data.subscriptionId", limit: 1 });
+    expect(getProcessStripeEvent().opts.concurrency).toEqual({ key: "event.data.subscriptionId", limit: 1 });
     expect(Object.keys(stripeSubscriptionEventData.shape), "la cle vise un champ reel de l'evenement").toContain("subscriptionId");
   });
 });

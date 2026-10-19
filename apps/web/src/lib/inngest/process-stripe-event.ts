@@ -27,7 +27,7 @@ import type Stripe from "stripe";
 import { getServerEnv } from "../env";
 import { getStripe, isStripeError } from "../stripe";
 import { applyStripeSubscription, databaseNow, REJECTION_CODES, type ApplyStripeSubscriptionInput } from "./billing-db";
-import { inngest, STRIPE_SUBSCRIPTION_EVENT, stripeSubscriptionEventData } from "./client";
+import { getInngest, STRIPE_SUBSCRIPTION_EVENT, stripeSubscriptionEventData } from "./client";
 
 type ReadOutcome = { kind: "found"; input: ApplyStripeSubscriptionInput } | { kind: "missing" };
 
@@ -99,62 +99,75 @@ export function reportAbandonedEvent(originalEvent: { data?: unknown }, runId: s
   );
 }
 
-export const processStripeEvent = inngest.createFunction(
-  {
-    id: "process-stripe-event",
-    triggers: { event: STRIPE_SUBSCRIPTION_EVENT },
-    onFailure: ({ event, error }) => {
-      reportAbandonedEvent(event.data.event, event.data.run_id, error);
+function createProcessStripeEvent() {
+  return getInngest().createFunction(
+    {
+      id: "process-stripe-event",
+      triggers: { event: STRIPE_SUBSCRIPTION_EVENT },
+      onFailure: ({ event, error }) => {
+        reportAbandonedEvent(event.data.event, event.data.run_id, error);
+      },
+      // Un seul pas a la fois par abonnement Stripe (D-072) : ferme la fenetre ou
+      // deux executions concurrentes du meme abonnement s'entrecroisent. Inngest
+      // limite les pas en cours, pas les executions en attente de relance : le
+      // rejeu d'un etat memorise reste couvert par la garde monotone (0013).
+      concurrency: { key: "event.data.subscriptionId", limit: 1 },
     },
-    // Un seul pas a la fois par abonnement Stripe (D-072) : ferme la fenetre ou
-    // deux executions concurrentes du meme abonnement s'entrecroisent. Inngest
-    // limite les pas en cours, pas les executions en attente de relance : le
-    // rejeu d'un etat memorise reste couvert par la garde monotone (0013).
-    concurrency: { key: "event.data.subscriptionId", limit: 1 },
-  },
-  async ({ event, step }) => {
-    const parsed = stripeSubscriptionEventData.safeParse(event.data);
-    if (!parsed.success) {
-      console.warn("[facturation] evenement de file mal forme, ignore sans nouvelle tentative");
-      throw new NonRetriableError("evenement de file mal forme");
-    }
-    const data = parsed.data;
-
-    const read = await step.run("relire-abonnement", async (): Promise<ReadOutcome> => {
-      try {
-        const subscription = await getStripe().subscriptions.retrieve(data.subscriptionId);
-        // Instant de la relecture, pris APRES la reponse de Stripe et sur l'horloge
-        // de la BASE (D-077), commune a toutes les instances : la garde monotone
-        // (D-071) refuse un etat relu avant le dernier applique.
-        const readAt = await databaseNow();
-        return { kind: "found", input: toApplyInput(data, subscription, getServerEnv().STRIPE_PRICE_ID_PRO, readAt) };
-      } catch (error) {
-        if (isStripeError(error) && error.code === "resource_missing") return { kind: "missing" };
-        throw error;
+    async ({ event, step }) => {
+      const parsed = stripeSubscriptionEventData.safeParse(event.data);
+      if (!parsed.success) {
+        console.warn("[facturation] evenement de file mal forme, ignore sans nouvelle tentative");
+        throw new NonRetriableError("evenement de file mal forme");
       }
-    });
+      const data = parsed.data;
 
-    if (read.kind === "missing") {
-      logRejection(data.stripeEventId, data.subscriptionId, "abonnement introuvable chez Stripe");
-      throw new NonRetriableError("abonnement introuvable chez Stripe");
-    }
+      const read = await step.run("relire-abonnement", async (): Promise<ReadOutcome> => {
+        try {
+          const subscription = await getStripe().subscriptions.retrieve(data.subscriptionId);
+          // Instant de la relecture, pris APRES la reponse de Stripe et sur l'horloge
+          // de la BASE (D-077), commune a toutes les instances : la garde monotone
+          // (D-071) refuse un etat relu avant le dernier applique.
+          const readAt = await databaseNow();
+          return { kind: "found", input: toApplyInput(data, subscription, getServerEnv().STRIPE_PRICE_ID_PRO, readAt) };
+        } catch (error) {
+          if (isStripeError(error) && error.code === "resource_missing") return { kind: "missing" };
+          throw error;
+        }
+      });
 
-    const outcome = await step.run("appliquer-etat", () => applyStripeSubscription(read.input));
+      if (read.kind === "missing") {
+        logRejection(data.stripeEventId, data.subscriptionId, "abonnement introuvable chez Stripe");
+        throw new NonRetriableError("abonnement introuvable chez Stripe");
+      }
 
-    if (outcome.kind === "rejected") {
-      logRejection(
-        data.stripeEventId,
-        data.subscriptionId,
-        `${outcome.code} ${REJECTION_CODES[outcome.code]}`,
-        outcome.code === "SG004" ? "error" : "warn",
-      );
-      throw new NonRetriableError(`refus definitif ${outcome.code}`);
-    }
-    if (outcome.result === "stale") {
-      console.info(
-        `[facturation] evenement Stripe ${data.stripeEventId} (abonnement ${data.subscriptionId}) : etat relu plus ancien que le dernier applique, ignore (D-071)`,
-      );
-    }
-    return { stripeEventId: data.stripeEventId, result: outcome.result };
-  },
-);
+      const outcome = await step.run("appliquer-etat", () => applyStripeSubscription(read.input));
+
+      if (outcome.kind === "rejected") {
+        logRejection(
+          data.stripeEventId,
+          data.subscriptionId,
+          `${outcome.code} ${REJECTION_CODES[outcome.code]}`,
+          outcome.code === "SG004" ? "error" : "warn",
+        );
+        throw new NonRetriableError(`refus definitif ${outcome.code}`);
+      }
+      if (outcome.result === "stale") {
+        console.info(
+          `[facturation] evenement Stripe ${data.stripeEventId} (abonnement ${data.subscriptionId}) : etat relu plus ancien que le dernier applique, ignore (D-071)`,
+        );
+      }
+      return { stripeEventId: data.stripeEventId, result: outcome.result };
+    },
+  );
+}
+
+let processStripeEvent: ReturnType<typeof createProcessStripeEvent> | null = null;
+
+/**
+ * Fonction Inngest de traitement, construite au premier usage avec le client
+ * (D-079) : aucune lecture de l'environnement au chargement du module.
+ */
+export function getProcessStripeEvent(): ReturnType<typeof createProcessStripeEvent> {
+  processStripeEvent ??= createProcessStripeEvent();
+  return processStripeEvent;
+}

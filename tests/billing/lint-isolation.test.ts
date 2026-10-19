@@ -97,7 +97,7 @@ describe("AC16 — import de billing-db interdit hors du module de la fonction I
   });
 
   it("AC16 : un import voisin non restreint (un autre module de lib/inngest) n'est pas touche par la regle", async () => {
-    const code = 'import { inngest } from "./client";\n\nexport const client = inngest;\n';
+    const code = 'import { getInngest } from "./client";\n\nexport const client = getInngest;\n';
 
     const messages = await lint(code, ROUTE.replace("fictif/route.ts", "fictif/autre.ts"));
 

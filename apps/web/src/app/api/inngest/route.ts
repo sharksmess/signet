@@ -10,27 +10,39 @@
  * Route Handler (`(request) => Response`) : celle du SDK exige un second
  * argument que Next ne fournit pas sous cette forme.
  *
+ * Gestionnaire construit a la premiere requete (D-079) : `next build` charge ce
+ * module, qui ne doit pas lire l'environnement du serveur a ce moment-la.
+ *
  * Imports relatifs : ce module est charge par la suite de tests hors de Next.
  */
 import { NextRequest } from "next/server";
 import { serve } from "inngest/next";
-import { inngest } from "../../../lib/inngest/client";
-import { processStripeEvent } from "../../../lib/inngest/process-stripe-event";
+import { getInngest } from "../../../lib/inngest/client";
+import { getProcessStripeEvent } from "../../../lib/inngest/process-stripe-event";
 
-const handler = serve({ client: inngest, functions: [processStripeEvent] });
+function createHandler() {
+  return serve({ client: getInngest(), functions: [getProcessStripeEvent()] });
+}
+
+let handler: ReturnType<typeof createHandler> | null = null;
+
+function getHandler(): ReturnType<typeof createHandler> {
+  handler ??= createHandler();
+  return handler;
+}
 
 function asNextRequest(request: Request): NextRequest {
   return request instanceof NextRequest ? request : new NextRequest(request);
 }
 
 export function GET(request: Request): Promise<Response> {
-  return handler.GET(asNextRequest(request), undefined);
+  return getHandler().GET(asNextRequest(request), undefined);
 }
 
 export function POST(request: Request): Promise<Response> {
-  return handler.POST(asNextRequest(request), undefined);
+  return getHandler().POST(asNextRequest(request), undefined);
 }
 
 export function PUT(request: Request): Promise<Response> {
-  return handler.PUT(asNextRequest(request), undefined);
+  return getHandler().PUT(asNextRequest(request), undefined);
 }

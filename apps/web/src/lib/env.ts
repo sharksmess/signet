@@ -2,9 +2,10 @@
  * Schema de l'environnement du serveur (AC13, AC15 ; ADR-0015, ADR-0016).
  *
  * Toute variable lue par la facturation et la file d'attente est validee ici,
- * une fois, au chargement du premier module qui l'utilise (`getServerEnv`).
- * Une variable absente ou mal formee leve : le module ne se charge pas, la
- * route qui l'importe ne repond pas. Le message ne cite que des NOMS de
+ * une fois, au premier appel de `getServerEnv`, jamais au chargement d'un
+ * module (D-079 : `next build` charge les routes). Une variable absente ou mal
+ * formee arrete le serveur au demarrage (`assertServerEnvOrExit`, appelee par
+ * `instrumentation.ts`) et fait echouer l'appel. Le message ne cite que des NOMS de
  * variables, jamais une valeur (regle absolue CLAUDE.md : secrets jamais dans
  * un message d'erreur).
  *

@@ -18,7 +18,7 @@ import type Stripe from "stripe";
 import { invalidSignature, serviceUnavailable, type ApiError } from "@/lib/errors";
 import { getServerEnv } from "@/lib/env";
 import {
-  inngest,
+  getInngest,
   STRIPE_SUBSCRIPTION_EVENT,
   STRIPE_SUBSCRIPTION_EVENT_TYPES,
   type StripeSubscriptionEventData,
@@ -43,7 +43,7 @@ async function sendWithDeadline(data: StripeSubscriptionEventData): Promise<bool
   const deadline = new Promise<false>((resolve) => {
     timer = setTimeout(() => resolve(false), QUEUE_DEADLINE_MS);
   });
-  const sent = inngest
+  const sent = getInngest()
     .send({ id: data.stripeEventId, name: STRIPE_SUBSCRIPTION_EVENT, data })
     .then(() => true, () => false);
   try {

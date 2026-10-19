@@ -167,7 +167,10 @@ superutilisateur peuvent l'executer, et la remise a zero de la base de test en a
   sans leurs valeurs (`tests/billing/startup.test.ts`). L'arret passe par `process.exit` car Next
   16.3.8 ne fait que journaliser une erreur levee par `register()` et continue d'ecouter. Il vit
   dans `lib/env.ts`, importe seulement sous le runtime Node (pas d'API Node dans le bundle Edge).
-  `getServerEnv()` reste appele par chaque module de facturation (meme validation, mise en cache).
+  `getServerEnv()` reste appele par chaque module de facturation (meme validation, mise en cache),
+  toujours au premier usage, jamais au chargement d'un module : `next build` charge les routes, et
+  l'etape Build de la CI ne pose pas l'environnement de facturation (D-079,
+  `tests/billing/build-env.test.ts`).
 
 ## Signal de reexamen
 
