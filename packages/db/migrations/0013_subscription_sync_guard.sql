@@ -9,7 +9,8 @@ ALTER TABLE "subscription" ADD COLUMN "stripe_synced_at" timestamp with time zon
 --    relecture Stripe, transmis par la fonction Inngest) est compare a
 --    `subscription.stripe_synced_at` (colonne ci-dessus) ; un etat relu plus
 --    ancien que le dernier applique est ignore (resultat `stale`), sans
---    ecriture ni evenement facturable.
+--    ecriture ni evenement facturable. Une marque de plus de 5 minutes dans le
+--    futur leve SG003 (D-072). Limites de la garde : voir l'etape 3 du corps.
 -- 2. Comparaison de la metadonnee d'organisation en `uuid`, jamais en texte
 --    (audit-002 CRITIQUE-1 : un UUID en majuscules levait SG004 a chaque
 --    evenement suivant, et l'abonnement ne pouvait plus etre retrograde).
@@ -138,6 +139,15 @@ BEGIN
       RAISE EXCEPTION 'apply_stripe_subscription: date hors calendrier' USING ERRCODE = 'SG003';
   END;
 
+  -- Borne haute de la marque (D-072, review-002 suggestion 4) : une instance
+  -- dont l'horloge avance de plus de 5 minutes sur la base figerait
+  -- l'organisation (tous les etats suivants seraient `stale`). Refus definitif,
+  -- journalise par la fonction Inngest.
+  IF v_read_at > now() + interval '5 minutes' THEN
+    RAISE EXCEPTION 'apply_stripe_subscription: stripe_read_at dans le futur (horloge de l''instance en avance)'
+      USING ERRCODE = 'SG003';
+  END IF;
+
   -- requested_by : valeur d'audit, jamais d'autorisation. Non UUID -> NULL
   -- (AC3 e) ; UUID sans utilisateur -> NULL a l'insertion (cle etrangere).
   IF v_metadata_by ~ c_uuid_pattern THEN
@@ -179,9 +189,15 @@ BEGIN
     RAISE EXCEPTION 'apply_stripe_subscription: organisation inexistante' USING ERRCODE = 'SG005';
   END IF;
 
-  -- 3. Garde monotone (D-071) : un etat relu avant le dernier etat applique
-  --    (pas rejoue par Inngest apres une panne, execution concurrente plus lente)
-  --    est perime ; il n'ecrit rien, ni etat ni evenement facturable.
+  -- 3. Garde monotone (D-071) : un etat relu avant le dernier etat applique est
+  --    perime ; il n'ecrit rien, ni etat ni evenement facturable. Cas couvert :
+  --    le pas d'ecriture rejoue par Inngest apres une panne, avec un etat
+  --    memorise anterieur au dernier applique. Limites (ADR-0016, D-072) : la
+  --    marque est l'instant ou l'instance a RECU la reponse de Stripe, pas
+  --    l'instant de l'etat chez Stripe, et les horloges des instances peuvent
+  --    differer ; deux executions concurrentes du meme abonnement ne sont pas
+  --    ordonnees par cette garde, mais par la limite de concurrence Inngest par
+  --    abonnement.
   IF v_current.stripe_synced_at IS NOT NULL AND v_read_at < v_current.stripe_synced_at THEN
     RETURN 'stale';
   END IF;
