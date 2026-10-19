@@ -47,6 +47,12 @@ dans des migrations SQL versionnees, dans la meme tranche que la table qu'ils pr
   `signet.create_organization()` et `signet.organizations_for_user()` (§1, ADR-0011). Ce n'est
   **pas** une erreur metier : elle signale un defaut du serveur (contexte non pose ou incoherent)
   et remonte en 500. Distinct de `42501` pour que le refus d'`EXECUTE` reste reconnaissable.
+  `SG003` a `SG006` — refus definitifs de `signet.apply_stripe_subscription()` (§8.1, ADR-0016,
+  D-067, D-068) : `SG003` entree `jsonb` invalide ; `SG004` metadonnee d'organisation contraire a
+  la ligne deja rattachee ; `SG005` organisation non resolue ; `SG006` incoherence Stripe (autre
+  abonnement deja rattache, client different, prix non Pro, identifiant deja rattache ailleurs).
+  Aucune ecriture ; la fonction Inngest les journalise sans nouvelle tentative.
+  `SG007` — mutation de `billing_event` refusee par le trigger `billing_event_immutable` (§8.2).
 
 ### Ecarts assumes par rapport aux defauts de better-auth
 
@@ -154,6 +160,7 @@ exigences.
 | `signet.organizations_for_user(user_id)` | Un utilisateur appartient a plusieurs organisations (PRD §unite de compte). Lister ses organisations est le seul besoin legitime de lecture inter-tenant. **Depuis 0009** : leve `SG002` si `app.user_id` est absent ou si `user_id IS DISTINCT FROM current_user_id()` (avant 0009, un `app.user_id` absent ne levait pas). |
 | `signet.lookup_invitation(token_hash)` | L'invite n'est pas encore membre : il n'a aucun contexte tenant. Retourne uniquement le nom de l'organisation, l'e-mail cible et la validite — jamais le contenu de l'organisation. (Tranche 006, non encore ecrite.) |
 | `signet.accept_invitation(token_hash, user_id)` | US-03 : consommation atomique du jeton + creation du `member`, hors contexte tenant. Voir §5. (Tranche 006, non encore ecrite.) Devra, comme `create_organization`, lier `user_id` a `current_user_id()` et poser `app.organization_id` depuis la ligne d'invitation. |
+| `signet.apply_stripe_subscription(p_input jsonb)` (0012, tranche 002) | Cinquieme entree, revue d'architecture = **ADR-0016**. Le traitement d'un evenement Stripe n'a pas d'utilisateur de session : il ne peut pas passer par les politiques de `signet_app`. Seul chemin d'ecriture de `subscription` (hors `create_organization`) et de `billing_event`. Executable par `signet_billing` seul. |
 
 ### Specification fonction par fonction (liste obligatoire `rules/drizzle-postgres.md`)
 
@@ -171,6 +178,7 @@ Les fonctions ecrites ou remplacees a partir de 0009 qualifient en plus leurs ta
 | `create_organization_counters` (trigger, 0005) | aucune : herite du contexte de `create_organization`, seul chemin d'`INSERT INTO organization` | `organization_link_usage_definer_write`, `subscription_definer_insert` | `INSERT` seulement | aucun (trigger) | sans objet |
 | `propagate_subscription_quota` (trigger, 0005) | `set_config(..., NEW.organization_id, true)` | `organization_link_usage_definer_write` | leve si `<> 1` | aucun (trigger) | pose le sien ; leve `P0001` si le compteur manque |
 | `assert_owner_remains` (trigger, 0004) | `set_config(..., OLD.organization_id, true)` | `organization_definer_context`, `member_definer_context` | sans objet (lecture) | aucun (trigger) | pose le sien |
+| `apply_stripe_subscription` (0012) | efface `app.organization_id`, valide l'entree (`SG003`), puis `set_config` depuis la ligne deja rattachee a l'abonnement Stripe ou, a defaut, la metadonnee relue chez Stripe (ADR-0016) | `subscription_definer_stripe_lookup`, `subscription_definer_read`, `subscription_definer_update`, `billing_event_definer_insert` | leve si `<> 1` sur `subscription` | `signet_billing` | `SG003` (entree `NULL`), contexte ambiant ignore (AC6 c, d) |
 
 Les trois fonctions de trigger recoivent en 0009 `ALTER FUNCTION ... SET search_path = pg_catalog,
 signet, public, pg_temp` (corps inchange ; proposition d'ADR-0011, contestable).
@@ -200,14 +208,15 @@ pas seulement au mecanisme de quota qui l'a motivee) :**
 
 Voir ADR-0002 pour le raisonnement complet et le critere de test associe.
 
-### Roles Postgres (ADR-0007, reimposes par la migration 0010)
+### Roles Postgres (ADR-0007, reimposes par les migrations 0010 puis 0011)
 
 | Role | `LOGIN` | Attributs imposes | Appartenances | Proprietaire de |
 |---|---|---|---|---|
-| `signet_owner` | oui | `NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS` | aucune | toutes les tables de `public` |
-| `signet_app` | oui | idem | aucune | rien |
-| `signet_auth` | oui | idem | aucune | rien |
-| `signet_definer` | **non** | idem | aucune | schema `signet`, fonctions `SECURITY DEFINER`, `context_org()` |
+| `signet_owner` | oui | `NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS` | aucune, dans aucun sens | toutes les tables de `public` |
+| `signet_app` | oui | idem | aucune, dans aucun sens | rien |
+| `signet_auth` | oui | idem | aucune, dans aucun sens | rien |
+| `signet_definer` | **non** | idem | aucune, dans aucun sens | schema `signet`, fonctions `SECURITY DEFINER`, `context_org()` |
+| `signet_billing` | oui | idem | aucune, dans aucun sens | rien ; aucun droit de table ; seul privilege : `EXECUTE` sur la fonction d'application d'etat Stripe (§8.1, ADR-0016), accorde par la migration de `billing_event` |
 | role de migration (bootstrap) | — | superutilisateur, hors de ce tableau (ADR-0007) | — | `_signet_migrations`, `uuidv7()`, `current_user_id()`, `quota_for_tier()` |
 
 - Creation idempotente en 0001 (`DO $$ ... IF NOT EXISTS ... $$`), aucun mot de passe dans une
@@ -220,6 +229,12 @@ Voir ADR-0002 pour le raisonnement complet et le critere de test associe.
   configuration.
 - `NOREPLICATION` complete la liste d'ADR-0007 : un role `REPLICATION` lit toutes les donnees par
   le protocole de replication, hors RLS.
+- **0011** (tranche 002, D-064) cree `signet_billing` (idempotent), reimpose les attributs des
+  **cinq** roles, et etend l'assertion de 0010 (audit-010 INFO-1) : elle leve aussi si un role
+  quelconque est **membre** d'un role `signet_*` (`pg_auth_members.roleid`), et si un reglage par
+  role existe pour l'un d'eux (`pg_db_role_setting`, toutes bases). Meme principe : lever, ne
+  jamais revoquer ni effacer en silence. Aucun reglage par role n'est attendu : tout parametre de
+  session est pose par le code (`set_config`), jamais par `ALTER ROLE ... SET`.
 
 ---
 
@@ -728,6 +743,7 @@ d'exprimer cette regle en RLS, donc en base, plutot qu'en garde applicative.
 | `stripe_subscription_id` | `text` | **NULL autorise** | `NULL` sur le palier Free : il n'existe aucun abonnement Stripe. |
 | `current_period_end` | `timestamptz` | **NULL autorise** | `NULL` sur Free : aucune periode de facturation. |
 | `cancel_at_period_end` | `boolean` | `NOT NULL DEFAULT false` | Annulation programmee (Stripe). |
+| `stripe_synced_at` | `timestamptz` | **NULL autorise** (0013, D-071) | `NULL` tant qu'aucun etat Stripe n'a ete applique. Instant de la relecture Stripe du dernier etat applique par `apply_stripe_subscription` : garde monotone, un etat relu plus ancien est ignore (ADR-0016). Jamais lu par l'API. |
 | `created_at` | `timestamptz` | `NOT NULL DEFAULT now()` | |
 | `updated_at` | `timestamptz` | `NOT NULL DEFAULT now()` | |
 
@@ -771,8 +787,20 @@ session soit owner, donc membre ; `current_org()` etant desormais verifiee, la c
 double. `subscription_definer_insert` (`FOR INSERT TO signet_definer`) passe en 0009 a
 `WITH CHECK (organization_id = signet.context_org())` : au moment ou `create_organization_counters`
 insere la ligne, le membership owner n'existe pas encore.
-Le webhook Stripe, lui, n'a pas d'utilisateur : il ecrit via une fonction dediee du role
-proprietaire, apres verification de signature (et non via `signet_app`).
+Le webhook Stripe, lui, n'a pas d'utilisateur. **Depuis la tranche 002 (Q-1, D-057)** : la route
+webhook verifie la signature et met l'evenement en file sans lire la base ; la fonction Inngest
+de traitement se connecte sous le role dedie **`signet_billing`** (§1, migration 0011 ; ni
+`signet_app`, ni `signet_owner`), qui n'a aucun droit de table et n'ecrit `subscription` et
+`billing_event` que par la fonction `SECURITY DEFINER` d'application d'etat Stripe (proprietaire
+`signet_definer`, `EXECUTE` accorde au seul `signet_billing`, ADR-0016). Cette fonction et ses
+politiques `TO signet_definer` arrivent avec la migration de `billing_event` (0012) :
+- `subscription_definer_read` (`FOR SELECT`) et `subscription_definer_update` (`FOR UPDATE`,
+  `USING` et `WITH CHECK`) sur `organization_id = signet.context_org()` ;
+- `subscription_definer_stripe_lookup` (`FOR SELECT`) sur `stripe_subscription_id =
+  nullif(current_setting('app.stripe_subscription_id', true), '')` : seule facon de retrouver
+  l'organisation d'un abonnement Stripe deja rattache ; le reglage est pose puis efface par la
+  fonction avant toute ecriture ;
+- `GRANT UPDATE ON subscription TO signet_definer` (jusqu'ici `SELECT, INSERT`).
 
 **Trigger de propagation du quota** — `AFTER INSERT OR UPDATE OF tier ON subscription`,
 `SECURITY DEFINER`, role `signet_definer`, `search_path` fixe, lecture/ecriture bornees a
@@ -850,6 +878,21 @@ ne touche pas.
 politique ne peut plus etre satisfaite par personne sous `signet_app` (§ ci-dessus) : c'est
 attendu, pas un bug d'acces.
 
+**Etat depuis 0012 (tranche 002)** :
+- `billing_event_owner_read` : `FOR SELECT TO signet_app`, texte de `subscription_owner_only` ;
+  `GRANT SELECT` seul a `signet_app`, `REVOKE INSERT, UPDATE, DELETE, TRUNCATE`.
+- `billing_event_definer_insert` : `FOR INSERT TO signet_definer`, `WITH CHECK (organization_id =
+  signet.context_org())` ; `GRANT INSERT` seul a `signet_definer`.
+- `signet.reject_mutation()` (`SECURITY INVOKER`, `SG007`) laisse passer une seule mise a jour :
+  l'action referentielle `ON DELETE SET NULL` d'`actor_user_id` (seule colonne modifiee, vers
+  `NULL`, `pg_trigger_depth() > 1`). Sans cette exception, supprimer un compte echouerait.
+- `TRUNCATE` n'est pas couvert par un trigger : seuls le proprietaire et le superutilisateur le
+  peuvent, et la remise a zero de la base de test en a besoin (ADR-0016, limite acceptee).
+- Contrainte supplementaire : `billing_event_stripe_event_length_chk` (`stripe_event_id` de 255
+  caracteres au plus, regle « texte libre borne » du §0), et un `CHECK` par colonne de palier
+  (`billing_event_type_chk`, `billing_event_from_tier_chk`, `billing_event_to_tier_chk`), en plus de
+  `billing_event_shape`.
+
 ---
 
 ## 9. Schema d'ensemble
@@ -889,8 +932,8 @@ jointure ecrite dans la politique (la sonde `member` est dans la fonction).
 | `collection` | direct | `organization_id = current_org()` | 0 | — |
 | `link` | **direct** (denormalise, verrouille par FK composite) | `organization_id = current_org()` | 0 | triggers de compteur : `context_org()` sur `organization_link_usage` |
 | `organization_link_usage` | `organization_id` (PK) | `organization_id = current_org()`, lecture seule | 0 | `context_org()` en ecriture |
-| `subscription` | `organization_id` (PK) | `current_org()` **et** role owner | 1 (`member`) | `context_org()` en `INSERT` |
-| `billing_event` | direct, **sans FK** (§8.2) | `current_org()` **et** role owner | 1 (`member`) | a definir en 002, sur `context_org()` |
+| `subscription` | `organization_id` (PK) | `current_org()` **et** role owner | 1 (`member`) | `context_org()` en `INSERT`, `SELECT`, `UPDATE` ; lecture par identifiant Stripe (`app.stripe_subscription_id`, 0012) |
+| `billing_event` | direct, **sans FK** (§8.2) | `current_org()` **et** role owner, lecture seule | 1 (`member`) | `context_org()` en `INSERT` (0012) |
 
 Aucune politique ne depasse une jointure, et cette jointure porte toujours sur `member`, table
 elle-meme filtree par `organization_id`. C'est la condition posee par ADR-0001 : une politique
@@ -913,7 +956,7 @@ n'a pas de cle etrangere sur `organization_id`, precisement pour ne pas cascader
 Chaque etape comprend, dans la **meme migration**, la table et sa politique RLS. Une table livree
 sans politique est une table ouverte le temps que la migration suivante arrive.
 
-### Migrations appliquees (etat au 2026-09-29)
+### Migrations appliquees (etat au 2026-10-15)
 
 Les fichiers de `packages/db/migrations/` presents dans `main` sont immuables (`migrate.ts`
 enregistre un nom, jamais une somme de controle : une modification ne serait jamais rejouee).
@@ -930,9 +973,17 @@ enregistre un nom, jamais une somme de controle : une modification ne serait jam
 | `0008_default_privileges_global_revoke.sql` | revocation globale d'`EXECUTE` a `PUBLIC` pour les fonctions futures | 001 |
 | **`0009_rls_session_user_membership.sql`** | ADR-0011 : `context_org()` (brute, `signet_definer` seul) ; `current_org()` remplacee (`SECURITY DEFINER`, verifiee, proprietaire `signet_definer`) ; `organization_isolation`/`member_isolation` restreintes a `signet_app` ; `organization_definer_context`/`member_definer_context` creees ; `organization_link_usage_definer_write`/`subscription_definer_insert` sur `context_org()` ; `create_organization`/`organizations_for_user` remplacees (garde `SG002`, `pg_temp`, noms qualifies) ; `search_path` des trois fonctions de trigger complete par `pg_temp` | 010 |
 | **`0010_reimpose_role_attributes.sql`** | MINEUR-10 : leve si un role `signet_*` est membre d'un role ; `ALTER ROLE` des quatre roles (attributs du tableau « Roles Postgres », §1) | 010 |
+| **`0011_billing_role.sql`** | Q-1 : role `signet_billing` (creation idempotente, aucun droit) ; INFO-1 : leve sur toute appartenance impliquant un des cinq roles (deux sens) et sur tout reglage `pg_db_role_setting` ; `ALTER ROLE` des cinq roles | 002 |
+| **`0012_billing_event.sql`** | §8.2 : table `billing_event` (partie generee par `pnpm db:generate`, fichier renomme depuis `0002_regular_ricochet.sql`, etiquette alignee dans `meta/_journal.json`) ; RLS, politiques `billing_event_*` et `subscription_definer_*`, triggers d'immutabilite, `signet.reject_mutation()`, `signet.apply_stripe_subscription(jsonb)` (ADR-0016), `USAGE` du schema `signet` et `EXECUTE` de la fonction a `signet_billing` | 002 |
+| **`0013_subscription_sync_guard.sql`** | D-071 : colonne `subscription.stripe_synced_at` (generee, fichier renomme depuis `0003_ambiguous_naoko.sql`) ; `apply_stripe_subscription` remplacee : cle d'entree `stripe_read_at` et garde monotone (resultat `stale`), metadonnee d'organisation comparee en `uuid` (audit-002 CRITIQUE-1), passage en Free decide par le statut relu seulement ; marque `stripe_read_at` prise sur l'horloge de la base par la fonction Inngest (D-077), sans borne haute | 002 |
 
-Aucune de ces deux migrations ne touche une table, une colonne ou un index : `pnpm db:generate`
-ne produit aucune difference, `packages/db/src/schema/*` est inchange.
+Aucune des trois migrations 0009 a 0011 ne touche une table, une colonne ou un index : `pnpm db:generate`
+ne produit aucune difference, `packages/db/src/schema/*` est inchange. 0012 ajoute
+`packages/db/src/schema/billing.ts`.
+
+**Numerotation** : `drizzle-kit` numerote les fichiers qu'il genere d'apres son propre journal
+(`meta/_journal.json`), qui ne compte que les migrations generees (0002, 0003, puis 0012, 0013). Le
+fichier genere est renomme au numero suivant du dossier, et l'etiquette du journal alignee.
 
 ---
 

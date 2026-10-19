@@ -95,6 +95,9 @@ export const subscription = pgTable(
     stripeSubscriptionId: text("stripe_subscription_id"),
     currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
     cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+    // NULL tant qu'aucun etat Stripe n'a ete applique. Instant de la relecture
+    // Stripe du dernier etat applique : garde monotone (ADR-0016, D-071).
+    stripeSyncedAt: timestamp("stripe_synced_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

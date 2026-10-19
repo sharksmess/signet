@@ -74,6 +74,7 @@ export const changeTier: ApiContract<typeof changeTierInput, typeof changeTierOu
     { status: 401, code: "UNAUTHENTICATED", trigger: "aucune session valide" },
     { status: 404, code: "ORGANIZATION_NOT_FOUND", trigger: "organizationId inexistant, ou appelant non membre" },
     { status: 403, code: "INSUFFICIENT_ROLE", trigger: "appelant membre mais role = member (US-08.2)" },
+    { status: 409, code: "ALREADY_ON_TIER", trigger: "le palier demande est deja actif (pro sur un Pro, annulation programmee ou non ; free sur un Free), ou free demande sur un Pro dont l'annulation est deja programmee, ou pro demande sur un Free dont un abonnement Stripe est deja rattache et en cours de paiement (`incomplete`, D-071) — aucun appel Stripe (Q-3, A5, D-057, D-071)" },
     { status: 502, code: "STRIPE_UNAVAILABLE", trigger: "l'appel a l'API Stripe echoue (timeout, 5xx) — aucun etat local modifie" },
   ],
   idempotency:
@@ -104,6 +105,7 @@ export const stripeWebhook: ApiContract<typeof stripeWebhookInput, typeof stripe
   output: stripeWebhookOutput,
   errors: [
     { status: 400, code: "INVALID_SIGNATURE", trigger: "signature absente ou ne correspondant pas au secret webhook configure — payload rejete avant tout traitement" },
+    { status: 503, code: "SERVICE_UNAVAILABLE", trigger: "evenement valide mais la file d'attente (Inngest) refuse la transmission ou ne repond pas dans le delai (5 s) — aucune ecriture, Stripe renverra l'evenement (A1, AC14, D-070)" },
   ],
   idempotency:
     "idempotente sur event.id (identifiant d'evenement Stripe) : un evenement deja traite est acquitte (200) sans reappliquer son effet ni redupliquer l'ecriture du journal.",

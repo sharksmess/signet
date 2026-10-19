@@ -19,7 +19,7 @@ export interface ApiContract<Input extends z.ZodTypeAny, Output extends z.ZodTyp
   input: Input;
   output: Output;
   errors: Array<{
-    status: 400 | 401 | 403 | 404 | 409 | 410 | 422 | 502;
+    status: 400 | 401 | 403 | 404 | 409 | 410 | 422 | 502 | 503;
     code: string;
     trigger: string;
   }>;
