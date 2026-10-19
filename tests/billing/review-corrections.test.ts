@@ -362,79 +362,99 @@ describe("D-072 — garde monotone, tests directs en base (sous signet_billing)"
     expect(await readBillingEvents(pro.org.organizationId)).toEqual([]);
   });
 
-  /**
-   * Appelle la fonction avec une marque = `now()` de la transaction + 5 minutes
-   * + `extraMicroseconds`. La marque est calculee DANS la transaction de l'appel :
-   * `now()` y est le meme que celui que voit la fonction.
-   */
-  async function applyAtBoundary(value: ApplyInput, extraMicroseconds: number): Promise<string> {
-    const fn = await findApplyFunction();
-    return asBillingCommitted({}, async (client) => {
-      const { rows: marks } = await client.query<{ mark: string }>(
-        `SELECT to_char((now() + interval '5 minutes' + make_interval(secs => $1::double precision / 1000000))
-                          AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS mark`,
-        [extraMicroseconds],
-      );
-      const mark = marks[0]?.mark ?? "";
-      const { rows } = await client.query<{ result: string }>(`SELECT ${fn.qualifiedName}($1::jsonb) AS result`, [
-        JSON.stringify({ ...value, stripe_read_at: mark }),
-      ]);
-      return rows[0]?.result ?? "";
-    });
-  }
+  it("plus de borne haute (D-077) : une marque lointaine dans le futur est acceptee par la fonction", async () => {
+    const pro = await createProOrganization({ name: "D-077 sans borne" });
 
-  it("marque exactement a now() + 5 minutes : acceptee (limite incluse)", async () => {
-    const pro = await createProOrganization({ name: "D-076 limite exacte" });
-
-    const result = await applyAtBoundary(
-      input({
-        stripe_subscription_id: pro.subscriptionId,
-        stripe_customer_id: pro.customerId,
-        metadata_organization_id: pro.org.organizationId,
-        cancel_at_period_end: true,
-      }),
-      0,
-    );
+    const result = await applyResult(input({
+      stripe_subscription_id: pro.subscriptionId,
+      stripe_customer_id: pro.customerId,
+      metadata_organization_id: pro.org.organizationId,
+      stripe_read_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      cancel_at_period_end: true,
+    }));
 
     expect(result).toBe("updated");
-    expect(await readSubscriptionRow(pro.org.organizationId)).toMatchObject({ cancel_at_period_end: true });
   });
+});
 
-  it("marque une microseconde au-dela de now() + 5 minutes : SG008 (refus rejouable), aucune ecriture", async () => {
-    const pro = await createProOrganization({ name: "D-076 au-dela de la limite" });
-    const before = await readSubscriptionRow(pro.org.organizationId);
+describe("D-077 — marque prise sur l'horloge de la base, pas sur celle du serveur", () => {
+  it("serveur en avance d'une heure : son etat relu « actif », rejoue apres une resiliation plus recente, ne remet pas l'organisation en Pro", async () => {
+    const pro = await createProOrganization({ name: "D-077 horloge en avance" });
+    let state = subscriptionFor(pro.org, { id: pro.subscriptionId, customer: pro.customerId, status: "active" });
+    programRetrieve(fakes.stripe, pro.subscriptionId, () => state);
+    const early = await deliver(makeEvent("customer.subscription.updated", state), "updated (serveur en avance)");
+    const apply = await findApplyFunction();
 
-    await expect(
-      applyAtBoundary(
-        input({
-          stripe_subscription_id: pro.subscriptionId,
-          stripe_customer_id: pro.customerId,
-          metadata_organization_id: pro.org.organizationId,
-          cancel_at_period_end: true,
-        }),
-        1,
-      ),
-    ).rejects.toMatchObject({ code: "SG008" });
-    expect(await readSubscriptionRow(pro.org.organizationId)).toEqual(before);
+    // 1. Le serveur qui traite `updated` a une heure d'avance ; son ecriture echoue.
+    vi.useFakeTimers({ toFake: ["Date"], now: Date.now() + 60 * 60 * 1000 });
+    await asBypassRls((client) => client.query(`REVOKE EXECUTE ON FUNCTION ${apply.signature} FROM signet_billing`));
+    let failed: ProcessorOutput;
+    try {
+      failed = await runProcessor(early);
+    } finally {
+      vi.useRealTimers();
+      await asBypassRls((client) => client.query(`GRANT EXECUTE ON FUNCTION ${apply.signature} TO signet_billing`));
+    }
+    expect(failed.error, "l'ecriture du premier passage echoue").toBeDefined();
+
+    // 2. Stripe resilie l'abonnement ; `deleted` est traite par un serveur a l'heure.
+    state = subscriptionFor(pro.org, { id: pro.subscriptionId, customer: pro.customerId, status: "canceled" });
+    await deliverAndProcess(makeEvent("customer.subscription.deleted", state), "deleted");
+    expect(await readSubscriptionRow(pro.org.organizationId)).toMatchObject({ tier: "free" });
+
+    // 3. Rejeu du pas memorise de `updated` : sa marque vient de la base (anterieure), il est `stale`.
+    const memoized: MemoizedStep[] = [];
+    const memoizedValues: unknown[] = [];
+    for (const [id, promise] of Object.entries(failed.state)) {
+      const settled = await promise.then(
+        (value) => ({ ok: true as const, value }),
+        () => ({ ok: false as const }),
+      );
+      if (settled.ok) {
+        memoized.push({ id, idIsHashed: true, handler: () => settled.value });
+        memoizedValues.push(settled.value);
+      }
+    }
+    const readAt = JSON.stringify(memoizedValues).match(/"stripe_read_at":"([^"]+)"/)?.[1];
+    expect(readAt, "marque memorisee par le pas de relecture").toBeDefined();
+    expect(new Date(readAt ?? "").getTime(), "la marque vient de l'horloge de la base, pas du serveur en avance").toBeLessThan(
+      Date.now() + 60_000,
+    );
+
+    const replayed = await runProcessor(early, { steps: memoized });
+
+    expectProcessed(replayed, "rejeu de l'etat du serveur en avance");
+    expect(await readSubscriptionRow(pro.org.organizationId)).toMatchObject({ tier: "free", stripe_subscription_id: null });
+    expect((await readBillingEvents(pro.org.organizationId)).map((e) => e.type)).toEqual(["subscription_canceled"]);
   });
+});
 
-  it("SG008 est rejoue : applyStripeSubscription le leve (erreur ordinaire), il ne le rend pas comme refus definitif", async () => {
+describe("D-077 — evenement abandonne par Inngest journalise en erreur", () => {
+  it("la fonction declare onFailure, et reportAbandonedEvent journalise en erreur l'evenement Stripe, l'abonnement et l'execution, sans le corps", async () => {
     applyServerEnvToProcess();
-    const { applyStripeSubscription } = await import("../../apps/web/src/lib/inngest/billing-db");
-    const pro = await createProOrganization({ name: "D-076 rejouable" });
-    const before = await readSubscriptionRow(pro.org.organizationId);
+    const { processStripeEvent, reportAbandonedEvent } = await import("../../apps/web/src/lib/inngest/process-stripe-event");
+    expect(processStripeEvent.opts.onFailure, "crochet onFailure declare").toBeTypeOf("function");
 
-    await expect(
-      applyStripeSubscription(
-        input({
-          stripe_subscription_id: pro.subscriptionId,
-          stripe_customer_id: pro.customerId,
-          metadata_organization_id: pro.org.organizationId,
-          stripe_read_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-        }),
-      ),
-    ).rejects.toMatchObject({ code: "SG008" });
-    expect(await readSubscriptionRow(pro.org.organizationId)).toEqual(before);
+    const lines: string[] = [];
+    const errors = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      lines.push(args.map(String).join(" "));
+    });
+    try {
+      reportAbandonedEvent(
+        { data: { stripeEventId: "evt_abandon_1", type: "customer.subscription.updated", subscriptionId: "sub_abandon_1", created: 1_790_000_000 } },
+        "01HRUNABANDON",
+        { name: "Error" },
+      );
+    } finally {
+      errors.mockRestore();
+    }
+
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("evt_abandon_1");
+    expect(lines[0]).toContain("sub_abandon_1");
+    expect(lines[0]).toContain("01HRUNABANDON");
+    expect(lines[0]).toContain("ABANDONNE");
+    expect(lines[0], "jamais le corps de l'evenement").not.toContain("1790000000");
   });
 });
 
