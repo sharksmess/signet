@@ -9,9 +9,9 @@ ALTER TABLE "subscription" ADD COLUMN "stripe_synced_at" timestamp with time zon
 --    relecture Stripe, transmis par la fonction Inngest) est compare a
 --    `subscription.stripe_synced_at` (colonne ci-dessus) ; un etat relu plus
 --    ancien que le dernier applique est ignore (resultat `stale`), sans
---    ecriture ni evenement facturable. Une marque de plus de 5 minutes dans le
---    futur leve SG008, refus rejouable (D-072, D-076). Limites de la garde :
---    voir l'etape 3 du corps.
+--    ecriture ni evenement facturable. La marque est prise sur l'horloge de la
+--    base par la fonction Inngest (D-077) : pas de borne haute. Limites de la
+--    garde : voir l'etape 3 du corps.
 -- 2. Comparaison de la metadonnee d'organisation en `uuid`, jamais en texte
 --    (audit-002 CRITIQUE-1 : un UUID en majuscules levait SG004 a chaque
 --    evenement suivant, et l'abonnement ne pouvait plus etre retrograde).
@@ -140,18 +140,6 @@ BEGIN
       RAISE EXCEPTION 'apply_stripe_subscription: date hors calendrier' USING ERRCODE = 'SG003';
   END;
 
-  -- Borne haute de la marque (D-072, D-076) : une instance dont l'horloge avance
-  -- de plus de 5 minutes sur la base figerait l'organisation (tous les etats
-  -- suivants seraient `stale`). Refus REJOUABLE (`SG008`, hors des refus
-  -- definitifs SG003 a SG006) : Inngest rejoue le pas d'ecriture avec la marque
-  -- memorisee, qui passe des que l'horloge de la base l'a rattrapee ; l'etat
-  -- relu (par exemple un `deleted`) n'est jamais perdu. La limite exacte
-  -- (`now()` + 5 minutes) est acceptee.
-  IF v_read_at > now() + interval '5 minutes' THEN
-    RAISE EXCEPTION 'apply_stripe_subscription: stripe_read_at dans le futur (horloge de l''instance en avance), a rejouer'
-      USING ERRCODE = 'SG008';
-  END IF;
-
   -- requested_by : valeur d'audit, jamais d'autorisation. Non UUID -> NULL
   -- (AC3 e) ; UUID sans utilisateur -> NULL a l'insertion (cle etrangere).
   IF v_metadata_by ~ c_uuid_pattern THEN
@@ -196,10 +184,11 @@ BEGIN
   -- 3. Garde monotone (D-071) : un etat relu avant le dernier etat applique est
   --    perime ; il n'ecrit rien, ni etat ni evenement facturable. Cas couvert :
   --    le pas d'ecriture rejoue par Inngest apres une panne, avec un etat
-  --    memorise anterieur au dernier applique. Limites (ADR-0016, D-072) : la
-  --    marque est l'instant ou l'instance a RECU la reponse de Stripe, pas
-  --    l'instant de l'etat chez Stripe, et les horloges des instances peuvent
-  --    differer ; deux executions concurrentes du meme abonnement ne sont pas
+  --    memorise anterieur au dernier applique. La marque vient de l'horloge de
+  --    la BASE, lue juste apres la reponse de Stripe (D-077) : une seule horloge
+  --    pour toutes les instances. Limites (ADR-0016, D-072) : la marque est
+  --    l'instant ou la reponse de Stripe a ete recue, pas l'instant de l'etat
+  --    chez Stripe ; deux executions concurrentes du meme abonnement ne sont pas
   --    ordonnees par cette garde, mais par la limite de concurrence Inngest par
   --    abonnement.
   IF v_current.stripe_synced_at IS NOT NULL AND v_read_at < v_current.stripe_synced_at THEN
