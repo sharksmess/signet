@@ -95,8 +95,10 @@ export type ChangeTierOutcome =
  * dans les metadonnees de l'abonnement a creer (lues par la fonction Inngest,
  * ADR-0016), et le client Stripe deja connu le cas echeant (D-062).
  * Pro -> Free : annulation en fin de periode, auteur pose dans
- * `metadata.requested_by` (A4).
- * Un palier deja actif ou une annulation deja programmee : 409 sans appel
+ * `metadata.canceled_by` (A4, D-071 ; `requested_by` reste celui du Checkout
+ * pour AC3 a), seule cle lue pour l'auteur d'un `subscription_canceled`.
+ * Un palier deja actif, une annulation deja programmee, ou un abonnement
+ * Stripe deja rattache a une organisation Free (`incomplete`, D-071) : 409 sans appel
  * Stripe (Q-3, A5). Un echec Stripe : 502 sans detail (AC10).
  */
 export async function changeTier(params: {
@@ -109,7 +111,9 @@ export async function changeTier(params: {
   const current = read.value;
 
   if (params.tier === "pro") {
-    if (current.tier === "pro") return fail(alreadyOnTier());
+    // Un abonnement rattache a un Free est `incomplete` (paiement en attente) : un
+    // second Checkout donnerait un second abonnement paye puis refuse (SG006).
+    if (current.tier === "pro" || current.stripe_subscription_id !== null) return fail(alreadyOnTier());
     return startCheckout(params, current.stripe_customer_id);
   }
 
@@ -153,7 +157,7 @@ async function cancelAtPeriodEnd(
   try {
     await getStripe().subscriptions.update(subscriptionId, {
       cancel_at_period_end: true,
-      metadata: { requested_by: params.userId },
+      metadata: { requested_by: params.userId, canceled_by: params.userId },
     });
     return ok({ action: "pending", organizationId: params.organizationId });
   } catch (error) {

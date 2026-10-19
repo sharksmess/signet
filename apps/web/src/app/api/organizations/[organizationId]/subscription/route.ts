@@ -4,6 +4,15 @@ import { changeTier as changeTierContract, getSubscription as getSubscriptionCon
 import { changeTier, getSubscription } from "@/lib/billing/subscriptions";
 import { unauthenticated, validationFailed, type ApiError } from "@/lib/errors";
 
+/**
+ * Forme canonique (minuscules) de l'UUID valide par le contrat, qui accepte les
+ * majuscules. L'identifiant part chez Stripe (metadonnees) et revient dans les
+ * evenements : une seule ecriture possible (audit-002 CRITIQUE-1, D-071).
+ */
+function canonical(uuid: string): string {
+  return uuid.toLowerCase();
+}
+
 function errorResponse(error: ApiError): NextResponse {
   return NextResponse.json({ code: error.code, message: error.message }, { status: error.status });
 }
@@ -19,7 +28,7 @@ export async function GET(
   const parsed = getSubscriptionContract.input.safeParse(await params);
   if (!parsed.success) return errorResponse(validationFailed(parsed.error.message));
 
-  const result = await getSubscription({ userId: session.user.id, organizationId: parsed.data.organizationId });
+  const result = await getSubscription({ userId: session.user.id, organizationId: canonical(parsed.data.organizationId) });
   if (!result.ok) return errorResponse(result.error);
   return NextResponse.json(result.value, { status: 200 });
 }
@@ -43,7 +52,7 @@ export async function POST(
 
   const result = await changeTier({
     userId: session.user.id,
-    organizationId: parsed.data.organizationId,
+    organizationId: canonical(parsed.data.organizationId),
     tier: parsed.data.tier,
   });
   if (!result.ok) return errorResponse(result.error);
