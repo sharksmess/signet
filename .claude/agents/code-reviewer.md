@@ -32,6 +32,6 @@ Pour chaque constat :
 - **Constat** et **consequence** : concret, verifiable. Pas d'opinion de style sans consequence.
 - **Direction** : ce qu'il faudrait faire, sans ecrire le correctif.
 
-Termine par un bilan de trois lignes (solide / fragile / manquant), puis par le verdict unique en derniere ligne : `REVIEW: PASS` s'il n'y a aucun constat BLOQUANT, sinon `REVIEW: CHANGES`. Ce verdict est lu par le script de cloture.
+Termine par un bilan de trois lignes (solide / fragile / manquant), puis par le verdict unique en derniere ligne : `REVIEW: PASS` s'il n'y a aucun constat BLOQUANT, sinon `REVIEW: FAIL`. Ce verdict est lu par le script de cloture.
 
 Un rapport sans aucun constat est suspect : cherche d'abord ce qui manque (un test, une decision non ecrite, un cas limite). Mais n'invente rien pour paraitre utile.

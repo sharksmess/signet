@@ -2,11 +2,20 @@
 # Usage :  .\gates.ps1 approve-prd
 #          .\gates.ps1 approve-architecture
 #          .\gates.ps1 status
+#          .\gates.ps1 scope-add "apps/web/src/x.ts"   (usine 1.6)
+#          .\gates.ps1 reopen-slice 002                (usine 1.6)
 #
 # Ces commandes t'appartiennent. Les agents en sont exclus par
 # block-dangerous.sh : ils ne peuvent ni les lancer ni ecrire dans .gates\.
 
-param([Parameter(Position=0)][string]$Action = "status")
+param([Parameter(Position=0)][string]$Action = "status", [Parameter(Position=1)][string]$Arg = "")
+
+# Ecriture sans BOM et en fin de ligne LF : gate-check.sh lit ces fichiers ligne a ligne.
+function Write-Lf($path, $text, [switch]$Append) {
+  $full = Join-Path (Get-Location) $path
+  $enc = New-Object Text.UTF8Encoding($false)
+  if ($Append) { [IO.File]::AppendAllText($full, $text, $enc) } else { [IO.File]::WriteAllText($full, $text, $enc) }
+}
 
 function Fail($m) { Write-Host "ECHEC: $m" -ForegroundColor Red; exit 1 }
 function Ok($m)   { Write-Host $m -ForegroundColor Green }
@@ -52,6 +61,34 @@ switch ($Action) {
   "reopen-architecture" {
     Remove-Item ".gates\02-architecture.approved" -ErrorAction SilentlyContinue
     Ok "Gate 2 rouvert. Ecris un ADR expliquant pourquoi avant de reprendre."
+  }
+
+  "scope-add" {
+    # Elargit le perimetre de la tranche active. Geste humain : l'agent s'arrete
+    # et demande, l'humain decide, l'agent inscrit la decision au registre.
+    if (-not (Test-Path ".gates\current-slice")) { Fail "aucune tranche active." }
+    if (-not $Arg) { Fail "usage : .\gates.ps1 scope-add <motif>   (ex. apps/web/src/instrumentation.ts)" }
+    if ($Arg -match '^\*|^\.\*$|^/') { Fail "motif trop large ou absolu : '$Arg'." }
+    $slice = (Get-Content ".gates\current-slice" -Raw).Trim()
+    $scope = ".gates\scope-$slice.txt"
+    if (-not (Test-Path $scope)) { Fail "$scope absent." }
+    $lines = Get-Content $scope | ForEach-Object { $_.Trim() }
+    if ($lines -contains $Arg) { Ok "deja present dans $scope : $Arg"; break }
+    $raw = [IO.File]::ReadAllText((Join-Path (Get-Location) $scope))
+    $prefix = if ($raw.Length -gt 0 -and -not $raw.EndsWith("`n")) { "`n" } else { "" }
+    Write-Lf $scope ($prefix + $Arg + "`n") -Append
+    Ok "Ajoute au perimetre de la tranche $slice : $Arg"
+    Write-Host "Dis a l'agent pourquoi : il committe ce changement et l'inscrit au registre." -ForegroundColor Yellow
+  }
+
+  "reopen-slice" {
+    # Rouvre une tranche close (CI rouge apres cloture, fiche a refaire). La
+    # cloture suivante refait toutes les preuves et un nouveau commit de cloture.
+    if (Test-Path ".gates\current-slice") { Fail "une tranche est deja active : $((Get-Content '.gates\current-slice' -Raw).Trim())." }
+    if ($Arg -notmatch '^\d{3}$') { Fail "usage : .\gates.ps1 reopen-slice <NNN>   (ex. 002)" }
+    if (-not (Test-Path ".gates\slice-$Arg.closed")) { Fail "la tranche $Arg n'est pas close." }
+    Write-Lf ".gates\current-slice" "$Arg`n"
+    Ok "Tranche $Arg rouverte. Dis a l'agent pourquoi : il l'inscrit au registre, corrige, puis relance scripts/close-slice.sh."
   }
 
   "status" {

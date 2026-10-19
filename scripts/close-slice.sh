@@ -45,6 +45,34 @@ say "   ${TEST_SUMMARY:-(resume des tests introuvable)}"
 say "-- pnpm audit --prod --audit-level=high"
 if pnpm audit --prod --audit-level=high > "$LOG/audit.txt" 2>&1; then R_AUDIT="PASS"; else bad "vulnerabilites hautes ou critiques en production (pnpm audit --prod)."; fi
 
+BASE=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main 2>/dev/null || echo "")
+
+# 4b. Etape Build de la CI, rejouee a l'identique (usine 1.6) : construction avec
+# le seul environnement de ci/build.env. Les tests locaux recoivent tout
+# l'environnement du serveur de test ; la CI, non (Signet D-079).
+R_BUILD="ECHEC"
+if [ -f scripts/ci-build.sh ]; then
+  say "-- bash scripts/ci-build.sh (etape Build de la CI)"
+  if bash scripts/ci-build.sh > "$LOG/build.txt" 2>&1; then R_BUILD="PASS"; else bad "l'etape Build de la CI echoue avec le seul environnement de ci/build.env"; strip "$LOG/build.txt" | tail -25; fi
+else
+  bad "scripts/ci-build.sh absent : l'etape Build de la CI ne peut pas etre rejouee en local (install-project le pose)."
+fi
+
+# 4c. Recherche de secrets, comme la CI (gitleaks), si l'outil est installe.
+R_SECRETS="non installe localement (CI seule)"
+if command -v gitleaks >/dev/null 2>&1; then
+  say "-- gitleaks (historique de la branche)"
+  RANGE="${BASE:+$BASE..}HEAD"
+  if gitleaks git --no-banner --log-opts="$RANGE" . > "$LOG/leaks.txt" 2>&1 \
+     || { grep -q 'unknown command' "$LOG/leaks.txt" && gitleaks detect --no-banner --log-opts="$RANGE" > "$LOG/leaks.txt" 2>&1; }; then
+    R_SECRETS="PASS"
+  else
+    bad "gitleaks signale des secrets potentiels dans l'historique de la branche"; strip "$LOG/leaks.txt" | grep -E 'RuleID|File|Line|Commit' | head -20
+  fi
+else
+  say "   AVERTISSEMENT : gitleaks absent, la recherche de secrets ne sera faite que par la CI (WINDOWS.md)."
+fi
+
 # 5. Verdicts des trois relecteurs independants, versionnes
 verdict() { # verdict <fichier> <attendu> <libelle>
   [ -f "$1" ] || { bad "rapport $3 absent ($1)"; return; }
@@ -60,7 +88,10 @@ verdict "$REVIEW" "REVIEW: PASS" "de relecture de code"
 # 6. Contrat et journal
 DOC=$(ls docs/03-slices/"$SLICE"-*.md 2>/dev/null | grep -v -- '-progress\.md$' | head -1)
 if [ -n "$DOC" ]; then
-  grep -qE '^- \[ \] AC' "$DOC" && bad "criteres d'acceptation non coches dans $DOC"
+  # Format du gabarit : "- [x] AC1 — ..." ; le numero en gras est tolere (Signet D-080).
+  grep -qE '^- \[ \] (\*\*)?AC[0-9]' "$DOC" && bad "criteres d'acceptation non coches dans $DOC"
+  NB_AC=$(grep -cE '^- \[[xX]\] (\*\*)?AC[0-9]' "$DOC" 2>/dev/null); NB_AC=${NB_AC:-0}
+  [ "$NB_AC" -gt 0 ] || bad "aucun critere d'acceptation coche reconnu dans $DOC (format attendu : « - [x] AC1 — ... »)"
   grep -qi 'tenant' "$DOC" || bad "aucun critere d'isolation tenant dans la tranche"
 else
   bad "contrat de tranche introuvable (docs/03-slices/$SLICE-*.md)"
@@ -85,7 +116,6 @@ else
   bad "journal de projet docs/00-context/JOURNAL.md absent (gabarit : docs/templates/JOURNAL.md)."
 fi
 
-BASE=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main 2>/dev/null || echo "")
 if [ -n "$BASE" ]; then
   # Dependance ajoutee => un ADR la nomme.
   NEWDEPS=$(git diff "$BASE"...HEAD -- package.json '*/package.json' 2>/dev/null \
@@ -109,7 +139,7 @@ fi
 
 if [ "$FAIL" -ne 0 ]; then
   rm -rf "$LOG"
-  say "=== Tranche $SLICE NON close. Corrige les points ci-dessus. ==="
+  say "=== CLOTURE REFUSEE : tranche $SLICE NON close. Corrige les points ci-dessus. ==="
   exit 1
 fi
 
@@ -117,7 +147,6 @@ fi
 # auditeur externe retrouve dans l'historique. Produite par la machine, jamais recopiee.
 EVID="docs/04-runbooks/evidence/$SLICE.md"
 mkdir -p "$(dirname "$EVID")"
-NB_AC=$(grep -cE '^- \[x\] AC' "$DOC" 2>/dev/null || echo 0)
 {
   printf '# Preuves de la tranche %s\n\n' "$SLICE"
   printf 'Produit par `scripts/close-slice.sh` le %s, sur le commit `%s` (branche `%s`).\n\n' "$(date '+%Y-%m-%d %H:%M')" "$(git rev-parse --short HEAD)" "$BRANCH"
@@ -125,6 +154,8 @@ NB_AC=$(grep -cE '^- \[x\] AC' "$DOC" 2>/dev/null || echo 0)
   printf '| `pnpm run check` (types + lint) | %s |\n' "$R_CHECK"
   printf '| `pnpm test` (base Postgres reelle) | %s — %s |\n' "$R_TEST" "${TEST_SUMMARY:-resume introuvable}"
   printf '| `pnpm audit --prod --audit-level=high` | %s |\n' "$R_AUDIT"
+  printf '| Etape Build de la CI (`scripts/ci-build.sh`) | %s |\n' "$R_BUILD"
+  printf '| Secrets, gitleaks local | %s |\n' "$R_SECRETS"
   printf '| Securite (`security-auditor`) | %s |\n' "$(tail -1 "$AUDIT" | tr -d '\r')"
   printf '| Contrats (`contract-guardian`) | %s |\n' "$(tail -1 "$CONTRACT" | tr -d '\r')"
   printf '| Relecture de code (`code-reviewer`) | %s |\n' "$(tail -1 "$REVIEW" | tr -d '\r')"
@@ -139,4 +170,4 @@ touch ".gates/slice-$SLICE.closed"
 rm -f .gates/current-slice
 git add -A .gates "$EVID"
 git commit -q -m "chore(slice-$SLICE): cloturer la tranche" || { say "ECHEC: commit de cloture impossible."; exit 1; }
-say "=== Tranche $SLICE close et committee. Suite : bash scripts/ship-slice.sh ==="
+say "=== CLOTURE REUSSIE : tranche $SLICE close et committee ($(git rev-parse --short HEAD)). Suite : bash scripts/ship-slice.sh ==="

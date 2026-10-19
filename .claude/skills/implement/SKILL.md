@@ -15,7 +15,8 @@ Delegue au sous-agent `slice-implementer`. Il travaille sur la branche `slice/NN
 Passe-lui dans le prompt de delegation : le chemin du fichier de tranche, le chemin du perimetre, et le rappel explicite des regles hors-perimetre. Un sous-agent demarre avec un contexte vierge : ce que tu ne lui dis pas, il ne le sait pas.
 
 ## Regles d'orchestration (tirees du premier passage autonome, tranche 010 de Signet)
-- **Tests au premier plan.** Lance `pnpm test` et `pnpm run check` au premier plan, jamais en arriere-plan : attendre une notification de fin a deja endormi la session, et il a fallu un humain pour la relancer.
+- **Tests et scripts au premier plan.** Lance `pnpm test`, `pnpm run check`, `scripts/close-slice.sh`, `scripts/ship-slice.sh` et `scripts/ci-build.sh` au premier plan, jamais en arriere-plan (le hook `block-dangerous` le refuse) : une attente de notification a deja endormi une session, et une cloture en arriere-plan a manque de memoire puis a ete crue interrompue alors qu'elle avait reussi. Lis toujours la derniere ligne : `CLOTURE REUSSIE` ou `CLOTURE REFUSEE`.
+- **Perimetre et reouverture.** Un fichier manquant au perimetre ou une tranche a rouvrir se demande a l'humain (`.\gates.ps1 scope-add <motif>` / `.\gates.ps1 reopen-slice <NNN>`, dans son terminal), avec la raison, puis s'inscrit au registre.
 - **Sous-agent bloque ou arrete sans rapport** : verifie ce qu'il a laisse (`git status`, `git log`), puis **relance-le une fois** avec l'etat constate. Si la relance echoue aussi, reprends son travail toi-meme **et ecris la reprise** dans la section « Decisions » du journal de tranche et dans `docs/DECISIONS.md` (qui, quoi, pourquoi, commits). Jamais de reprise silencieuse (decision D-034 de Signet).
 - **Base de test partagee** : une seule suite de tests a la fois. Les relecteurs lances en parallele ne lancent pas `pnpm test` ; ils lisent les resultats que tu leur transmets.
 
