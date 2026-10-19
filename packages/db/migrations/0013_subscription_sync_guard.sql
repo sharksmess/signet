@@ -10,7 +10,8 @@ ALTER TABLE "subscription" ADD COLUMN "stripe_synced_at" timestamp with time zon
 --    `subscription.stripe_synced_at` (colonne ci-dessus) ; un etat relu plus
 --    ancien que le dernier applique est ignore (resultat `stale`), sans
 --    ecriture ni evenement facturable. Une marque de plus de 5 minutes dans le
---    futur leve SG003 (D-072). Limites de la garde : voir l'etape 3 du corps.
+--    futur leve SG008, refus rejouable (D-072, D-076). Limites de la garde :
+--    voir l'etape 3 du corps.
 -- 2. Comparaison de la metadonnee d'organisation en `uuid`, jamais en texte
 --    (audit-002 CRITIQUE-1 : un UUID en majuscules levait SG004 a chaque
 --    evenement suivant, et l'abonnement ne pouvait plus etre retrograde).
@@ -139,13 +140,16 @@ BEGIN
       RAISE EXCEPTION 'apply_stripe_subscription: date hors calendrier' USING ERRCODE = 'SG003';
   END;
 
-  -- Borne haute de la marque (D-072, review-002 suggestion 4) : une instance
-  -- dont l'horloge avance de plus de 5 minutes sur la base figerait
-  -- l'organisation (tous les etats suivants seraient `stale`). Refus definitif,
-  -- journalise par la fonction Inngest.
+  -- Borne haute de la marque (D-072, D-076) : une instance dont l'horloge avance
+  -- de plus de 5 minutes sur la base figerait l'organisation (tous les etats
+  -- suivants seraient `stale`). Refus REJOUABLE (`SG008`, hors des refus
+  -- definitifs SG003 a SG006) : Inngest rejoue le pas d'ecriture avec la marque
+  -- memorisee, qui passe des que l'horloge de la base l'a rattrapee ; l'etat
+  -- relu (par exemple un `deleted`) n'est jamais perdu. La limite exacte
+  -- (`now()` + 5 minutes) est acceptee.
   IF v_read_at > now() + interval '5 minutes' THEN
-    RAISE EXCEPTION 'apply_stripe_subscription: stripe_read_at dans le futur (horloge de l''instance en avance)'
-      USING ERRCODE = 'SG003';
+    RAISE EXCEPTION 'apply_stripe_subscription: stripe_read_at dans le futur (horloge de l''instance en avance), a rejouer'
+      USING ERRCODE = 'SG008';
   END IF;
 
   -- requested_by : valeur d'audit, jamais d'autorisation. Non UUID -> NULL
