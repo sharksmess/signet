@@ -3,9 +3,9 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : decisions D-076 appliquees (borne haute rejouable `SG008`, test a la limite exacte, test de la concurrence Inngest, ERD) ; relecture de code en contexte neuf, puis `close-slice.sh` et `ship-slice.sh` si PASS
+- Statut : decisions D-077 appliquees (marque sur l'horloge de la base, borne des 5 minutes et `SG008` retires, abandon journalise par `onFailure`) ; relecture de code en contexte neuf, puis `close-slice.sh` et `ship-slice.sh` si PASS
 - Branche : slice/002-abonnement-palier
-- Dernier commit : voir `git log` ; corrections D-072 : 37ada6f (0013), 2e6d395 (concurrence Inngest), 7259b89 (409), 6282cc4 (tests), 303ded1 (docs) ; puis rapport de la troisieme relecture et mise a jour des journaux
+- Dernier commit : voir `git log` ; D-076 : a594017, 9ac3db7, 4453f1f, c1e8071 ; quatrieme relecture : 49208ce ; D-077 : commits par couche du 2026-10-19 qui suivent
 - Prochaine etape : relecture de code (`code-reviewer`, contexte neuf) ; si `REVIEW: PASS`, `bash scripts/close-slice.sh` puis `bash scripts/ship-slice.sh`, arret sur le lien de la PR.
 
 ## Couches
@@ -17,7 +17,7 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 - [x] API : `subscription` GET/POST, webhook Stripe, `/api/inngest` (07cead4)
 - [ ] UI — sans objet (Q-6, D-057)
 - [x] Documentation : ADR-0015 (d1e5051), ADR-0016, ADR-0011, ADR-0007, ERD, runbook (ee43428), contrat `subscriptions.ts` (07cead4), `.env*.example` et CI (115a813), journal de projet 14 (a049621)
-- [x] Suite complete verte (280 tests, 24 fichiers, apres D-076) + `pnpm run check`
+- [x] Suite complete verte (280 tests, 24 fichiers, apres D-077) + `pnpm run check`
 
 ## Blocages
 <!-- cause, essais, options. Vide = aucun. -->
@@ -73,6 +73,7 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 
 - Phase 5, apres la seconde serie de relectures (D-072) : concurrence Inngest par abonnement ; borne haute de `stripe_read_at` (5 minutes, SG003) et commentaire de la garde corriges en place dans 0013 (hors `main`, precedent D-016) ; 409 decrit (contrat et message) ; trois tests directs de la garde dans `review-corrections.test.ts` (plutot que `database.test.ts`, pour ne pas modifier un test existant) ; ligne au backlog sur `canceled_by` ; commentaires perimes ; memoire des relecteurs committee.
 - Phase 6, apres la troisieme relecture (D-076) : la borne haute de `stripe_read_at` leve `SG008`, refus rejouable (absent de `REJECTION_CODES`, donc relance par Inngest) au lieu de SG003 definitif : un `deleted` relu par une instance en avance n'est plus perdu ; 0013 modifiee en place (hors `main`, D-016). Tests : marque a `now()` + 5 minutes exactement acceptee, une microseconde de plus refusee (marque calculee dans la transaction de l'appel, meme `now()` que la fonction) ; `applyStripeSubscription` leve SG008 au lieu de le rendre comme refus ; options de concurrence de la fonction Inngest. Troisieme relecture : FAIL documentaire, corrige (25e9885).
+- Phase 7, apres la quatrieme relecture (D-077, remplace D-076) : marque `stripe_read_at` lue sur l'horloge de la base (`databaseNow()`, `clock_timestamp()` sous `signet_billing`) dans le pas de relecture ; borne des 5 minutes et `SG008` retires de 0013 en place (hors `main`) ; `onFailure` journalise un evenement abandonne en erreur. Tests : trois tests de D-076 supprimes (regle disparue, nommes dans D-077), trois ajoutes (absence de borne, serveur en avance d'une heure, abandon journalise).
 ## Tests ecrits (test-writer, avant implementation)
 Chemins et noms que les tests supposent (a respecter ou a renegocier avec l'orchestrateur, pas a contourner dans les tests) :
 - Fonction Inngest : `apps/web/src/lib/inngest/process-stripe-event.ts`, export nomme `processStripeEvent`.

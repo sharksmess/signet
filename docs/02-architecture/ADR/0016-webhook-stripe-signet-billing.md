@@ -3,7 +3,7 @@
 - **Statut** : accepte pour le role et le circuit (D-057, Q-1, Q-2, A1 a A4) ; details de la fonction valides par l'humain le 2026-10-15 (D-067, D-068). 503 au contrat et refus de demarrer par `instrumentation.ts` : D-070. Revue d'architecture exigee par ERD §1 (cinquieme fonction `SECURITY DEFINER` hors triggers).
 - **Date** : 2026-10-15
 - **Phase** : 3 — tranche 002
-- **Decisions du registre** : D-057, D-058, D-060, D-061, D-062, D-065, D-067, D-068, D-069, D-070, D-071
+- **Decisions du registre** : D-057, D-058, D-060, D-061, D-062, D-065, D-067, D-068, D-069, D-070, D-071, D-072, D-076, D-077
 
 ## Contexte
 
@@ -65,10 +65,13 @@ connexion `signet_billing` (`lib/inngest/billing-db.ts`), ce qu'impose `no-restr
   - la marque est l'instant ou l'instance a **recu** la reponse de Stripe, pas l'instant de l'etat
     chez Stripe (Stripe n'en fournit pas) ; deux relectures tres proches peuvent etre ordonnees a
     l'inverse de l'etat qu'elles portent, a la latence reseau pres ;
-  - la marque vient de l'horloge de chaque instance : un ecart entre instances fausse l'ordre a
-    hauteur de cet ecart. Une marque de plus de 5 minutes dans le futur de la base leve `SG008`, refus **rejouable** (D-076)
-    (sinon une instance en avance figerait l'organisation : tous les etats suivants seraient
-    `stale`) ; un `stale` est journalise ;
+  - la marque est lue sur l'**horloge de la base** (`clock_timestamp()` sous `signet_billing`),
+    juste apres la reponse de Stripe, dans le pas de relecture (D-077) : une seule horloge pour
+    toutes les instances, l'avance ou le retard d'un serveur ne change plus l'ordre. Historique :
+    D-072 bornait une marque d'instance a 5 minutes dans le futur (refus definitif), D-076 avait
+    rendu ce refus rejouable (`SG008`) ; la quatrieme relecture de code a montre que ce rejeu
+    pouvait reappliquer un etat « actif » apres une resiliation plus recente. La marque de la base
+    rend la borne et `SG008` inutiles : retires. Un `stale` est journalise ;
   - deux executions concurrentes du meme abonnement ne sont pas ordonnees par la garde mais par la
     limite de concurrence Inngest `{ key: event.data.subscriptionId, limit: 1 }` (D-072). Inngest
     limite les **pas en cours**, pas les executions en attente de relance : le rejeu d'un pas
@@ -101,12 +104,22 @@ connexion `signet_billing` (`lib/inngest/billing-db.ts`), ce qu'impose `no-restr
 | `SG005` | organisation non resolue | journalise, `NonRetriableError` |
 | `SG006` | incoherence Stripe (Q-7) | journalise, `NonRetriableError` |
 | `SG007` | mutation de `billing_event` (trigger) | sans objet |
-| `SG008` | marque de relecture plus de 5 minutes dans le futur de la base (horloge d'instance en avance, D-076) | **rejoue** par Inngest (le pas memorise passe quand l'horloge de la base a rattrape la marque) |
 | autre | base indisponible, privilege retire | rejoue par Inngest |
 
 Les cas « sans effet » levent plutot que de rendre un statut : regle 3 de
 `.claude/rules/drizzle-postgres.md` (« echouer bruyamment ») et annulation garantie de toute
 ecriture. Condition de l'humain (D-068) : ils ne sont jamais rejoues.
+
+### Evenement abandonne (D-077)
+
+Une erreur rejouable qui persiste (Stripe ou base indisponibles longtemps) epuise les relances
+d'Inngest : 3 par pas, defaut du SDK `inngest` 4.23.0 (non modifie). L'etat relu n'est alors pas
+applique. La fonction declare `onFailure` : `reportAbandonedEvent` journalise en **erreur**
+l'identifiant de l'evenement Stripe, l'abonnement, l'execution Inngest et le nom de l'erreur, avec
+la mention « a reprendre a la main » ; jamais le corps de l'evenement ni le message complet d'une
+erreur (AC9 a). Le crochet est aussi appele apres un refus non rejouable (SG003 a SG006) : ces
+refus produisent donc deux lignes, la raison (`logRejection`) puis l'abandon. Reprise : renvoyer
+l'evenement depuis le tableau de bord Stripe, ou rejouer l'execution depuis Inngest.
 
 ## `billing_event` append-only
 
