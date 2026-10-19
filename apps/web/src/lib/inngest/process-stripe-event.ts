@@ -82,7 +82,15 @@ function logRejection(stripeEventId: string, subscriptionId: string, reason: str
 }
 
 export const processStripeEvent = inngest.createFunction(
-  { id: "process-stripe-event", triggers: { event: STRIPE_SUBSCRIPTION_EVENT } },
+  {
+    id: "process-stripe-event",
+    triggers: { event: STRIPE_SUBSCRIPTION_EVENT },
+    // Un seul pas a la fois par abonnement Stripe (D-072) : ferme la fenetre ou
+    // deux executions concurrentes du meme abonnement s'entrecroisent. Inngest
+    // limite les pas en cours, pas les executions en attente de relance : le
+    // rejeu d'un etat memorise reste couvert par la garde monotone (0013).
+    concurrency: { key: "event.data.subscriptionId", limit: 1 },
+  },
   async ({ event, step }) => {
     const parsed = stripeSubscriptionEventData.safeParse(event.data);
     if (!parsed.success) {

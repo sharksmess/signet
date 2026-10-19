@@ -4,7 +4,7 @@
  * Valide l'environnement du serveur (`lib/env.ts`) avant la premiere requete
  * et arrete le processus s'il est invalide : variable de facturation absente
  * ou mal formee, `STRIPE_API_BASE_URL` hors `APP_ENV=test`, mode developpement
- * d'Inngest en production, `INNGEST_SIGNING_KEY` absente hors mode
+ * d'Inngest en production, `INNGEST_SIGNING_KEY` ou `INNGEST_EVENT_KEY` absente hors mode
  * developpement. Preuve : `tests/billing/startup.test.ts`.
  *
  * L'arret (`process.exit`) vit dans `lib/env.ts`, importe seulement sous le
