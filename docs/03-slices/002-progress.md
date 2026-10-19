@@ -3,10 +3,10 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : corrections de la seconde serie de relectures (D-072) faites ; relecture de code seule en contexte neuf, puis cloture si PASS. Seconde serie : `audit-002.md` PASS, `contracts-002.md` PASS, `review-002.md` PASS avec trois A CORRIGER (traites, D-072)
+- Statut : corrections D-072 faites (277/277) ; troisieme relecture de code : `REVIEW: FAIL` pour un seul A CORRIGER documentaire (journaux en retard sur D-072), corrige ; **attente humaine** avant la cloture (nouvelle relecture, suggestion sur la borne haute)
 - Branche : slice/002-abonnement-palier
-- Dernier commit : 32abc19 docs(slice-002): rapports de la seconde serie de relectures (corrections D-072 commitees ensuite ; avant : a049621 docs D-071, 2accc16 tests, 563f580 api, d9a1b62 billing, d67dfe6 migration 0013)
-- Prochaine etape : relecture de code seule (`code-reviewer`, contexte neuf) ; si `REVIEW: PASS`, `bash scripts/close-slice.sh` puis `bash scripts/ship-slice.sh` ; arret sur le lien de la PR.
+- Dernier commit : voir `git log` ; corrections D-072 : 37ada6f (0013), 2e6d395 (concurrence Inngest), 7259b89 (409), 6282cc4 (tests), 303ded1 (docs) ; puis rapport de la troisieme relecture et mise a jour des journaux
+- Prochaine etape : decision humaine sur la troisieme relecture (FAIL documentaire corrige) et sur la suggestion 3 (borne haute en refus definitif) ; puis relecture de code PASS, `bash scripts/close-slice.sh`, `bash scripts/ship-slice.sh`.
 
 ## Couches
 - [x] Migration

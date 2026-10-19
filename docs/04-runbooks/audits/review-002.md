@@ -1,122 +1,89 @@
-# Relecture de code, tranche 002, seconde serie (slice/002-abonnement-palier, a049621, base main)
+# Relecture de code, tranche 002, troisieme serie (slice/002-abonnement-palier, 303ded1, base main)
 
 ## Methode
-J'ai relu toute la tranche de facon independante, sur le diff `git diff main...HEAD` (29 commits, 66 fichiers). J'ai relu de plus pres les six commits de corrections posterieurs a la premiere serie, `git diff 6de91b2..HEAD` (d5cc5ee a a049621, 27 fichiers). Documents de reference lus :
-- `CLAUDE.md` et `.claude/rules/` (documentation, git, drizzle-postgres, dependencies) ;
-- le contrat `002-abonnement-palier.md`, amende par D-071, et `002-decisions-humaines.md` ;
-- le journal `002-progress.md` (dont la « Phase 4 ») et le registre D-057 a D-071 ;
-- ADR-0015 et ADR-0016, et les amendements d'ADR-0007 et d'ADR-0011 ;
-- l'ERD (colonne `stripe_synced_at` et table des migrations) ;
+J'ai relu toute la tranche de facon independante, sur le diff `git diff main...HEAD` (34 commits, 70 fichiers). J'ai relu de plus pres les cinq commits de corrections posterieurs a la deuxieme serie, `git diff 32abc19..HEAD` (37ada6f a 303ded1, 14 fichiers). Documents de reference lus :
+- `CLAUDE.md` et `.claude/rules/` (documentation, git, drizzle-postgres, nextjs) ;
+- le contrat `002-abonnement-palier.md` (AC1 a AC18, amende D-071) et `002-decisions-humaines.md` ;
+- le journal `002-progress.md` (dont la « Phase 5 ») et le registre D-057 a D-072, plus D-016 (precedent de correction en place) ;
+- ADR-0015 et ADR-0016 (section « Garde monotone » et ses « Limites restantes »), les amendements d'ADR-0007 et d'ADR-0011 ;
+- l'ERD (colonne `stripe_synced_at`, codes `SGxxx`, table des migrations) ;
 - le runbook `stripe-facturation-locale.md` ;
 - le journal de projet `14-tranche-002-abonnement-palier.md` et son index `JOURNAL.md` ;
-- les trois rapports de la premiere serie.
+- les rapports `audit-002.md`, `contracts-002.md` et la deuxieme version de `review-002.md`.
 
-Code de production relu ligne a ligne : `0013_subscription_sync_guard.sql` (fonction remplacee en entier, comparee a 0012), `schema/organizations.ts`, `lib/env.ts`, `instrumentation.ts`, `lib/inngest/{billing-db,process-stripe-event}.ts`, `lib/billing/subscriptions.ts`, la route `subscription`, `errors.ts` et la fonction `billingIsolation()` d'`eslint.config.mjs`.
+Code de production relu ligne a ligne : le corps complet de `apply_stripe_subscription` dans `0013_subscription_sync_guard.sql`, `lib/inngest/{process-stripe-event,client,billing-db}.ts`, la route webhook, `lib/billing/subscriptions.ts`, la route `subscription`, `errors.ts`, `instrumentation.ts`, et le contrat `api-contracts/subscriptions.ts`.
 
-Tests relus :
-- **ajoutes** : `review-corrections.test.ts`, `lint-isolation-forms.test.ts` ;
-- **modifies** depuis la premiere serie : `processing.test.ts` (AC3 c et e), `database.test.ts` (une ligne), `tests/helpers/billing-db.ts` (une cle) ;
-- **fixtures** : `subscriptionFor` et `stripeSubscriptionObject` (`tests/helpers/billing.ts`).
+Tests relus : les trois tests directs ajoutes dans `tests/billing/review-corrections.test.ts:299-379`, et la fixture `createProOrganization` (`tests/helpers/billing.ts`, qui ne pose pas `stripe_synced_at`).
 
-Je n'ai pas lance `pnpm test`, parce que d'autres relecteurs tournent en parallele sur la meme base de test. Je reprends le resultat transmis par l'orchestrateur : 274/274 en 24 fichiers, `pnpm run check` vert. J'ai verifie la logique des tests a la lecture, en me demandant pour chacun s'il echouerait sans la correction qu'il couvre. Je n'ai lu ni `.env*.local` ni l'environnement.
+Je n'ai pas lance `pnpm test`, parce que d'autres relecteurs peuvent tourner sur la meme base de test. Je reprends le resultat transmis par l'orchestrateur : 277/277 en 24 fichiers, `pnpm run check` vert. J'ai verifie la logique des tests a la lecture, en me demandant pour chacun s'il echouerait sans la correction qu'il couvre. Je n'ai lu ni `.env*.local` ni l'environnement.
 
 Ce que j'ai verifie sans y trouver de constat :
-- **Regle D-065 n.2 (aucun test affaibli).** `git diff 6de91b2..HEAD -- tests/` ne touche que cinq fichiers.
-  - `database.test.ts` et `helpers/billing-db.ts` ajoutent seulement la cle `stripe_read_at`, devenue obligatoire.
-  - AC3 c ajoute `canceled_by` a la fixture et garde toutes ses assertions.
-  - AC3 e garde ses quatre cas et en ajoute un cinquieme : souscripteur dans `requested_by`, aucun `canceled_by`, `actor_user_id` NULL attendu. Ce cas est exactement celui que la premiere serie disait non detectable.
-  - Ces modifications sont nommees et justifiees dans D-071.
-  - Les tests sont discriminants ensemble. Une implementation qui lirait toujours `requested_by` echouerait au cinquieme cas d'AC3 e. Une implementation qui lirait toujours `canceled_by` echouerait a AC2 c, dont la fixture n'a que `requested_by`.
-- **Le test de la garde monotone est discriminant.** `review-corrections.test.ts:158-198` rejoue le pas « appliquer-etat » avec l'instantane memorise (`stripe_read_at` anterieur au `deleted`). Sans la garde, ce rejeu repasserait l'organisation en Pro (abonnement detache, metadonnee valide) et ecrirait un `subscription_started` : les assertions `tier: "free"` et `["subscription_canceled"]` echoueraient.
-- **Migration 0013.** 0012 n'est pas modifiee. Le fichier a ete genere puis renomme, avec l'etiquette du journal alignee. La colonne nullable est justifiee dans le schema Drizzle et dans l'ERD. La fonction garde les points 1, 2 et 5 de la liste `SECURITY DEFINER` (`search_path`, proprietaire `signet_definer`, `REVOKE`/`GRANT`), le controle `ROW_COUNT`, l'effacement du contexte ambiant et la validation complete du `jsonb` (`stripe_read_at` est soumise au format ISO). La comparaison SG004 en `uuid` passe par un `CASE` qui evite tout cast d'une valeur invalide. La garde est placee apres le verrou et avant les controles Q-7, comme le dit le journal.
-- **Regles absolues.** Pas de `any`, pas de `// TODO`, pas de `eslint-disable` dans le code ni les tests de la tranche. `stale` est un resultat type (`ApplyResult`). Les refus restent des valeurs (`ApplyOutcome`). L'identifiant d'organisation est mis en minuscules a l'entree des deux routes, et le filtre tenant de `readAsOwner` est inchange.
-- **Isolement AC16 (constat 8 de la premiere serie).**
-  - Couvert par la regle : toutes les extensions, tout chemin relatif, `import()`, `require()`, les trois formes d'acces a `process.env.DATABASE_URL_BILLING`, et l'accesseur `billingDatabaseUrl`. L'exception du module de la fonction ne retire plus que le motif `./billing-db`.
-  - Prouve par les tests : chaque refus a son temoin positif, et les temoins ecartent le faux vert d'une analyse en echec (`fatal`).
-  - Non couvert : la limite residuelle (chaine calculee) est ecrite dans ADR-0016.
-- **`ServerEnv` sans `DATABASE_URL_BILLING`.** La variable est toujours exigee au demarrage, mais `getServerEnv()` ne l'expose plus. `grep` confirme que seul `billing-db.ts` appelle `billingDatabaseUrl()`.
-- **AC18 (verifie par relecture).** Le runbook documente :
-  - le reglage A6 « Annuler l'abonnement » (§4), dont la phrase « sans auteur » est maintenant vraie pour une resiliation par Stripe seul ;
-  - les trois valeurs Stripe du mode test (§3, etape 2) ;
-  - le lancement facultatif d'Inngest (§5) ;
-  - `\password signet_billing`, lance par l'humain (§1, etape 2).
-
-  AC18 est satisfait.
-- **Documentation.**
-  - D-071 decrit chaque decision avec les options ecartees, et le journal en donne le detail (« Phase 4 »).
-  - ADR-0016 est a jour : garde, auteur, statut relu, isolement renforce.
-  - Le contrat est amende : AC3 a, c, e, AC9 e, AC17.
-  - L'ERD est a jour : colonne, table des migrations, numerotation.
-  - L'entree 14 du journal de projet est ecrite et indexee.
-  - Les deux reports sont ecrits au backlog : audit MINEUR-1 et INFO-3.
+- **Limite de concurrence Inngest.** `process-stripe-event.ts:92` : `concurrency: { key: "event.data.subscriptionId", limit: 1 }`. La cle designe un champ qui existe et qui est obligatoire dans le schema de l'evenement (`client.ts:45`, `subscriptionId: z.string().min(1)`), rempli par le webhook (`webhooks/stripe/route.ts:86`). L'option est acceptee par le type d'`inngest` 4.23 (`pnpm run check` vert). Le raisonnement tient : les pas d'un meme abonnement sont serialises. Si deux executions s'entrecroisent (pas 1 de A, pas 1 de B, pas 2 de B, pas 2 de A), A porte une marque anterieure a celle de B et la garde le rend `stale`. Le seul ordre faux restant est celui des horloges de deux instances, et il est ecrit.
+- **Garde monotone (0013, etape 3).** Elle est placee apres le verrou `FOR UPDATE` et avant les controles Q-7, avec une comparaison stricte (`<`). Le commentaire en place decrit maintenant le cas couvert et les limites, sans promettre plus. La borne haute (`v_read_at > now() + interval '5 minutes'`, SG003) vient apres la validation ISO et avant toute lecture de table. Elle compare a l'horloge de la base, et `now()` reste stable dans la transaction.
+- **Correction en place de 0013.** 0013 n'est pas sur `main` (`git log main` ne la contient pas) et D-016 sert de precedent. La base de test est recreee a chaque `pnpm test`. Le journal (D-067, FRICTION) indique que `pnpm db:migrate` n'a jamais tourne sur le poste de developpement : aucune base persistante ne garde l'ancienne version de la fonction.
+- **Tests directs de la garde : ils discriminent.**
+  - *Egalite des marques* : la fixture laisse `stripe_synced_at` a NULL. Le premier appel l'ecrit a `readAt`, et le second, a marque egale, doit rendre `updated`. Un `<=` le rendrait `stale` : le test echouerait.
+  - *`stale` avant SG006* : l'abonnement `sub_other` n'est pas rattache, donc l'organisation est resolue par la metadonnee. La ligne verrouillee porte un autre `stripe_subscription_id`. Si la garde passait apres Q-7, SG006 serait leve : le test echouerait.
+  - *Borne haute* : hormis la marque, l'entree est identique a celles qui reussissent dans les deux autres tests. Le SG003 attendu ne peut donc venir que de la borne.
+- **Contrat et message du 409.** `subscriptions.ts:77` couvre maintenant « pro demande sur un Free dont un abonnement Stripe est deja rattache et en cours de paiement ». Le message d'`errors.ts:65` le dit aussi, et le code `ALREADY_ON_TIER` n'a pas change. Le code (`lib/billing/subscriptions.ts:116`) refuse tout Free dont `stripe_subscription_id` n'est pas NULL. Par la correspondance Q-8, ce cas est seulement `incomplete` : contrat, message et code concordent, et AC17 du contrat est deja amende.
+- **Regle D-065 n.2.** `git diff 32abc19..HEAD -- tests/` n'ajoute que 85 lignes a `review-corrections.test.ts` : aucun test existant n'est modifie (le journal dit pourquoi les tests directs ne vont pas dans `database.test.ts`).
+- **Regles absolues.** Pas de `any`, pas de `// TODO`, pas de `eslint-disable` ni de `@ts-` dans le diff de code et de tests. Les refus restent des valeurs typees (`ApplyOutcome`, `Result`). L'evenement de file est valide par Zod avant usage. Le filtre tenant de `readAsOwner` et l'identifiant normalise a l'entree des routes n'ont pas change.
+- **Suggestions 5 et 8 de la deuxieme serie.** La ligne `canceled_by` est au backlog (`000-backlog.md:70`), a cote de Q-4. Le commentaire d'`instrumentation.ts` cite `INNGEST_EVENT_KEY`. Le titre de section d'ADR-0016 indique « remplacee par 0013 ».
+- **ADR-0016, « Limites restantes ».** La section decrit la marque comme un instant de reception, l'effet des horloges des instances, la borne de 5 minutes, et ce que la concurrence Inngest serialise ou non. Les options ecartees sont ecrites. D-072 au registre donne les options ecartees de la decision humaine (0014, cloture sans correction).
+- **AC18 (verifie par relecture, inchange depuis la deuxieme serie).** Le runbook couvre le reglage A6 (§4), les trois valeurs Stripe du mode test (§3, etape 2), Inngest en local (§5) et `\password signet_billing`, lance par l'humain (§1, etape 2). AC18 est satisfait.
+- **Commits.** Ils suivent Conventional Commits avec le trailer `Slice: 002`, et chaque corps donne maintenant le pourquoi (amelioration par rapport a la suggestion 7).
 
 ## Constats
 
 ### A CORRIGER
 
-**1. Les limites de la garde monotone ne sont pas ecrites, et le commentaire SQL promet plus que la garde ne tient**
-- **Emplacement :** `packages/db/migrations/0013_subscription_sync_guard.sql:182-187` (« execution concurrente plus lente »), `apps/web/src/lib/inngest/process-stripe-event.ts:97-99`, ADR-0016 « Garde monotone » (l. 57-63), `process-stripe-event.ts:84-85` (toujours aucune option `concurrency`).
-- **Constat :** la garde ordonne les etats selon `stripe_read_at`, c'est-a-dire l'horloge du processus qui a recu la reponse de Stripe, lue apres cette reponse. Elle couvre le scenario bloquant de la premiere serie (rejeu de plusieurs secondes ou minutes, test a l'appui). Elle couvre aussi deux executions concurrentes dont les ecritures se croisent. En revanche, `stripe_read_at` borne l'instantane Stripe par le haut, pas par le bas. Une execution dont l'instantane est plus ancien, mais dont la reponse arrive plus tard (lenteur reseau, ou relance du SDK Stripe sur une autre execution), porte une marque plus recente et ecrase l'etat plus frais. De plus, les marques viennent d'horloges de processus differents : un ecart entre instances fait le meme effet. Aucune cle de concurrence Inngest ne serialise les executions d'un meme abonnement. Le cas reste etroit : au moment de la Checkout, un `created` relu `incomplete` peut arriver apres un `updated` relu `active`, et laisser `status = 'incomplete'` jusqu'a l'evenement suivant, sans effet sur le palier. Mais ni le commentaire SQL ni l'ADR ne le disent, et le commentaire affirme le contraire.
-- **Consequence :** un auditeur qui lit le code croit le desordre concurrent entierement couvert. La prochaine tranche qui s'appuiera sur `status` (affichage, relance d'impaye) heritera d'une garantie qui n'existe pas.
-- **Direction :** decrire la limite dans ADR-0016 (marque = instant de reception, horloges des instances) et corriger le commentaire de 0013 dans une prochaine migration, ou a defaut dans l'ADR seul (0013 est appliquee). L'option peu couteuse qui la ferme presque entierement : `concurrency: { key: "event.data.subscriptionId", limit: 1 }` sur la fonction Inngest. Elle merite une ligne au registre, retenue ou ecartee.
-
-**2. Le refus « abonnement `incomplete` rattache » renvoie un message et une description de contrat qui ne le couvrent pas**
-- **Emplacement :** `apps/web/src/lib/errors.ts:61-65`, `docs/02-architecture/api-contracts/subscriptions.ts:77`, `apps/web/src/lib/billing/subscriptions.ts:116`.
-- **Constat :** D-071 (3) ajoute un nouveau cas de `409 ALREADY_ON_TIER` : `POST pro` sur une organisation **Free** dont un abonnement est rattache. Le message renvoye au client dit « L'organisation est deja sur ce palier, ou son annulation est deja programmee. » : c'est faux pour une organisation Free. Le `trigger` du 409 dans le contrat `subscriptions.ts` n'a pas ete amende (seul AC17 l'a ete).
-- **Consequence :** l'owner d'une organisation Free recoit un message qui contredit le `GET` (`tier: "free"`). Il ne peut pas savoir qu'il doit attendre la fin du paiement en cours, ou son expiration par Stripe en environ 23 h. Le contrat machine reste en retard sur la decision.
-- **Direction :** amender le `trigger` du 409 dans `subscriptions.ts`, et elargir le message (par exemple « ... ou un abonnement est deja en cours de paiement »). Le code `ALREADY_ON_TIER` reste inchange. `contract-guardian` jugera l'anti-regression du contrat.
-
-**3. Journal de tranche en partie perime**
-- **Emplacement :** `docs/03-slices/002-progress.md:8`, `:19`, `:20`.
-- **Constat :** l'Etat est a jour. En revanche, « Dernier commit » renvoie a `git log` au lieu de nommer a049621 (`rules/git.md` : mettre a jour le dernier commit). La couche Documentation indique encore « reste : journal de projet 14 », alors que l'entree existe. La suite est annoncee a « 242 tests », pour 274 en realite.
-- **Consequence :** a la reprise apres interruption, le journal dit d'ecrire une entree deja ecrite. L'ecart de 32 tests ne permet pas de savoir lesquels ont ete ajoutes.
-- **Direction :** trois lignes a corriger avant `close-slice.sh`.
+**1. Le journal de projet ne connait ni D-072 ni la troisieme relecture, et le journal de tranche ne nomme pas les commits de D-072**
+- **Emplacement :** `docs/00-context/journal/14-tranche-002-abonnement-palier.md` (sections « Ce qui a ete fait », « Decisions », « Preuves », « Etat a la fin ») ; `docs/00-context/JOURNAL.md:22` (« D-057 a D-071 ») ; `docs/03-slices/002-progress.md:8`.
+- **Constat :** l'entree 14 s'arrete a la « Seconde serie de relectures ». Elle ne cite pas D-072 (decision humaine : corriger les trois A CORRIGER, concurrence Inngest, borne haute, correction en place de 0013), ni la Phase 5, ni cette troisieme relecture. « Etat a la fin » dit la cloture « en attente des verdicts de la seconde serie », alors que cette serie a rendu trois PASS. « Preuves » parle de la suite « apres la phase 4 ». L'index `JOURNAL.md` borne les decisions a D-071. Dans `002-progress.md:8`, « Dernier commit » nomme encore 32abc19 et renvoie les corrections a « commitees ensuite », sans les identifier (37ada6f, 2e6d395, 7259b89, 6282cc4, 303ded1).
+- **Consequence :** d'apres `documentation.md`, l'entree du journal de projet est ce que l'humain et un auditeur externe lisent en premier, et elle part dans la PR. En l'etat, elle decrit une tranche qui attend des verdicts deja rendus et omet une decision humaine qui a modifie en place une migration. `close-slice.sh` ne verifie que la presence de la tranche dans le journal : ce retard passerait sans signal. Ce constat reprend le n.3 de la deuxieme serie, deplace vers le journal de projet.
+- **Direction :** completer l'entree 14 (Phase 5 et D-072, troisieme relecture, etat et preuves a jour), etendre l'index a D-072, et nommer les commits de D-072 dans `002-progress.md`. La correction est purement documentaire et ne demande pas de nouvelle relecture du code : un controle de ces trois fichiers suffit.
 
 ### SUGGESTION
 
-**4. `stripe_read_at` n'est borne ni par le haut ni par rapport a l'horloge de la base**
-- **Emplacement :** `packages/db/migrations/0013_subscription_sync_guard.sql:127-135` et `:240`.
-- **Constat :** une marque dans le futur, par exemple une instance dont l'horloge avance de plusieurs heures, est ecrite dans `stripe_synced_at`. Tous les etats suivants deviennent alors `stale`, journalises en `info` seulement, jusqu'a ce que l'horloge les rattrape. L'organisation peut rester Pro apres une resiliation pendant ce temps.
-- **Direction :** refuser en SG003 un `stripe_read_at` superieur a `now()` plus une tolerance (quelques minutes), avec un test, dans la prochaine migration qui touchera la fonction. Ou ecrire la limite dans ADR-0016 avec le constat 1.
+**2. La limite de concurrence n'est gardee par aucun test**
+- **Emplacement :** `apps/web/src/lib/inngest/process-stripe-event.ts:92`.
+- **Constat :** si l'on retirait l'option `concurrency`, ou si l'on changeait sa cle en un champ absent de l'evenement (par exemple `event.data.subscriptionID`), la suite resterait verte : les doublures executent les pas en sequence. C'est pourtant la mesure retenue par D-072 (1) pour le cas concurrent, que la garde ne couvre pas seule, comme le dit ADR-0016.
+- **Direction :** un test de configuration qui lit les options de `processStripeEvent`, verifie `limit: 1`, et verifie que la cle designe un champ de `stripeSubscriptionEventData`.
 
-**5. `canceled_by` survit a une reactivation**
-- **Emplacement :** `apps/web/src/lib/billing/subscriptions.ts:160`, `apps/web/src/lib/inngest/process-stripe-event.ts:54-55`.
-- **Constat :** la cle n'est jamais effacee. Si une annulation programmee est retiree (tableau de bord Stripe aujourd'hui, ou tranche Q-4 plus tard), puis que Stripe resilie pour impaye, l'owner qui avait demande puis retire l'annulation est enregistre comme auteur. Le cas est hors perimetre (Q-4), mais rien ne le signale a la tranche qui l'ouvrira.
-- **Direction :** une ligne au backlog, a cote de Q-4 : « la reactivation efface `canceled_by` ».
+**3. Un evenement porte par une instance en avance est perdu, et la tolerance de 5 minutes n'est pas testee a la frontiere**
+- **Emplacement :** `packages/db/migrations/0013_subscription_sync_guard.sql:146-149`, `process-stripe-event.ts:122-129`, ADR-0016 (puce « horloge de chaque instance »), `tests/billing/review-corrections.test.ts:364-378`.
+- **Constat :**
+  - SG003 est un refus definitif (`NonRetriableError`), donc l'etat relu par une instance en avance de plus de 5 minutes n'est jamais applique. L'etat de l'organisation ne se corrige qu'a l'evenement Stripe suivant. Si l'evenement perdu est un `deleted`, il n'y a pas d'evenement suivant : l'organisation reste Pro. L'ADR dit « leve SG003 », mais pas cette consequence.
+  - Une alternative existe. Le pas « relire-abonnement » est memorise, donc la marque du rejeu ne change pas. Une erreur rejouable laisserait `now()` rattraper la marque au fil des relances Inngest, et l'etat serait applique avec au plus 5 minutes d'avance.
+  - Le test verifie seulement une marque a +1 h. Une borne sans tolerance (`> now()`) le passerait aussi, alors qu'elle refuserait en production toute instance en avance de quelques millisecondes.
+- **Direction :** ecrire la consequence dans ADR-0016, ou reclasser ce cas en erreur rejouable (decision a porter au registre). Ajouter un cas a +1 minute qui doit s'appliquer.
 
-**6. La garde n'est testee qu'au travers de la fonction Inngest**
-- **Emplacement :** `tests/billing/database.test.ts`, `tests/billing/review-corrections.test.ts:157-198`.
-- **Constat :** deux branches de la garde n'ont aucun test : l'egalite des marques (choix explicite du journal : « un etat relu au meme instant s'applique ») et l'ordre « `stale` avant SG006 » (un etat perime ne leve jamais SG006). Un `<` change en `<=`, ou la garde deplacee apres les controles Q-7, laisseraient la suite verte.
-- **Direction :** deux cas en appel direct de la fonction dans `database.test.ts`.
+**4. La ligne 0013 de l'ERD ne mentionne pas la borne haute**
+- **Emplacement :** `docs/02-architecture/ERD.md:978`.
+- **Constat :** la table des migrations decrit 0013 sans la borne SG003 ajoutee en place par D-072. Le code SG003 « entree invalide » (ERD:51) la couvre en substance, mais un lecteur de l'ERD ne sait pas qu'une marque trop recente est refusee.
+- **Direction :** une demi-ligne dans la description de 0013 (« marque de plus de 5 minutes dans le futur : SG003, D-072 »).
 
-**7. Commits de corrections crees en lot, avec des etats intermediaires rouges**
-- **Emplacement :** d67dfe6, d9a1b62, 563f580 et 2accc16, crees en moins de trois secondes.
-- **Constat :** d67dfe6 rend `stripe_read_at` obligatoire, alors que `process-stripe-event.ts` ne l'envoie qu'a partir de d9a1b62 et que `database.test.ts` ne la fournit qu'a partir de 2accc16. Ces deux commits ne passent donc pas les tests de leur couche (`rules/git.md`). Les tests sont committes apres le code qu'ils couvrent. Les corps de commit sont vides alors que le pourquoi n'est pas evident (garde, auteur). Le squash a la fusion limite l'effet sur `main`.
-- **Direction :** rien a reecrire, la branche sera ecrasee au squash. Pour les prochaines corrections, committer chaque couche verte au fil de l'eau, avec une ligne de pourquoi dans le corps.
+**5. Commits de corrections encore crees en lot, tests apres le code**
+- **Emplacement :** 37ada6f a 303ded1, crees en quatre secondes.
+- **Constat :** chaque commit compile ici, car les changements sont independants. Les corps de commit expliquent maintenant le pourquoi, ce qui ameliore la suggestion 7 precedente. Mais les tests (6282cc4) sont committes apres le code qu'ils couvrent, et l'ensemble a ete committe d'un coup en fin de travail, pas au fil de l'eau (`rules/git.md`). Le squash a la fusion limite l'effet sur `main`.
+- **Direction :** rien a reecrire. Garder la pratique « test avant code, commit par couche verte » pour les prochaines corrections.
 
-**8. Petites derives de commentaires**
-- **Emplacement :** `apps/web/src/instrumentation.ts:139-143`, ADR-0016 titre de section « (migration 0012) » (l. 34).
-- **Constat :** le commentaire du crochet liste encore les seuls refus d'avant D-071 : il ne cite pas `INNGEST_EVENT_KEY`. La section de l'ADR attribue la fonction a 0012, alors qu'elle est remplacee par 0013.
-- **Direction :** les aligner a la prochaine occasion.
+## Suivi des constats de la deuxieme serie
 
-## Suivi des constats de la premiere serie
-
-| # | Gravite (1re serie) | Constat | Etat |
+| # | Gravite (2e serie) | Constat | Etat |
 |---|---|---|---|
-| 1 | BLOQUANT | Instantane perime rejoue apres un `deleted` | **Corrige.** Garde monotone (`stripe_synced_at`, 0013, D-071 (1)), test discriminant `review-corrections.test.ts:158`. Limite residuelle en concurrence non ecrite : constat 1 ci-dessus. |
-| 2 | BLOQUANT | `requested_by` sert a la fois au souscripteur et a l'auteur de l'annulation | **Corrige.** Cle `canceled_by` (D-071 (2)), lue seulement quand le statut relu mene a Free ; AC3 c/e amendes ; cas « souscripteur present, aucun `canceled_by` » ajoute ; runbook §4 desormais exact. |
-| 3 | A CORRIGER | Branche « `deleted` force Free » non discriminee | **Corrige par changement de regle.** D-071 (4) : le statut relu decide seul ; test « `deleted` relu actif » (`review-corrections.test.ts:218`) et « `incomplete` depuis Pro » (`:229`). |
-| 4 | A CORRIGER | Second Checkout sur un Free avec abonnement `incomplete` | **Corrige.** 409 (D-071 (3)), AC17 amende, test `review-corrections.test.ts:243`. Message et contrat a aligner : constat 2 ci-dessus. Double Checkout paye : backlog (INFO-3). |
-| 5 | A CORRIGER | Journal de tranche perime, journal de projet absent | **Corrige en partie.** Etat a jour, entree 14 ecrite et indexee ; trois lignes encore perimees : constat 3 ci-dessus. |
-| 6 | A CORRIGER | `INNGEST_EVENT_KEY` exigee sans decision ni test | **Corrige.** D-071, commentaire d'`env.ts`, runbook §5, test `review-corrections.test.ts:277`. |
-| 7 | A CORRIGER | Table des migrations de l'ERD coupee | **Corrige** (366190d), ligne 0013 ajoutee. |
-| 8 | SUGGESTION | Regle d'import AC16 contournable | **Corrige.** Regle etendue, un test par forme (`lint-isolation-forms.test.ts`), exception limitee a `./billing-db`. |
-| 9 | SUGGESTION | SG004 compare des UUID en texte | **Corrige.** Comparaison en `uuid` (0013:159-163), UUID normalise a l'entree de l'API, test en majuscules de bout en bout. |
-| 10 | SUGGESTION | Commentaire du verrou trop affirmatif | **Corrige.** En-tete de 0013 point 4 et ADR-0016 « Verrou » decrivent l'ordre reel. |
+| 1 | A CORRIGER | Limites de la garde non ecrites, commentaire SQL trop affirmatif, pas de concurrence par abonnement | **Corrige.** Concurrence `{ key: event.data.subscriptionId, limit: 1 }` (`process-stripe-event.ts:92`), limites ecrites dans ADR-0016, commentaire de 0013 corrige en place (D-072, precedent D-016). Sans test de configuration : constat 2. |
+| 2 | A CORRIGER | Message et contrat du 409 ne couvrent pas l'abonnement `incomplete` | **Corrige.** Declencheur du contrat (`subscriptions.ts:77`) et message (`errors.ts:65`) amendes, code inchange. |
+| 3 | A CORRIGER | Journal de tranche en partie perime | **Corrige en partie.** Couche Documentation et nombre de tests a jour (277). « Dernier commit » ne nomme pas les commits de D-072, et le journal de projet 14 n'a pas suivi : constat 1. |
+| 4 | SUGGESTION | `stripe_read_at` sans borne haute | **Retenu.** SG003 au-dela de 5 minutes (0013:146-149), avec un test. Effet d'un refus definitif et frontiere non testee : constat 3. |
+| 5 | SUGGESTION | `canceled_by` survit a une reactivation | **Retenu.** Ligne au backlog (`000-backlog.md:70`). |
+| 6 | SUGGESTION | Garde testee seulement au travers d'Inngest | **Retenu.** Trois tests directs sous `signet_billing`, discriminants (voir Methode). |
+| 7 | SUGGESTION | Commits en lot, corps vides | **En partie.** Corps renseignes ; commits toujours crees en lot, tests apres le code : constat 5. |
+| 8 | SUGGESTION | Commentaires perimes (`instrumentation.ts`, titre de section d'ADR-0016) | **Corrige.** |
 
 ## Bilan
-- **Solide :** les deux bloquants sont corriges sur decision humaine ecrite et prouves par des tests qui echoueraient sans la correction ; aucun test n'est affaibli ; l'isolement de `signet_billing` est nettement renforce et teste forme par forme ; la documentation (registre, contrat, ADR, ERD, journaux) suit chaque changement.
-- **Fragile :** la garde monotone repose sur des horloges de processus et sur l'instant de reception, sans serialisation par abonnement et sans borne superieure (constats 1 et 4) ; deux branches de la garde n'ont pas de test direct.
-- **Manquant :** la limite de la garde ecrite dans ADR-0016, le contrat et le message du 409 pour le cas `incomplete`, trois lignes du journal de tranche.
+- **Solide :** le desordre des evenements est maintenant ferme a trois niveaux : la relecture fait foi, les pas d'un meme abonnement sont serialises, et la garde monotone est testee directement en base sur ses deux branches sensibles. Le contrat, le message et le code du 409 concordent. Aucun test n'est affaibli, et chaque decision de D-072 a sa trace au registre, dans ADR-0016 et dans le journal de tranche.
+- **Fragile :** l'ordre depend encore des horloges des instances. Un etat refuse par la borne haute est perdu plutot que differe, et la limite de concurrence n'est gardee par aucun test.
+- **Manquant :** le journal de projet (entree 14 et index) a jour de D-072 et de cette relecture, et les commits de D-072 nommes dans le journal de tranche.
 
-REVIEW: PASS
+REVIEW: FAIL
