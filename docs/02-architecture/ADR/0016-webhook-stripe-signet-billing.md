@@ -3,7 +3,7 @@
 - **Statut** : accepte pour le role et le circuit (D-057, Q-1, Q-2, A1 a A4) ; details de la fonction valides par l'humain le 2026-10-15 (D-067, D-068). 503 au contrat et refus de demarrer par `instrumentation.ts` : D-070. Revue d'architecture exigee par ERD §1 (cinquieme fonction `SECURITY DEFINER` hors triggers).
 - **Date** : 2026-10-15
 - **Phase** : 3 — tranche 002
-- **Decisions du registre** : D-057, D-058, D-060, D-061, D-062, D-065, D-067, D-068, D-069, D-070
+- **Decisions du registre** : D-057, D-058, D-060, D-061, D-062, D-065, D-067, D-068, D-069, D-070, D-071
 
 ## Contexte
 
@@ -36,7 +36,8 @@ connexion `signet_billing` (`lib/inngest/billing-db.ts`), ce qu'impose `no-restr
 - Proprietaire `signet_definer`, `SECURITY DEFINER`, `SET search_path = pg_catalog, signet, public,
   pg_temp`, tables qualifiees, `REVOKE ALL FROM PUBLIC`, `EXECUTE` au seul `signet_billing`.
 - **Entree : un objet `jsonb` (D-067), valide par la fonction elle-meme avant toute lecture** :
-  onze cles exactement (toute cle inconnue refusee) ; textes non vides de 255 caracteres au plus ;
+  douze cles exactement depuis 0013 (`stripe_read_at` ajoutee, D-071 ; toute cle inconnue refusee) ;
+  textes non vides de 255 caracteres au plus ;
   booleens types ; cles nullables presentes ; dates au format ISO 8601 complet (le cast de Postgres
   accepterait `now` ou `infinity`) ; `event_type` et `stripe_status` dans leur liste fermee. Tout
   ecart leve `SG003`.
@@ -45,20 +46,37 @@ connexion `signet_billing` (`lib/inngest/billing-db.ts`), ce qu'impose `no-restr
   la politique `subscription_definer_stripe_lookup` (lecture seule, sur `app.stripe_subscription_id`
   pose puis efface par la fonction), sinon (2) de `metadata_organization_id`, lue sur l'abonnement
   relu chez Stripe avec la cle secrete et posee par notre serveur au Checkout apres controle du role
-  owner. Une metadonnee contraire a la ligne deja rattachee leve `SG004`.
-- **Verrou** : `SELECT ... FOR UPDATE` de la ligne `subscription` de l'organisation avant toute
-  decision ; deux traitements concurrents s'ordonnent (AC8 c).
+  owner. Une metadonnee contraire a la ligne deja rattachee leve `SG004` ; la comparaison se fait
+  en type `uuid` depuis 0013 (audit-002 CRITIQUE-1 : en texte, un UUID en majuscules dans l'URL
+  bloquait tous les evenements suivants), et les routes normalisent l'identifiant en minuscules
+  avant tout envoi a Stripe.
+- **Verrou** : l'organisation est d'abord resolue (lecture sans verrou de la ligne rattachee), puis
+  la ligne `subscription` de cette organisation est verrouillee (`SELECT ... FOR UPDATE`) avant
+  toute decision sur l'etat ; deux traitements concurrents s'ordonnent (AC8 c). Le verrou ordonne
+  les ecritures, pas l'age des etats appliques : c'est le role de la garde monotone.
+- **Garde monotone (D-071, review-002 BLOQUANT 1)** : la fonction Inngest transmet l'instant de la
+  relecture Stripe (`stripe_read_at`, pris apres la reponse). La fonction ignore, sans ecriture ni
+  erreur (resultat `stale`), un etat relu avant le dernier etat applique
+  (`subscription.stripe_synced_at`, colonne de 0013). Cas couvert : `updated` relu « actif » dont
+  l'ecriture echoue, `deleted` traite entre-temps, puis rejeu par Inngest du pas memorise. Revient
+  partiellement sur Q-2 (« aucune colonne nouvelle ») ; la garde porte sur l'instant de RELECTURE
+  (milliseconde), pas sur `event.created` (seconde) ecarte par Q-2.
 - **Coherence (Q-7)** : autre abonnement deja rattache, client Stripe different, prix qui n'est pas
   `STRIPE_PRICE_ID_PRO` (D-068), identifiant deja rattache a une autre organisation : `SG006`.
   Organisation non resolue (metadonnee absente, mal formee, organisation inexistante) : `SG005`.
 - **Correspondance des statuts (Q-8)** : `active`/`trialing` -> Pro actif ; `past_due`/`unpaid`/
-  `paused` -> Pro `past_due` ; `incomplete` -> palier inchange ; `canceled`/`incomplete_expired`, ou
-  evenement `deleted` -> Free (abonnement et fin de periode a `NULL`, client conserve, D-062).
+  `paused` -> Pro `past_due` ; `incomplete` -> palier inchange ; `canceled`/`incomplete_expired` ->
+  Free (abonnement et fin de periode a `NULL`, client conserve, D-062). Depuis 0013 (D-071), le
+  type d'evenement `deleted` n'intervient plus : Stripe relit un abonnement supprime en `canceled`,
+  et un `deleted` forge (mode developpement non signe, audit-002 INFO-2) ne retrograde rien.
 - **Journal (Q-5)** : `subscription_started` sur Free -> Pro, `subscription_canceled` sur Pro ->
-  Free, rien d'autre. `actor_user_id` = `metadata.requested_by` s'il designe un utilisateur
-  existant, sinon `NULL` (valeur d'audit, jamais d'autorisation, A4). Le rejeu du meme evenement
-  Stripe est absorbe par l'index unique `billing_event_stripe_idx`.
-- Retour : `subscription_started`, `subscription_canceled` ou `updated`.
+  Free, rien d'autre. `actor_user_id` = `metadata_requested_by` de l'entree s'il designe un
+  utilisateur existant, sinon `NULL` (valeur d'audit, jamais d'autorisation, A4). La fonction
+  Inngest y place l'auteur de la transition (D-071, review-002 BLOQUANT 2) : `canceled_by` (pose
+  par la demande d'annulation de l'owner) quand le statut relu mene a Free, `requested_by` (pose au
+  Checkout) sinon. Une resiliation par Stripe seul n'a pas de `canceled_by` : auteur `NULL`. Le
+  rejeu du meme evenement Stripe est absorbe par l'index unique `billing_event_stripe_idx`.
+- Retour : `subscription_started`, `subscription_canceled`, `updated` ou `stale` (garde monotone).
 
 ### Codes d'erreur (D-067, D-068)
 
@@ -103,8 +121,18 @@ superutilisateur peuvent l'executer, et la remise a zero de la base de test en a
 
 ## Consequences
 
-- Le serveur n'expose aucune ecriture du palier : une route compromise ne peut pas changer le
-  palier d'une organisation (aucune connexion `signet_billing` hors de la fonction Inngest).
+- Aucune route n'accede a la connexion `signet_billing` (AC16, renforce par D-071) :
+  - `billing-db` n'est importable que par `./billing-db` depuis `process-stripe-event.ts` (toute
+    autre forme, extension ou chemin relatif refusee ; `import()` et `require()` refuses partout) ;
+  - `DATABASE_URL_BILLING` est validee au demarrage mais retiree de `ServerEnv` ; seul
+    `billing-db.ts` la lit, par l'accesseur `billingDatabaseUrl()` de `env.ts`, dont l'import est
+    refuse ailleurs ; `process.env.DATABASE_URL_BILLING` est refuse dans toute l'application ;
+  - preuve : un test par forme (`tests/billing/lint-isolation-forms.test.ts`).
+  Cela reste une **garde de code, pas une frontiere** (audit-002 INFO-1) : du code ecrit pour la
+  contourner (lecture indirecte de l'environnement, cle calculee, `import()` d'une chaine calculee)
+  n'est pas detectable par le lint,
+  et avec cette connexion la fonction definer croit son appelant sur la metadonnee, le prix et le
+  statut. La barriere contre une route compromise est la revue et le lint, pas la base.
 - Une connexion de plus a configurer et a superviser.
 - L'environnement est valide au demarrage du processus (`apps/web/src/instrumentation.ts`, D-070) :
   un environnement de facturation invalide arrete `next start` en erreur, en nommant les variables

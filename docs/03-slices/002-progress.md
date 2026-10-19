@@ -3,10 +3,10 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : implementation terminee, suite complete verte (242 tests, 21 fichiers) et `pnpm run check` vert ; **attente humaine** : deux questions (503 hors contrat, `instrumentation.ts`) et copie du bloc de variables de test (runbook § 2), avant les trois relecteurs
+- Statut : corrections des relectures (D-071) faites ; seconde serie de relectures (contexte neuf) en cours. Premiere serie : `audit-002.md` FAIL (CRITIQUE-1), `contracts-002.md` PASS, `review-002.md` FAIL (deux bloquants)
 - Branche : slice/002-abonnement-palier
-- Dernier commit : ee43428 docs(billing): ADR-0016, ADR-0011, ERD et runbook Stripe (avant : 115a813 ci, 07cead4 api, 316c9c6 billing, d1e5051 deps, 0b792b0, 3399cd1 migration)
-- Prochaine etape : reponses humaines (Blocages), puis `security-auditor`, `contract-guardian`, `code-reviewer`, journal de projet 14, `bash scripts/close-slice.sh`, `bash scripts/ship-slice.sh`.
+- Dernier commit : voir `git log` (corrections D-071 commitees par couche le 2026-10-19 ; avant : 366190d docs(erd), 8652f9e rapports, 6de91b2, e0c47b2, e141728 D-070)
+- Prochaine etape : verdicts de la seconde serie de relectures (`audit-002.md`, `contracts-002.md`, `review-002.md` reecrits), puis decision humaine ; si les trois passent : `bash scripts/close-slice.sh`, `bash scripts/ship-slice.sh`.
 
 ## Couches
 - [x] Migration
@@ -27,6 +27,7 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 - ~~`pnpm run check` rouge (modules absents)~~ : vert depuis 316c9c6.
 - ~~Questions 503 et `instrumentation.ts`~~ : tranchees le 2026-10-15 (D-070) : 503 au contrat, `instrumentation.ts` dans le perimetre avec un test. `.env.test.local` complete par l'humain (bloc Facturation).
 - ~~Perimetre fige~~ : elargi par l'humain (93403bb, D-070).
+- ~~Relectures, premiere serie (2026-10-15)~~ : audit FAIL (CRITIQUE-1, UUID compare en texte), review FAIL (etat perime rejoue, auteur d'une resiliation par Stripe seul) ; decisions humaines D-071, perimetre elargi a `packages/db/src/schema/organizations.ts` (d5cc5ee). Corrections faites, seconde serie lancee.
 
 ## Decisions
 <!-- Toute decision prise sans l'humain, avec sa raison. Reprise dans la PR. -->
@@ -61,6 +62,13 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
   - URL de retour Checkout : `APP_URL/organizations/<id>/billing?checkout=success|cancel` (chemin qui n'a pas besoin d'exister, Q-6).
   - Journal serveur : prefixe `[facturation]`, identifiants Stripe et code de refus seulement (AC9 a).
   - Execution locale des tests : les neuf variables de test inventees de `.env.test.example` ont ete passees par le terminal (le globalSetup trace leur provenance), en attendant que l'humain les copie dans `.env.test.local` (runbook § 2). Aucun fichier local lu ni modifie.
+- Phase 4, corrections des relectures (D-071) :
+  - Migration `0013_subscription_sync_guard.sql` plutot qu'une modification de 0012 (regle : migration appliquee immuable ; 0012 a deja ete jouee sur les bases de test). Fichier genere par `pnpm db:generate` sous `0003_ambiguous_naoko.sql`, renomme, etiquette alignee.
+  - Garde monotone sur l'instant de RELECTURE pris apres la reponse de Stripe (milliseconde), comparaison stricte (`<`) : un etat relu au meme instant que le dernier applique s'applique (idempotent). Placee avant les controles de coherence : un etat perime ne leve jamais SG006.
+  - Auteur de la transition choisi par la fonction Inngest (`canceled_by` si le statut relu mene a Free, `requested_by` sinon) et transmis dans la cle existante `metadata_requested_by` : l'entree de la fonction SQL ne gagne qu'une cle (`stripe_read_at`). Ecarte : une treizieme cle `metadata_canceled_by` (meme effet, deux cles a valider). La demande d'annulation continue de poser `requested_by` (AC3 a inchange) en plus de `canceled_by`.
+  - Comparaison SG004 en `uuid` par `CASE` entre parentheses : Postgres ne garantit pas l'ordre d'evaluation d'un `OR` (cast possible sur une valeur invalide), et PL/pgSQL coupe la condition d'un `IF` au premier `THEN` hors parentheses (erreur rencontree, corrigee).
+  - Regle de lint : selecteurs `no-restricted-syntax` pour `import()`, `require()` et `process.env.DATABASE_URL_BILLING` ; esquery n'accepte pas de `/` dans une expression reguliere de selecteur, meme echappe : la barre est ecrite `\x2F`). Limite : un `import()` d'une chaine calculee n'est pas detecte (ecrit dans ADR-0016).
+  - `DATABASE_URL_BILLING` toujours validee au demarrage (`instrumentation.ts`) mais retiree de `ServerEnv` ; `billingDatabaseUrl()` revalide l'environnement a chaque construction du pool (une seule fois par processus).
 
 ## Tests ecrits (test-writer, avant implementation)
 Chemins et noms que les tests supposent (a respecter ou a renegocier avec l'orchestrateur, pas a contourner dans les tests) :
