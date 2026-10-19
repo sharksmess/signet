@@ -1,87 +1,122 @@
-# Relecture de code, tranche 002 (slice/002-abonnement-palier, 6de91b2, base main)
+# Relecture de code, tranche 002, seconde serie (slice/002-abonnement-palier, a049621, base main)
 
 ## Methode
-J'ai lu le diff complet `git diff main...HEAD` (21 commits, 57 fichiers) et les documents de reference : contrat `002-abonnement-palier.md` (AC1 a AC18), `002-decisions-humaines.md`, journal `002-progress.md`, registre D-057 a D-070, ADR-0015, ADR-0016, l'ERD (§0, §1, §8, matrice, table des migrations), le runbook `stripe-facturation-locale.md`, `CLAUDE.md` et `.claude/rules/` (documentation, git, drizzle-postgres).
+J'ai relu toute la tranche de facon independante, sur le diff `git diff main...HEAD` (29 commits, 66 fichiers). J'ai relu de plus pres les six commits de corrections posterieurs a la premiere serie, `git diff 6de91b2..HEAD` (d5cc5ee a a049621, 27 fichiers). Documents de reference lus :
+- `CLAUDE.md` et `.claude/rules/` (documentation, git, drizzle-postgres, dependencies) ;
+- le contrat `002-abonnement-palier.md`, amende par D-071, et `002-decisions-humaines.md` ;
+- le journal `002-progress.md` (dont la « Phase 4 ») et le registre D-057 a D-071 ;
+- ADR-0015 et ADR-0016, et les amendements d'ADR-0007 et d'ADR-0011 ;
+- l'ERD (colonne `stripe_synced_at` et table des migrations) ;
+- le runbook `stripe-facturation-locale.md` ;
+- le journal de projet `14-tranche-002-abonnement-palier.md` et son index `JOURNAL.md` ;
+- les trois rapports de la premiere serie.
 
-J'ai relu en detail le code de production : `0011_billing_role.sql`, `0012_billing_event.sql` (dont `apply_stripe_subscription` ligne a ligne), `schema/billing.ts`, `lib/env.ts`, `instrumentation.ts`, `lib/stripe.ts`, `lib/inngest/{client,billing-db,process-stripe-event}.ts`, `lib/billing/subscriptions.ts`, les trois routes, `errors.ts` et `eslint.config.mjs`. J'ai lu les tests `tests/billing/*` et les fixtures `tests/helpers/billing*.ts` qui portent les constats ci-dessous.
+Code de production relu ligne a ligne : `0013_subscription_sync_guard.sql` (fonction remplacee en entier, comparee a 0012), `schema/organizations.ts`, `lib/env.ts`, `instrumentation.ts`, `lib/inngest/{billing-db,process-stripe-event}.ts`, `lib/billing/subscriptions.ts`, la route `subscription`, `errors.ts` et la fonction `billingIsolation()` d'`eslint.config.mjs`.
 
-Je n'ai pas lance `pnpm test`, parce que d'autres relecteurs tournent en parallele sur la meme base de test. Je reprends le resultat transmis par l'orchestrateur : 245/245 en 22 fichiers, `pnpm run check` vert. Je n'ai lu ni `.env*.local` ni l'environnement.
+Tests relus :
+- **ajoutes** : `review-corrections.test.ts`, `lint-isolation-forms.test.ts` ;
+- **modifies** depuis la premiere serie : `processing.test.ts` (AC3 c et e), `database.test.ts` (une ligne), `tests/helpers/billing-db.ts` (une cle) ;
+- **fixtures** : `subscriptionFor` et `stripeSubscriptionObject` (`tests/helpers/billing.ts`).
+
+Je n'ai pas lance `pnpm test`, parce que d'autres relecteurs tournent en parallele sur la meme base de test. Je reprends le resultat transmis par l'orchestrateur : 274/274 en 24 fichiers, `pnpm run check` vert. J'ai verifie la logique des tests a la lecture, en me demandant pour chacun s'il echouerait sans la correction qu'il couvre. Je n'ai lu ni `.env*.local` ni l'environnement.
 
 Ce que j'ai verifie sans y trouver de constat :
-- **Regle D-065 n.2.** `git diff df5d435..HEAD --stat -- tests/` ne montre qu'un seul ajout, `tests/billing/startup.test.ts` (e0c47b2). Aucun test existant n'est modifie, et aucun test de 001, 010 ou 011 n'est touche.
-- **Regles absolues.** Pas de `any`, pas de `// TODO`. Les erreurs metier sont typees (`Result`, `ApplyOutcome`). `throw` est reserve aux invariants : la ligne `subscription` absente, un resultat SQL inattendu, et `NonRetriableError` impose par l'API Inngest. Toute entree externe est validee (zod pour les routes et les donnees de file, la signature avant `JSON.parse`, le `jsonb` valide champ par champ dans la fonction). Le filtre tenant est explicite dans `readAsOwner`.
-- **Documentation.** ERD a jour avec les deux migrations ; ADR-0015 pour les trois dependances (versions exactes, `protobufjs` refuse, aucune exclusion de quarantaine) ; registre et journal renseignes pour D-057 a D-070.
-- **AC18 (verifie par relecture).** Le runbook documente le reglage A6 « Annuler l'abonnement » apres l'echec des paiements (§4), les trois valeurs Stripe du mode test (§3), le lancement facultatif d'Inngest en local (§5), et la procedure `\password signet_billing` que l'humain lance lui-meme (§1, etape 2). AC18 est satisfait, a une phrase pres (constat 2).
-- **Historique.** Sujets Conventional Commits de 70 caracteres au plus, un commit par couche, trailer `Slice: 002`.
+- **Regle D-065 n.2 (aucun test affaibli).** `git diff 6de91b2..HEAD -- tests/` ne touche que cinq fichiers.
+  - `database.test.ts` et `helpers/billing-db.ts` ajoutent seulement la cle `stripe_read_at`, devenue obligatoire.
+  - AC3 c ajoute `canceled_by` a la fixture et garde toutes ses assertions.
+  - AC3 e garde ses quatre cas et en ajoute un cinquieme : souscripteur dans `requested_by`, aucun `canceled_by`, `actor_user_id` NULL attendu. Ce cas est exactement celui que la premiere serie disait non detectable.
+  - Ces modifications sont nommees et justifiees dans D-071.
+  - Les tests sont discriminants ensemble. Une implementation qui lirait toujours `requested_by` echouerait au cinquieme cas d'AC3 e. Une implementation qui lirait toujours `canceled_by` echouerait a AC2 c, dont la fixture n'a que `requested_by`.
+- **Le test de la garde monotone est discriminant.** `review-corrections.test.ts:158-198` rejoue le pas « appliquer-etat » avec l'instantane memorise (`stripe_read_at` anterieur au `deleted`). Sans la garde, ce rejeu repasserait l'organisation en Pro (abonnement detache, metadonnee valide) et ecrirait un `subscription_started` : les assertions `tier: "free"` et `["subscription_canceled"]` echoueraient.
+- **Migration 0013.** 0012 n'est pas modifiee. Le fichier a ete genere puis renomme, avec l'etiquette du journal alignee. La colonne nullable est justifiee dans le schema Drizzle et dans l'ERD. La fonction garde les points 1, 2 et 5 de la liste `SECURITY DEFINER` (`search_path`, proprietaire `signet_definer`, `REVOKE`/`GRANT`), le controle `ROW_COUNT`, l'effacement du contexte ambiant et la validation complete du `jsonb` (`stripe_read_at` est soumise au format ISO). La comparaison SG004 en `uuid` passe par un `CASE` qui evite tout cast d'une valeur invalide. La garde est placee apres le verrou et avant les controles Q-7, comme le dit le journal.
+- **Regles absolues.** Pas de `any`, pas de `// TODO`, pas de `eslint-disable` dans le code ni les tests de la tranche. `stale` est un resultat type (`ApplyResult`). Les refus restent des valeurs (`ApplyOutcome`). L'identifiant d'organisation est mis en minuscules a l'entree des deux routes, et le filtre tenant de `readAsOwner` est inchange.
+- **Isolement AC16 (constat 8 de la premiere serie).**
+  - Couvert par la regle : toutes les extensions, tout chemin relatif, `import()`, `require()`, les trois formes d'acces a `process.env.DATABASE_URL_BILLING`, et l'accesseur `billingDatabaseUrl`. L'exception du module de la fonction ne retire plus que le motif `./billing-db`.
+  - Prouve par les tests : chaque refus a son temoin positif, et les temoins ecartent le faux vert d'une analyse en echec (`fatal`).
+  - Non couvert : la limite residuelle (chaine calculee) est ecrite dans ADR-0016.
+- **`ServerEnv` sans `DATABASE_URL_BILLING`.** La variable est toujours exigee au demarrage, mais `getServerEnv()` ne l'expose plus. `grep` confirme que seul `billing-db.ts` appelle `billingDatabaseUrl()`.
+- **AC18 (verifie par relecture).** Le runbook documente :
+  - le reglage A6 « Annuler l'abonnement » (§4), dont la phrase « sans auteur » est maintenant vraie pour une resiliation par Stripe seul ;
+  - les trois valeurs Stripe du mode test (§3, etape 2) ;
+  - le lancement facultatif d'Inngest (§5) ;
+  - `\password signet_billing`, lance par l'humain (§1, etape 2).
+
+  AC18 est satisfait.
+- **Documentation.**
+  - D-071 decrit chaque decision avec les options ecartees, et le journal en donne le detail (« Phase 4 »).
+  - ADR-0016 est a jour : garde, auteur, statut relu, isolement renforce.
+  - Le contrat est amende : AC3 a, c, e, AC9 e, AC17.
+  - L'ERD est a jour : colonne, table des migrations, numerotation.
+  - L'entree 14 du journal de projet est ecrite et indexee.
+  - Les deux reports sont ecrits au backlog : audit MINEUR-1 et INFO-3.
 
 ## Constats
 
-### BLOQUANT
-
-**1. Un instantane Stripe perime peut ecraser un etat plus recent, jusqu'a remettre en Pro un abonnement resilie (AC9 c)**
-- **Emplacement :** `apps/web/src/lib/inngest/process-stripe-event.ts:80-95` (deux pas, aucune option `concurrency`), `packages/db/migrations/0012_billing_event.sql:294-364` (aucune garde d'anteriorite), ADR-0016 « Verrou » (l. 49-50).
-- **Constat :** l'etat ecrit au pas 2 est celui relu au pas 1. D-061 veut justement que ce resultat soit memorise et rejoue sans rappeler Stripe, eventuellement longtemps apres, au fil des relances d'Inngest apres un echec de la base. Or rien n'ordonne les executions d'un meme abonnement : la fonction Inngest n'a pas de cle de concurrence, et la fonction SQL n'a pas de garde d'anteriorite. Le `FOR UPDATE` ordonne bien deux ecritures, mais il ne dit rien de l'age des instantanes qu'elles appliquent. Scenario : un evenement `updated` relit `active` (pas 1), son pas 2 echoue (base indisponible) ; Stripe resilie l'abonnement ; l'evenement `deleted` est traite entierement (Free, `subscription_canceled`) ; puis le pas 2 de `updated` est rejoue avec l'instantane `active`. La recherche par identifiant ne trouve plus rien (`stripe_subscription_id` est a NULL), la metadonnee designe l'organisation, aucune incoherence n'est detectee : l'organisation repasse Pro et un `subscription_started` est ecrit. Le meme entrelacement existe sans panne, en plus etroit, quand deux executions tournent en parallele.
-- **Consequence :** aucun evenement Stripe ne suivra pour un abonnement supprime, donc l'organisation reste Pro sans payer, indefiniment. Le journal facturable, append-only, garde un faux `subscription_started` qu'on ne pourra pas corriger. AC9 c (« jamais un etat perime ; un `updated` traite apres la suppression ne refait pas passer l'organisation en Pro ») n'est prouve qu'en sequence (`tests/billing/processing.test.ts:491-506`). ADR-0016 presente le verrou comme suffisant (« deux traitements concurrents s'ordonnent »), et c'est faux pour ce cas.
-- **Direction :** decision a faire trancher par l'humain, car elle touche D-061 et Q-2. Options : (a) serialiser par abonnement (`concurrency` avec une cle sur `event.data.subscriptionId`, limite 1) et relire Stripe dans le meme pas que l'ecriture, ou a chaque tentative du pas 2 ; (b) garde monotone en base, par exemple l'horodatage de relecture compare a celui de la derniere application, au prix d'une colonne ; (c) refuser en SQL de rattacher a nouveau un abonnement deja detache par un `deleted`. Ajouter un test du scenario « pas 2 rejoue apres un `deleted` complet », sur le modele d'AC8 e, puis mettre ADR-0016 et le registre a jour.
-
-**2. `metadata.requested_by` designe a la fois le souscripteur et l'auteur de l'annulation : une resiliation par Stripe seul est attribuee au souscripteur**
-- **Emplacement :** `apps/web/src/lib/billing/subscriptions.ts:135` (pose au Checkout) et `:156` (pose a l'annulation), `packages/db/migrations/0012_billing_event.sql:288-292` et `:398-404`, `tests/billing/processing.test.ts:257-285`, `docs/04-runbooks/stripe-facturation-locale.md:105`, contrat AC2 a et AC3 e.
-- **Constat :** AC2 a impose `subscription_data.metadata.requested_by = owner` sur tout abonnement cree par notre Checkout. Tout abonnement reel porte donc cette cle des sa creation. Quand Stripe resilie seul (impaye apres le reglage A6), la relecture renvoie encore le `requested_by` du souscripteur, et `subscription_canceled` est ecrit avec `actor_user_id` = ce souscripteur. AC3 e (« une resiliation par Stripe seul (impaye, sans `requested_by`) porte aussi `NULL` ») et le runbook §4 (« sans auteur (`actor_user_id` NULL) ») decrivent un cas qui n'arrive pas. Le test correspondant passe parce que sa fixture construit un abonnement sans `requested_by` (`stripeSubscriptionObject` avec `metadata = { organization_id }`), ce que notre propre Checkout ne produit jamais. L'incoherence vient du contrat (AC2 a contre AC3 e) ; le code l'applique fidelement.
-- **Consequence :** sur toute resiliation pour impaye, US-08.3 attribue l'arret a un owner qui ne l'a pas demande. `billing_event` est append-only, donc ces attributions sont definitives. C'est faux au regard du critere et du runbook, et le test ne peut pas le detecter.
-- **Direction :** remonter a l'humain, car le contrat change (cle d'AC2 a). Par exemple, deux cles distinctes : une cle de souscription posee au Checkout et lue seulement pour `subscription_started`, et une cle d'annulation posee par `cancelAtPeriodEnd` et lue seulement pour `subscription_canceled`. Aligner la fixture d'AC3 e sur un abonnement cree par notre Checkout (avec la cle de souscription), puis corriger le runbook §4 et le registre.
-
 ### A CORRIGER
 
-**3. AC9 e : la branche « evenement `deleted` force Free » n'est discriminee par aucun test**
-- **Emplacement :** `packages/db/migrations/0012_billing_event.sql:341`, `tests/billing/processing.test.ts:539-581` et `:207-238`.
-- **Constat :** le contrat exige « un test par ligne », dont « `deleted` -> Free ». Le tableau d'AC9 e n'a pas de ligne `deleted`, et AC3 c/d envoient `deleted` avec un statut relu `canceled`, qui donne Free par la branche du statut. Si l'on retire `v_event_type = 'customer.subscription.deleted' OR` de la ligne 341, toute la suite reste verte. De meme, « `incomplete` -> palier inchange » n'est verifie qu'en partant de Free, cas ou « inchange » et « Free » se confondent.
-- **Consequence :** la decision du journal (« `deleted` force Free quel que soit le statut relu ») n'est pas protegee contre une regression.
-- **Direction :** ajouter un cas `deleted` avec un statut relu non terminal (par exemple `active`) et attendre Free, plus un cas `incomplete` depuis Pro. Les deux sont de simples lignes en plus dans les tests.
+**1. Les limites de la garde monotone ne sont pas ecrites, et le commentaire SQL promet plus que la garde ne tient**
+- **Emplacement :** `packages/db/migrations/0013_subscription_sync_guard.sql:182-187` (« execution concurrente plus lente »), `apps/web/src/lib/inngest/process-stripe-event.ts:97-99`, ADR-0016 « Garde monotone » (l. 57-63), `process-stripe-event.ts:84-85` (toujours aucune option `concurrency`).
+- **Constat :** la garde ordonne les etats selon `stripe_read_at`, c'est-a-dire l'horloge du processus qui a recu la reponse de Stripe, lue apres cette reponse. Elle couvre le scenario bloquant de la premiere serie (rejeu de plusieurs secondes ou minutes, test a l'appui). Elle couvre aussi deux executions concurrentes dont les ecritures se croisent. En revanche, `stripe_read_at` borne l'instantane Stripe par le haut, pas par le bas. Une execution dont l'instantane est plus ancien, mais dont la reponse arrive plus tard (lenteur reseau, ou relance du SDK Stripe sur une autre execution), porte une marque plus recente et ecrase l'etat plus frais. De plus, les marques viennent d'horloges de processus differents : un ecart entre instances fait le meme effet. Aucune cle de concurrence Inngest ne serialise les executions d'un meme abonnement. Le cas reste etroit : au moment de la Checkout, un `created` relu `incomplete` peut arriver apres un `updated` relu `active`, et laisser `status = 'incomplete'` jusqu'a l'evenement suivant, sans effet sur le palier. Mais ni le commentaire SQL ni l'ADR ne le disent, et le commentaire affirme le contraire.
+- **Consequence :** un auditeur qui lit le code croit le desordre concurrent entierement couvert. La prochaine tranche qui s'appuiera sur `status` (affichage, relance d'impaye) heritera d'une garantie qui n'existe pas.
+- **Direction :** decrire la limite dans ADR-0016 (marque = instant de reception, horloges des instances) et corriger le commentaire de 0013 dans une prochaine migration, ou a defaut dans l'ADR seul (0013 est appliquee). L'option peu couteuse qui la ferme presque entierement : `concurrency: { key: "event.data.subscriptionId", limit: 1 }` sur la fonction Inngest. Elle merite une ligne au registre, retenue ou ecartee.
 
-**4. Organisation Free avec un abonnement `incomplete` rattache : un second Checkout est accepte, puis son abonnement paye est refuse**
-- **Emplacement :** `apps/web/src/lib/billing/subscriptions.ts:111-113`, `packages/db/migrations/0012_billing_event.sql:327-330` et `:350-364`.
-- **Constat :** sur Free, `incomplete` rattache `stripe_subscription_id` en gardant le palier Free (comme le prevoit Q-8). `changeTier` ne regarde que `tier` et ouvre un nouveau Checkout. Les evenements du second abonnement, paye, levent alors SG006 (« un autre abonnement deja rattache ») et ne sont jamais rejoues. L'organisation reste Free jusqu'a l'expiration du premier puis un evenement ulterieur du second, typiquement le renouvellement suivant.
-- **Consequence :** un client qui paie reste Free pendant jusqu'a une periode de facturation. Le cas n'est ni teste ni ecrit dans une decision.
-- **Direction :** faire trancher le comportement par l'humain : 409 sur `pro` si un abonnement est rattache, quel que soit le palier, ou rattachement du plus recent dans ce cas precis. A defaut, l'inscrire au backlog avec sa consequence.
+**2. Le refus « abonnement `incomplete` rattache » renvoie un message et une description de contrat qui ne le couvrent pas**
+- **Emplacement :** `apps/web/src/lib/errors.ts:61-65`, `docs/02-architecture/api-contracts/subscriptions.ts:77`, `apps/web/src/lib/billing/subscriptions.ts:116`.
+- **Constat :** D-071 (3) ajoute un nouveau cas de `409 ALREADY_ON_TIER` : `POST pro` sur une organisation **Free** dont un abonnement est rattache. Le message renvoye au client dit « L'organisation est deja sur ce palier, ou son annulation est deja programmee. » : c'est faux pour une organisation Free. Le `trigger` du 409 dans le contrat `subscriptions.ts` n'a pas ete amende (seul AC17 l'a ete).
+- **Consequence :** l'owner d'une organisation Free recoit un message qui contredit le `GET` (`tier: "free"`). Il ne peut pas savoir qu'il doit attendre la fin du paiement en cours, ou son expiration par Stripe en environ 23 h. Le contrat machine reste en retard sur la decision.
+- **Direction :** amender le `trigger` du 409 dans `subscriptions.ts`, et elargir le message (par exemple « ... ou un abonnement est deja en cours de paiement »). Le code `ALREADY_ON_TIER` reste inchange. `contract-guardian` jugera l'anti-regression du contrat.
 
-**5. Journal de tranche perime et journal de projet absent**
-- **Emplacement :** `docs/03-slices/002-progress.md:6` et `:8`, `docs/00-context/journal/` (pas de `14-*`).
-- **Constat :** l'etat annonce « 242 tests, 21 fichiers », « attente humaine : deux questions (503 hors contrat, `instrumentation.ts`) » et le dernier commit `ee43428`. Ces deux questions sont tranchees (D-070) et quatre commits ont suivi, dont `6de91b2`. L'entree 14 du journal de projet, prevue par la tranche et verifiee par `close-slice.sh`, n'existe pas encore.
-- **Consequence :** un lecteur qui reprend la tranche sur la foi du journal croit qu'elle est bloquee. La cloture echouera sur le controle du journal de projet.
-- **Direction :** mettre a jour la section Etat (245/22, dernier commit, plus de blocage) et ecrire `journal/14-*` avec sa ligne dans `JOURNAL.md` avant `close-slice.sh`.
-
-**6. `INNGEST_EVENT_KEY` exigee hors mode developpement sans decision ecrite ni test**
-- **Emplacement :** `apps/web/src/lib/env.ts:64-66`, contrat l. 144, D-069.
-- **Constat :** le contrat et A2 n'exigent que `INNGEST_SIGNING_KEY`. Le schema refuse aussi le demarrage sans `INNGEST_EVENT_KEY`. Le choix est raisonnable (sans elle, `inngest.send` echoue en production), mais il n'apparait ni dans le journal ni au registre (D-069 ne le cite pas), et aucun test ne couvre son absence. `validProductionEnv` la fournit toujours.
-- **Consequence :** c'est une regle de demarrage en production non documentee. Un auditeur ne peut pas savoir si elle est voulue.
-- **Direction :** une ligne dans les Decisions du journal (et dans D-069 ou une nouvelle entree), plus un cas « `INNGEST_EVENT_KEY` absente hors mode developpement -> refus » dans `environment.test.ts`.
-
-**7. Table des migrations de l'ERD coupee en deux**
-- **Emplacement :** `docs/02-architecture/ERD.md:976` (ligne vide entre les lignes 0011 et 0012).
-- **Constat :** la ligne vide termine le tableau Markdown. La ligne 0012 devient un paragraphe isole, sans en-tete, rendu comme du texte brut.
-- **Consequence :** la migration de la tranche est mal lisible dans le document de reference.
-- **Direction :** supprimer la ligne vide.
+**3. Journal de tranche en partie perime**
+- **Emplacement :** `docs/03-slices/002-progress.md:8`, `:19`, `:20`.
+- **Constat :** l'Etat est a jour. En revanche, « Dernier commit » renvoie a `git log` au lieu de nommer a049621 (`rules/git.md` : mettre a jour le dernier commit). La couche Documentation indique encore « reste : journal de projet 14 », alors que l'entree existe. La suite est annoncee a « 242 tests », pour 274 en realite.
+- **Consequence :** a la reprise apres interruption, le journal dit d'ecrire une entree deja ecrite. L'ecart de 32 tests ne permet pas de savoir lesquels ont ete ajoutes.
+- **Direction :** trois lignes a corriger avant `close-slice.sh`.
 
 ### SUGGESTION
 
-**8. La regle `no-restricted-imports` d'AC16 se contourne par des formes d'import non couvertes**
-- **Emplacement :** `eslint.config.mjs:74` et `:85`.
-- **Constat :** l'expression ne couvre ni l'extension `.js` (`@/lib/inngest/billing-db.js`, resolu vers le `.ts` par TypeScript), ni `../billing-db` depuis un sous-dossier de `lib/inngest/`, ni `import()` dynamique. Par ailleurs, la regle entiere est mise a `"off"` pour `process-stripe-event.ts`, ce qui y desactivera toute future restriction d'import, pas seulement celle-ci.
-- **Direction :** elargir l'expression a toute fin de chemin `billing-db` avec ou sans extension, ajouter un cas de test par forme, et reexprimer l'exception par une surcharge qui ne retire que ce motif. `security-auditor` jugera l'enjeu.
+**4. `stripe_read_at` n'est borne ni par le haut ni par rapport a l'horloge de la base**
+- **Emplacement :** `packages/db/migrations/0013_subscription_sync_guard.sql:127-135` et `:240`.
+- **Constat :** une marque dans le futur, par exemple une instance dont l'horloge avance de plusieurs heures, est ecrite dans `stripe_synced_at`. Tous les etats suivants deviennent alors `stale`, journalises en `info` seulement, jusqu'a ce que l'horloge les rattrape. L'organisation peut rester Pro apres une resiliation pendant ce temps.
+- **Direction :** refuser en SG003 un `stripe_read_at` superieur a `now()` plus une tolerance (quelques minutes), avec un test, dans la prochaine migration qui touchera la fonction. Ou ecrire la limite dans ADR-0016 avec le constat 1.
 
-**9. SG004 compare des UUID comme du texte**
-- **Emplacement :** `packages/db/migrations/0012_billing_event.sql:304`.
-- **Constat :** `v_metadata_org IS DISTINCT FROM v_org::text` est sensible a la casse, alors que la branche de premier rattachement convertit en `uuid`. Une metadonnee en majuscules designant la bonne organisation leverait SG004, refus definitif.
-- **Direction :** comparer en `uuid` quand la valeur respecte `c_uuid_pattern`, et lever SG004 sinon.
+**5. `canceled_by` survit a une reactivation**
+- **Emplacement :** `apps/web/src/lib/billing/subscriptions.ts:160`, `apps/web/src/lib/inngest/process-stripe-event.ts:54-55`.
+- **Constat :** la cle n'est jamais effacee. Si une annulation programmee est retiree (tableau de bord Stripe aujourd'hui, ou tranche Q-4 plus tard), puis que Stripe resilie pour impaye, l'owner qui avait demande puis retire l'annulation est enregistre comme auteur. Le cas est hors perimetre (Q-4), mais rien ne le signale a la tranche qui l'ouvrira.
+- **Direction :** une ligne au backlog, a cote de Q-4 : « la reactivation efface `canceled_by` ».
 
-**10. La recherche par identifiant precede le verrou**
-- **Emplacement :** `packages/db/migrations/0012_billing_event.sql:295-321` et commentaire l. 172-176.
-- **Constat :** l'organisation est resolue avant le `FOR UPDATE`. Les controles Q-7 faits ensuite sur `v_current` rattrapent les cas connus, mais le commentaire « verrouillee avant toute decision » surestime la garantie. Ce point s'ajoute au constat 1.
-- **Direction :** preciser le commentaire et l'ADR quand le constat 1 sera traite.
+**6. La garde n'est testee qu'au travers de la fonction Inngest**
+- **Emplacement :** `tests/billing/database.test.ts`, `tests/billing/review-corrections.test.ts:157-198`.
+- **Constat :** deux branches de la garde n'ont aucun test : l'egalite des marques (choix explicite du journal : « un etat relu au meme instant s'applique ») et l'ordre « `stale` avant SG006 » (un etat perime ne leve jamais SG006). Un `<` change en `<=`, ou la garde deplacee apres les controles Q-7, laisseraient la suite verte.
+- **Direction :** deux cas en appel direct de la fonction dans `database.test.ts`.
+
+**7. Commits de corrections crees en lot, avec des etats intermediaires rouges**
+- **Emplacement :** d67dfe6, d9a1b62, 563f580 et 2accc16, crees en moins de trois secondes.
+- **Constat :** d67dfe6 rend `stripe_read_at` obligatoire, alors que `process-stripe-event.ts` ne l'envoie qu'a partir de d9a1b62 et que `database.test.ts` ne la fournit qu'a partir de 2accc16. Ces deux commits ne passent donc pas les tests de leur couche (`rules/git.md`). Les tests sont committes apres le code qu'ils couvrent. Les corps de commit sont vides alors que le pourquoi n'est pas evident (garde, auteur). Le squash a la fusion limite l'effet sur `main`.
+- **Direction :** rien a reecrire, la branche sera ecrasee au squash. Pour les prochaines corrections, committer chaque couche verte au fil de l'eau, avec une ligne de pourquoi dans le corps.
+
+**8. Petites derives de commentaires**
+- **Emplacement :** `apps/web/src/instrumentation.ts:139-143`, ADR-0016 titre de section « (migration 0012) » (l. 34).
+- **Constat :** le commentaire du crochet liste encore les seuls refus d'avant D-071 : il ne cite pas `INNGEST_EVENT_KEY`. La section de l'ADR attribue la fonction a 0012, alors qu'elle est remplacee par 0013.
+- **Direction :** les aligner a la prochaine occasion.
+
+## Suivi des constats de la premiere serie
+
+| # | Gravite (1re serie) | Constat | Etat |
+|---|---|---|---|
+| 1 | BLOQUANT | Instantane perime rejoue apres un `deleted` | **Corrige.** Garde monotone (`stripe_synced_at`, 0013, D-071 (1)), test discriminant `review-corrections.test.ts:158`. Limite residuelle en concurrence non ecrite : constat 1 ci-dessus. |
+| 2 | BLOQUANT | `requested_by` sert a la fois au souscripteur et a l'auteur de l'annulation | **Corrige.** Cle `canceled_by` (D-071 (2)), lue seulement quand le statut relu mene a Free ; AC3 c/e amendes ; cas « souscripteur present, aucun `canceled_by` » ajoute ; runbook §4 desormais exact. |
+| 3 | A CORRIGER | Branche « `deleted` force Free » non discriminee | **Corrige par changement de regle.** D-071 (4) : le statut relu decide seul ; test « `deleted` relu actif » (`review-corrections.test.ts:218`) et « `incomplete` depuis Pro » (`:229`). |
+| 4 | A CORRIGER | Second Checkout sur un Free avec abonnement `incomplete` | **Corrige.** 409 (D-071 (3)), AC17 amende, test `review-corrections.test.ts:243`. Message et contrat a aligner : constat 2 ci-dessus. Double Checkout paye : backlog (INFO-3). |
+| 5 | A CORRIGER | Journal de tranche perime, journal de projet absent | **Corrige en partie.** Etat a jour, entree 14 ecrite et indexee ; trois lignes encore perimees : constat 3 ci-dessus. |
+| 6 | A CORRIGER | `INNGEST_EVENT_KEY` exigee sans decision ni test | **Corrige.** D-071, commentaire d'`env.ts`, runbook §5, test `review-corrections.test.ts:277`. |
+| 7 | A CORRIGER | Table des migrations de l'ERD coupee | **Corrige** (366190d), ligne 0013 ajoutee. |
+| 8 | SUGGESTION | Regle d'import AC16 contournable | **Corrige.** Regle etendue, un test par forme (`lint-isolation-forms.test.ts`), exception limitee a `./billing-db`. |
+| 9 | SUGGESTION | SG004 compare des UUID en texte | **Corrige.** Comparaison en `uuid` (0013:159-163), UUID normalise a l'entree de l'API, test en majuscules de bout en bout. |
+| 10 | SUGGESTION | Commentaire du verrou trop affirmatif | **Corrige.** En-tete de 0013 point 4 et ADR-0016 « Verrou » decrivent l'ordre reel. |
 
 ## Bilan
-- **Solide :** fonction definer rigoureuse (validation `jsonb` complete, contexte ambiant efface, codes SG distincts, rejeu absorbe), isolement de `signet_billing` en base et au lint, webhook verifie avant analyse avec 503 borne, refus de demarrer prouve de bout en bout, documentation abondante et tracee.
-- **Fragile :** l'ordre des instantanes Stripe entre executions (constat 1), l'attribution des annulations (constat 2), une branche Q-8 sans test discriminant (constat 3).
-- **Manquant :** decision humaine sur les constats 1, 2 et 4, journal de tranche a jour, entree 14 du journal de projet, trace de la regle `INNGEST_EVENT_KEY`.
+- **Solide :** les deux bloquants sont corriges sur decision humaine ecrite et prouves par des tests qui echoueraient sans la correction ; aucun test n'est affaibli ; l'isolement de `signet_billing` est nettement renforce et teste forme par forme ; la documentation (registre, contrat, ADR, ERD, journaux) suit chaque changement.
+- **Fragile :** la garde monotone repose sur des horloges de processus et sur l'instant de reception, sans serialisation par abonnement et sans borne superieure (constats 1 et 4) ; deux branches de la garde n'ont pas de test direct.
+- **Manquant :** la limite de la garde ecrite dans ADR-0016, le contrat et le message du 409 pour le cas `incomplete`, trois lignes du journal de tranche.
 
-REVIEW: FAIL
+REVIEW: PASS

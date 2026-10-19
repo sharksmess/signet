@@ -1,55 +1,49 @@
-## Rapport de controle des contrats, tranche 002 (abonnement et changement de palier)
+## Rapport de contrôle des contrats, tranche 002 (abonnement et changement de palier), seconde série
 
-**Verdict : aucune rupture de contrat constatee.** Les seuls changements de contrat sont les trois autorises par l'humain : `409 ALREADY_ON_TIER` (Q-3, D-057), `503 SERVICE_UNAVAILABLE` sur le webhook, et `503` dans le type des statuts de `_contract.ts` (D-070). Je n'ai lance ni `pnpm test` ni le build, et je n'ai pas lu l'environnement. Sources : `git diff main...HEAD`, le code et la documentation du depot.
+**Verdict : aucune rupture de contrat constatée.** Le contrôle a été refait de façon indépendante sur `git diff main...HEAD` (HEAD a049621). Je n'ai lancé ni `pnpm test` ni le build. Je me suis appuyé sur `git`, la lecture du code, des migrations, des contrats et de l'ERD. Je n'ai pas lu les fichiers `.env*.local` ni l'environnement.
 
-### 1. Contrats d'API (`docs/02-architecture/api-contracts/`)
-- `_contract.ts:22` : l'union des statuts passe de `... | 502` a `... | 502 | 503`. Cet ajout est additif et seul changement du fichier.
-- `subscriptions.ts:77` : `changeTier` gagne `409 ALREADY_ON_TIER`. Les erreurs 401, 404, 403 et 502 sont inchangees. L'entree (`organizationId`, `tier`) et la sortie (`redirect_to_checkout` ou `pending`) sont inchangees. Ajouter un code d'erreur n'est pas une rupture ; ce cas ne retournait auparavant rien de defini.
-- `subscriptions.ts:108` : le webhook gagne `503 SERVICE_UNAVAILABLE`. Le `400 INVALID_SIGNATURE`, l'entree (`rawBody`, `signature`), la sortie `{ received: true }` et la regle d'idempotence sont inchanges. Le 503 sert a faire renvoyer l'evenement par Stripe, qui le retente deja sur tout 5xx. Aucun consommateur existant n'est casse.
-- `getSubscription` est inchange. `organizations.ts` n'apparait pas dans le diff. Aucun test de `tests/organizations/` n'est modifie (`git diff --stat` vide).
-- Aucune route, methode, champ ou enumeration existants n'est supprime, renomme ou deplace.
+> Note de l'orchestrateur : rapport rendu par `contract-guardian` (sans droit d'écriture sur le dépôt) et recopié tel quel. Il remplace le rapport de la première série (PASS, 2026-10-15).
 
-### 2. Implementation conforme au contrat
-- `apps/web/src/app/api/organizations/[organizationId]/subscription/route.ts`
-  - Les erreurs sortent en `{ code, message }` avec le statut du contrat (lignes 7-9).
-  - Le GET valide `params` avec `getSubscriptionContract.input` (ligne 19). Le POST valide `{ ...body, organizationId }` avec `changeTierContract.input` (ligne 41). L'`organizationId` du chemin fait autorite. Les entrees invalides donnent 422 `VALIDATION_FAILED`, comme en 001.
-  - Les sorties sont `{ organizationId, tier, status, cancelAtPeriodEnd, currentPeriodEnd }` (`apps/web/src/lib/billing/subscriptions.ts:80-86`, date en ISO ou `null`) et `{ action: "redirect_to_checkout", checkoutUrl }` ou `{ action: "pending", organizationId }` (lignes 142 et 158).
-  - Les codes renvoyes sont 401, 404 (non membre ou organisation inexistante), 403 (role `member`), 409 (lignes 112 et 118) et 502 (lignes 141, 144 et 160, sans detail Stripe).
-  - Les conditions du 409 correspondent au texte du contrat : pro sur un Pro, free sur un Free, free sur un Pro dont l'annulation est deja programmee. Aucun appel Stripe n'est fait dans ces cas.
-- `apps/web/src/app/api/webhooks/stripe/route.ts`
-  - Signature invalide ou absente : 400 `INVALID_SIGNATURE` (lignes 62-70). La verification a lieu sur le corps brut, avant tout `JSON.parse`.
-  - Evenement signe d'un type non traite, ou sans identifiant d'abonnement : 200 `{ received: true }` (lignes 72-81).
-  - File d'attente refusee ou sans reponse en 5 s : 503 `SERVICE_UNAVAILABLE` (lignes 83-92).
-  - Evenement mis en file : 200 `{ received: true }` (ligne 93). La deduplication se fait sur `event.id` (ligne 47). La route ne touche pas la base.
-- `apps/web/src/app/api/inngest/route.ts` : point de service Inngest (GET, POST, PUT), absent du contrat `subscriptions.ts`. C'est une route nouvelle, donc additive, reservee a l'integration Inngest.
-- `apps/web/src/lib/errors.ts` : `ApiErrorCode` et `ApiError.status` sont etendus (`ALREADY_ON_TIER`, `STRIPE_UNAVAILABLE`, `INVALID_SIGNATURE`, `SERVICE_UNAVAILABLE` ; statuts 400, 409, 502, 503). Les quatre codes et les quatre statuts de 001 sont conserves, ainsi que les fabriques existantes. Les routes `organizations/route.ts` et `organizations/[organizationId]/route.ts` importent ces types. Elargir une union de sortie n'est pas une rupture, car ce type est interne a l'application et les usages de 001 compilent sans changement.
+### 1. Contrats d'API
+- **Contrats de la tranche 001 inchangés.** `git diff main...HEAD -- docs/02-architecture/api-contracts/organizations.ts` est vide. Aucun fichier de `apps/web/src/app/api/organizations/**` n'est modifié hormis l'ajout de `.../[organizationId]/subscription/route.ts` (fichier nouveau). Aucun test de 001 n'est modifié.
+- **`_contract.ts`.** L'union des statuts gagne `503` : élargissement sans retrait, autorisé par D-070.
+- **`subscriptions.ts`.** Deux ajouts seulement : `409 ALREADY_ON_TIER` sur `changeTier` (D-057, étendu D-071) et `503 SERVICE_UNAVAILABLE` sur `stripeWebhook` (D-070). Schémas d'entrée et de sortie, routes, méthodes et autres codes (401, 403, 404, 502, 400 `INVALID_SIGNATURE`) inchangés.
+- **`GET` sous `/subscription`.** La réponse `{organizationId, tier, status, cancelAtPeriodEnd, currentPeriodEnd}` correspond à `getSubscriptionOutput` (`currentPeriodEnd` en ISO ou `null`). Codes : 401, 422, 404 (non membre et organisation inexistante : même réponse), 403 (rôle `member`).
+- **`POST` sous `/subscription`.** Sorties `{action:"redirect_to_checkout", checkoutUrl}` et `{action:"pending", organizationId}`, conformes à `changeTierOutput`. Codes : 401, 422, 404, 403, 409, 502. `organizationId` du chemin fait autorité sur le corps ; un corps non-objet donne 422. Le 422 `VALIDATION_FAILED` n'est pas listé dans `errors[]` du contrat mais suit le comportement déjà en place en 001 : pas un nouveau code.
+- **Normalisation en minuscules de `organizationId`.** Appliquée après validation par `Uuid`, qui accepte déjà les majuscules. Ni la forme des réponses ni les codes ne changent ; la valeur renvoyée est un sous-ensemble des valeurs valides du contrat.
+- **`409 ALREADY_ON_TIER`.** Il couvre Pro sur Pro, Pro sur un Free avec abonnement Stripe rattaché (`incomplete`, D-071), Free sur Free, et Free sur un Pro dont l'annulation est déjà programmée. Aucun appel Stripe dans ces cas.
+- **Webhook.** 400 `INVALID_SIGNATURE` avant tout parse, 200 `{received:true}` pour les types ignorés, 503 `SERVICE_UNAVAILABLE` si la file échoue ou dépasse 5 s. Les corps d'erreur ont la forme `{code, message}` des routes de 001.
 
-### 3. Schema de base
-- **Migrations existantes.** `git diff --name-status` ne montre que des ajouts : `0011_billing_role.sql`, `0012_billing_event.sql` et `meta/0002_snapshot.json`. Les migrations 0001 a 0010 sont inchangees. Je n'ai pas diffe 0011 contre un etat anterieur : elle est nouvelle dans cette branche.
-- **`meta/_journal.json`.** Une entree est ajoutee (`idx` 2, tag `0012_billing_event`), et les deux entrees precedentes sont intactes. Le saut de numerotation par rapport a 0011 est documente dans `ERD.md` (section « Numerotation »). Il suit le meme principe que pour 0004 a 0010, qui sont ecrites a la main et ne figurent pas dans ce journal.
-- **`0012_billing_event.sql`, partie generee** (lignes 1-24) conforme a l'ERD §8.2.
-  - Colonnes : `id` en `uuid` avec `signet.uuidv7()`, `organization_id` `NOT NULL` **sans** cle etrangere, `type`, `from_tier`, `to_tier` et `stripe_event_id` nullable, `actor_user_id` en `ON DELETE SET NULL`, `occurred_at` et `recorded_at` `NOT NULL`.
-  - Contraintes : trois `CHECK` d'enumeration, `billing_event_shape` identique a l'ERD, et `billing_event_stripe_event_length_chk` (ajout restrictif, nouvelle table).
-  - Index : `billing_event_org_time_idx` (`occurred_at DESC`, `id DESC`) et l'index unique partiel `billing_event_stripe_idx`.
-  - Le `NOT NULL` sans valeur par defaut est sans effet sur le contrat, car la table est nouvelle.
-- **Partie ecrite a la main** (lignes 26-430).
-  - RLS activee et forcee ; `GRANT SELECT` seul a `signet_app` ; `INSERT` seul a `signet_definer` ; trigger `billing_event_immutable` (`SG007`).
-  - Le `REVOKE` va au-dela de l'ERD §8.2 (qui cite `UPDATE, DELETE`) : il couvre aussi `INSERT` et `TRUNCATE`. C'est un durcissement documente dans l'ERD.
-  - `GRANT UPDATE ON subscription TO signet_definer` : nouveau droit pour un role interne, aucune colonne modifiee.
-  - Politiques `subscription_definer_read`, `subscription_definer_update` et `subscription_definer_stripe_lookup` : nouvelles, additives.
-  - `signet.apply_stripe_subscription(jsonb)` : fonction nouvelle, `EXECUTE` revoque a `PUBLIC` puis accorde a `signet_billing` seul.
-- **Aucune colonne de `subscription` modifiee.** La migration ne contient aucun `ALTER TABLE` sur `subscription`, aucun `DROP`, ni aucun `CREATE OR REPLACE`. Elle contient un seul `UPDATE public.subscription` (ligne 368, dans la fonction nouvelle). `propagate_subscription_quota` et `quota_for_tier` n'apparaissent pas dans 0012, donc ils sont inchanges.
-- **`create_organization` reste le seul `INSERT INTO subscription`.** Les deux seuls `INSERT` de 0012 portent sur `billing_event` (lignes 398 et 408).
-- **`packages/db/src/schema/billing.ts`.** Il est coherent avec la migration : meme liste de colonnes, memes `CHECK`, memes index, partiel compris. `schema/index.ts` ajoute seulement `export * from "./billing"`.
-- **ERD.** Les sections §1, §5, §6, §8.1, §8.2, §9 et « Migrations appliquees » sont mises a jour dans la meme branche. L'ERD documente la table, le role `signet_billing` et les codes `SG003` a `SG007`.
+### 2. Types partagés
+- **`ApiError` / `ApiErrorCode` (`apps/web/src/lib/errors.ts`).** Le `status` passe de `401 | 403 | 404 | 422` à `400 | 401 | 403 | 404 | 409 | 422 | 502 | 503` ; les codes gagnent `ALREADY_ON_TIER`, `STRIPE_UNAVAILABLE`, `INVALID_SIGNATURE`, `SERVICE_UNAVAILABLE`. Élargissement sans retrait ; les constructeurs existants sont intacts ; type interne à `apps/web`.
+- **`ServerEnv`.** Type nouveau (`env.ts` est ajouté par la tranche), sans `DATABASE_URL_BILLING`, lu par un accesseur dédié de la fonction Inngest. Aucun usage de 001 n'est affecté.
+- **`ApplyStripeSubscriptionInput`.** Lié à la fonction de base de 0012 ; voir le schéma ci-dessous.
 
-### 4. Evenements et files de messages
-- L'evenement Inngest `STRIPE_SUBSCRIPTION_EVENT` et la fonction `process-stripe-event` sont nouveaux dans cette tranche. Il n'existe donc aucun consommateur anterieur dont la forme serait cassee. Le payload (`stripeEventId`, `type`, `subscriptionId`, `created`) est cree ici.
-- Le webhook Stripe est une integration tierce existante par contrat. Sa forme d'entree (corps brut et en-tete `stripe-signature`) et ses sorties (200 `{ received: true }` et 400) sont inchangees.
+### 3. Schéma de base
+- **Migrations existantes intactes.** `git diff --name-status main...HEAD -- packages/db/migrations` ne liste que des ajouts : `0011_billing_role.sql`, `0012_billing_event.sql`, `0013_subscription_sync_guard.sql`, `meta/0002_snapshot.json`, `meta/0003_snapshot.json`. Seul `meta/_journal.json` est modifié. 0001 à 0010 ne sont pas touchées.
+- **`_journal.json`.** Deux entrées ajoutées (idx 2 `0012_billing_event`, idx 3 `0013_subscription_sync_guard`) ; les deux entrées de `main` sont inchangées. 0011 n'y figure pas, comme les migrations manuelles 0004 à 0010.
+- **0012 non modifiée par 0013.** `git log main..HEAD` sur 0012 ne montre que le commit de création (3399cd1).
+- **0013.**
+  - `ADD COLUMN "stripe_synced_at" timestamptz` est nullable et sans `NOT NULL` : ajout compatible.
+  - `CREATE OR REPLACE FUNCTION signet.apply_stripe_subscription(p_input jsonb) RETURNS text` garde la même signature et le même type de retour. `CREATE OR REPLACE` conserve propriétaire et droits (`EXECUTE` à `signet_billing`).
+  - La clé d'entrée `stripe_read_at` est nouvelle, contrôlée par `SG003` ; la fonction (0012) n'avait aucun appelant livré dans une tranche antérieure.
+  - Le résultat `stale` s'ajoute aux résultats retournés, sans retrait.
+- **Cohérence avec Drizzle.** `organizations.ts` ajoute `stripeSyncedAt` (nullable), conforme à 0013. `billing.ts` (nouveau) correspond à `billing_event` de 0012 (contraintes `billing_event_type_chk`, `billing_event_shape`, longueur de `stripe_event_id`). `schema/index.ts` exporte `billing`.
+- **Seul INSERT dans `subscription`.** Aucune migration de 002 n'insère dans `subscription`. Les seuls `INSERT INTO subscription` du dépôt sont dans `create_organization` (0003, remplacée en 0005). 0012 et 0013 n'insèrent que dans `billing_event`.
+- **ERD à jour.** §1 (rôle `signet_billing`, codes `SG003` à `SG007`), table des fonctions `SECURITY DEFINER` (`apply_stripe_subscription`), §8.1 (`stripe_synced_at`), politiques de `subscription` et `billing_event`, table des migrations (0011, 0012, 0013), matrice RLS.
+- **`billing_event`.** Table nouvelle ; `organization_id` sans clé étrangère, conformément à l'ERD §8.2.
 
-### 5. Remarques non bloquantes
-- Le contrat `subscriptions.ts` ne liste pas `422 VALIDATION_FAILED` dans `errors[]` de `getSubscription` et `changeTier`. Les routes le renvoient comme en 001, et l'union `status` de `_contract.ts` contient deja 422. C'est un ecart de documentation preexistant, ni une rupture ni un ajout de cette tranche.
-- Compatibilite : aucune strategie (champ deprecie, double ecriture, versionnement) n'est necessaire, faute de rupture.
+### 4. Événements et files de messages
+- L'événement Inngest `StripeSubscriptionEventData` (`stripeEventId`, `type`, `subscriptionId`, `created`) et sa fonction de traitement sont créés dans cette tranche : aucun consommateur antérieur.
+- Le webhook Stripe est une route nouvelle ; aucun webhook existant n'est modifié.
+
+### Observations (hors rupture)
+- **O-1.** Le libellé du `trigger` du `409` dans `docs/02-architecture/api-contracts/subscriptions.ts` ne mentionne pas explicitement le cas D-071 « abonnement Stripe déjà rattaché à un Free » (`incomplete`). Le code est identique et autorisé, donc ce n'est pas une rupture, mais un client qui ne lit que le libellé ne sait pas que `POST pro` peut renvoyer 409 sur un Free. L'orchestrateur peut décider d'ajouter ce cas au libellé.
+- **O-2.** La normalisation en minuscules fait que `organizationId` dans la réponse `pending` est la forme canonique et non celle envoyée en majuscules. C'est conforme à `Uuid`, mais un client qui compare en texte sensible à la casse doit en tenir compte.
+
+### Synthèse
+- Aucun champ, code, route, méthode, énumération ou colonne n'est supprimé, renommé ou changé de sens.
+- Les trois modifications de contrat (409, 503 webhook, 503 dans `_contract.ts`) sont autorisées par l'humain (D-057, D-070, D-071).
 - Aucun ADR de migration n'est requis au titre des contrats.
 
 CONTRACTS: PASS
