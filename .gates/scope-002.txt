@@ -39,3 +39,4 @@ tests/helpers/db.ts
 tests/helpers/billing*.ts
 apps/web/src/instrumentation.ts
 docs/02-architecture/api-contracts/_contract.ts
+packages/db/src/schema/organizations.ts
