@@ -138,6 +138,8 @@ export async function findApplyFunction(): Promise<ApplyFunction> {
  * l'implementeur, voir rapport) ; valeurs en texte JSON comme les rend Stripe.
  */
 export interface ApplyInput {
+  /** Instant de la relecture Stripe (ISO 8601) : garde monotone (D-071). */
+  stripe_read_at: string;
   stripe_event_id: string;
   /** Instant de l'evenement selon Stripe (ISO 8601). */
   occurred_at: string;

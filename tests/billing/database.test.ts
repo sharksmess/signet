@@ -63,6 +63,7 @@ function expectRefusalForTheRightReason(failure: PgFailure | undefined, what: st
 function applyInput(overrides: Partial<ApplyInput> & Pick<ApplyInput, "stripe_subscription_id" | "metadata_organization_id">): ApplyInput {
   return {
     stripe_event_id: uniqueId("evt_db"),
+    stripe_read_at: new Date().toISOString(),
     occurred_at: new Date(Date.now() - 60_000).toISOString(),
     event_type: "customer.subscription.updated",
     stripe_customer_id: uniqueId("cus_db"),

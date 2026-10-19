@@ -206,11 +206,14 @@ describe("AC3 — Pro -> Free, annulation en fin de periode (US-08.1, US-08.3)",
 
   it("AC3 (c) : customer.subscription.deleted -> Free / active, abonnement et fin de periode a NULL, client conserve, plafond 50, subscription_canceled porte par l'owner demandeur", async () => {
     const pro = await createProOrganization({ name: "AC3 c" });
+    // D-071 : l'auteur d'une annulation est lu dans `canceled_by`, pose par la
+    // demande d'annulation de l'owner (AC3 a), et non dans `requested_by` (Checkout).
     const stripeState = subscriptionFor(pro.org, {
       id: pro.subscriptionId,
       customer: pro.customerId,
       status: "canceled",
       cancelAtPeriodEnd: false,
+      metadata: { canceled_by: pro.org.owner.userId },
     });
     programRetrieve(fakes.stripe, pro.subscriptionId, () => stripeState);
     const event = makeEvent("customer.subscription.deleted", stripeState);
@@ -255,18 +258,31 @@ describe("AC3 — Pro -> Free, annulation en fin de periode (US-08.1, US-08.3)",
   });
 
   describe("AC3 (e) — auteur de l'annulation disparu ou inconnu (A4)", () => {
-    const authors: Array<{ label: string; requestedBy: () => Promise<string | undefined> }> = [
-      { label: "utilisateur supprime", requestedBy: () => deletedUserId() },
-      { label: "UUID sans utilisateur", requestedBy: () => Promise.resolve(randomUUID()) },
-      { label: "valeur qui n'est pas un UUID", requestedBy: () => Promise.resolve("pas-un-uuid") },
-      { label: "resiliation par Stripe seul (aucun requested_by)", requestedBy: () => Promise.resolve(undefined) },
+    // D-071 : l'auteur d'une annulation est `canceled_by` ; `requested_by`
+    // (souscripteur, pose au Checkout) n'est jamais lu pour un subscription_canceled.
+    const authors: Array<{
+      label: string;
+      requestedBy: (owner: string) => string | undefined;
+      canceledBy: () => Promise<string | undefined>;
+    }> = [
+      { label: "utilisateur supprime", requestedBy: () => undefined, canceledBy: () => deletedUserId() },
+      { label: "UUID sans utilisateur", requestedBy: () => undefined, canceledBy: () => Promise.resolve(randomUUID()) },
+      { label: "valeur qui n'est pas un UUID", requestedBy: () => undefined, canceledBy: () => Promise.resolve("pas-un-uuid") },
+      { label: "resiliation par Stripe seul (aucune metadonnee d'auteur)", requestedBy: () => undefined, canceledBy: () => Promise.resolve(undefined) },
+      {
+        label: "resiliation par Stripe seul d'un abonnement souscrit par l'owner (requested_by pose au Checkout, aucun canceled_by)",
+        requestedBy: (owner) => owner,
+        canceledBy: () => Promise.resolve(undefined),
+      },
     ];
 
-    it.each(authors)("AC3 (e) : $label -> subscription_canceled ecrit avec actor_user_id NULL, sans erreur", async ({ requestedBy }) => {
+    it.each(authors)("AC3 (e) : $label -> subscription_canceled ecrit avec actor_user_id NULL, sans erreur", async ({ requestedBy, canceledBy }) => {
       const pro = await createProOrganization({ name: "AC3 e" });
-      const author = await requestedBy();
+      const author = await canceledBy();
+      const subscriber = requestedBy(pro.org.owner.userId);
       const metadata: Record<string, string> = { organization_id: pro.org.organizationId };
-      if (author !== undefined) metadata.requested_by = author;
+      if (author !== undefined) metadata.canceled_by = author;
+      if (subscriber !== undefined) metadata.requested_by = subscriber;
       const stripeState = stripeSubscriptionObject({
         id: pro.subscriptionId,
         customer: pro.customerId,
