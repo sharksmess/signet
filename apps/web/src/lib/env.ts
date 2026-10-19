@@ -66,7 +66,16 @@ const serverEnvSchema = z
     }
   });
 
-export type ServerEnv = z.infer<typeof serverEnvSchema>;
+type ValidatedEnv = z.infer<typeof serverEnvSchema>;
+
+/**
+ * Environnement commun, SANS `DATABASE_URL_BILLING` (audit-002 INFO-1, D-071) :
+ * la variable est validee au demarrage comme les autres, mais seul
+ * `lib/inngest/billing-db.ts` la lit, par `billingDatabaseUrl()` ; la regle de
+ * lint d'AC16 interdit cet accesseur et `process.env.DATABASE_URL_BILLING`
+ * partout ailleurs.
+ */
+export type ServerEnv = Omit<ValidatedEnv, "DATABASE_URL_BILLING">;
 
 /** Les entrees vides valent absentes (une ligne `NOM=` dans un fichier .env). */
 function withoutEmpty(raw: Record<string, string | undefined>): Record<string, string> {
@@ -74,7 +83,7 @@ function withoutEmpty(raw: Record<string, string | undefined>): Record<string, s
   return Object.fromEntries(entries);
 }
 
-export function parseServerEnv(raw: Record<string, string | undefined>): ServerEnv {
+function validate(raw: Record<string, string | undefined>): ValidatedEnv {
   const parsed = serverEnvSchema.safeParse(withoutEmpty(raw));
   if (!parsed.success) {
     // Noms de variables et regle enfreinte seulement : jamais la valeur recue.
@@ -85,6 +94,17 @@ export function parseServerEnv(raw: Record<string, string | undefined>): ServerE
     throw new Error(`Environnement du serveur invalide, demarrage refuse. ${problems.join(" ; ")}.`);
   }
   return parsed.data;
+}
+
+export function parseServerEnv(raw: Record<string, string | undefined>): ServerEnv {
+  const common: ServerEnv & { DATABASE_URL_BILLING?: string } = { ...validate(raw) };
+  delete common.DATABASE_URL_BILLING;
+  return common;
+}
+
+/** Reserve a `lib/inngest/billing-db.ts` (AC16, D-071) : URL de la connexion `signet_billing`, validee. */
+export function billingDatabaseUrl(): string {
+  return validate(process.env).DATABASE_URL_BILLING;
 }
 
 let cached: ServerEnv | null = null;

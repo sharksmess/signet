@@ -42,11 +42,20 @@ function toApplyInput(
   event: { stripeEventId: string; type: string; created: number },
   subscription: Stripe.Subscription,
   priceIdPro: string,
+  readAt: Date,
 ): ApplyStripeSubscriptionInput {
   const items = subscription.items.data;
   const [item] = items;
+  // Statuts qui menent a Free (D-071, Q-8) : la seule transition possible est
+  // alors `subscription_canceled`, dont l'auteur est `canceled_by`, pose par la
+  // demande d'annulation de l'owner. Une resiliation par Stripe seul n'en a pas :
+  // auteur NULL (AC3 e). Sinon (debut d'abonnement), l'auteur est `requested_by`,
+  // pose au Checkout (AC2 c).
+  const leavesPro = subscription.status === "canceled" || subscription.status === "incomplete_expired";
+  const author = leavesPro ? subscription.metadata?.canceled_by : subscription.metadata?.requested_by;
   return {
     stripe_event_id: event.stripeEventId,
+    stripe_read_at: readAt.toISOString(),
     occurred_at: new Date(event.created * 1000).toISOString(),
     event_type: event.type,
     stripe_subscription_id: subscription.id,
@@ -57,14 +66,19 @@ function toApplyInput(
     cancel_at_period_end: subscription.cancel_at_period_end,
     current_period_end: isoFromEpoch(item?.current_period_end),
     metadata_organization_id: subscription.metadata?.organization_id ?? null,
-    metadata_requested_by: subscription.metadata?.requested_by ?? null,
+    metadata_requested_by: author ?? null,
   };
 }
 
-function logRejection(stripeEventId: string, subscriptionId: string, reason: string): void {
-  console.warn(
-    `[facturation] evenement Stripe ${stripeEventId} (abonnement ${subscriptionId}) traite sans effet, sans nouvelle tentative : ${reason}`,
-  );
+/**
+ * Journal d'un refus definitif. SG004 (metadonnee d'organisation contraire a la
+ * ligne deja rattachee) signale une incoherence a examiner, pas un cas attendu :
+ * niveau erreur (audit-002, D-071). Les autres refus sont des avertissements.
+ */
+function logRejection(stripeEventId: string, subscriptionId: string, reason: string, level: "error" | "warn" = "warn"): void {
+  const message = `[facturation] evenement Stripe ${stripeEventId} (abonnement ${subscriptionId}) traite sans effet, sans nouvelle tentative : ${reason}`;
+  if (level === "error") console.error(message);
+  else console.warn(message);
 }
 
 export const processStripeEvent = inngest.createFunction(
@@ -80,7 +94,10 @@ export const processStripeEvent = inngest.createFunction(
     const read = await step.run("relire-abonnement", async (): Promise<ReadOutcome> => {
       try {
         const subscription = await getStripe().subscriptions.retrieve(data.subscriptionId);
-        return { kind: "found", input: toApplyInput(data, subscription, getServerEnv().STRIPE_PRICE_ID_PRO) };
+        // Instant de la relecture, pris APRES la reponse de Stripe : la garde monotone
+        // (D-071) refuse un etat relu avant le dernier applique.
+        const readAt = new Date();
+        return { kind: "found", input: toApplyInput(data, subscription, getServerEnv().STRIPE_PRICE_ID_PRO, readAt) };
       } catch (error) {
         if (isStripeError(error) && error.code === "resource_missing") return { kind: "missing" };
         throw error;
@@ -95,8 +112,18 @@ export const processStripeEvent = inngest.createFunction(
     const outcome = await step.run("appliquer-etat", () => applyStripeSubscription(read.input));
 
     if (outcome.kind === "rejected") {
-      logRejection(data.stripeEventId, data.subscriptionId, `${outcome.code} ${REJECTION_CODES[outcome.code]}`);
+      logRejection(
+        data.stripeEventId,
+        data.subscriptionId,
+        `${outcome.code} ${REJECTION_CODES[outcome.code]}`,
+        outcome.code === "SG004" ? "error" : "warn",
+      );
       throw new NonRetriableError(`refus definitif ${outcome.code}`);
+    }
+    if (outcome.result === "stale") {
+      console.info(
+        `[facturation] evenement Stripe ${data.stripeEventId} (abonnement ${data.subscriptionId}) : etat relu plus ancien que le dernier applique, ignore (D-071)`,
+      );
     }
     return { stripeEventId: data.stripeEventId, result: outcome.result };
   },

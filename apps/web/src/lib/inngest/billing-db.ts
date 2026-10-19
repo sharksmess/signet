@@ -14,20 +14,22 @@
  */
 import pg from "pg";
 import type { Pool } from "pg";
-import { getServerEnv } from "../env";
+import { billingDatabaseUrl } from "../env";
 
 const { Pool: PgPool } = pg;
 
 let billingPool: Pool | null = null;
 
 function getBillingPool(): Pool {
-  billingPool ??= new PgPool({ connectionString: getServerEnv().DATABASE_URL_BILLING });
+  billingPool ??= new PgPool({ connectionString: billingDatabaseUrl() });
   return billingPool;
 }
 
 /** Entree de `signet.apply_stripe_subscription` : exactement les cles que la fonction accepte (ADR-0016). */
 export interface ApplyStripeSubscriptionInput {
   stripe_event_id: string;
+  /** Instant de la relecture Stripe (ISO 8601) : garde monotone, D-071. */
+  stripe_read_at: string;
   /** ISO 8601. */
   occurred_at: string;
   event_type: string;
@@ -39,6 +41,7 @@ export interface ApplyStripeSubscriptionInput {
   /** ISO 8601 ou null. */
   current_period_end: string | null;
   metadata_organization_id: string | null;
+  /** Auteur de la transition : `canceled_by` si le statut relu mene a Free, sinon `requested_by` (D-071). */
   metadata_requested_by: string | null;
 }
 
@@ -56,8 +59,16 @@ export const REJECTION_CODES = {
 
 export type RejectionCode = keyof typeof REJECTION_CODES;
 
+/** `stale` : etat relu plus ancien que le dernier applique, ignore sans ecriture (D-071). */
+const APPLY_RESULTS = ["subscription_started", "subscription_canceled", "updated", "stale"] as const;
+type ApplyResult = (typeof APPLY_RESULTS)[number];
+
+function isApplyResult(value: unknown): value is ApplyResult {
+  return typeof value === "string" && (APPLY_RESULTS as readonly string[]).includes(value);
+}
+
 export type ApplyOutcome =
-  | { kind: "applied"; result: "subscription_started" | "subscription_canceled" | "updated" }
+  | { kind: "applied"; result: ApplyResult }
   | { kind: "rejected"; code: RejectionCode };
 
 function rejectionCodeOf(error: unknown): RejectionCode | undefined {
@@ -81,7 +92,7 @@ export async function applyStripeSubscription(input: ApplyStripeSubscriptionInpu
     );
     await client.query("COMMIT");
     const result = rows[0]?.result;
-    if (result !== "subscription_started" && result !== "subscription_canceled" && result !== "updated") {
+    if (!isApplyResult(result)) {
       throw new Error("signet.apply_stripe_subscription : resultat inattendu");
     }
     return { kind: "applied", result };
