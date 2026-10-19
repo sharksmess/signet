@@ -48,7 +48,9 @@ export interface ApplyStripeSubscriptionInput {
 /**
  * Codes leves par la fonction pour un evenement qui ne doit rien ecrire
  * (ERD §0, D-067, D-068). Tous sont definitifs : rejouer l'evenement donnerait
- * le meme refus.
+ * le meme refus. `SG008` (marque de relecture plus de 5 minutes dans le futur,
+ * D-076) n'y figure PAS : il est leve comme une erreur ordinaire, et Inngest
+ * rejoue le pas jusqu'a ce que l'horloge de la base rattrape la marque.
  */
 export const REJECTION_CODES = {
   SG003: "entree invalide",
