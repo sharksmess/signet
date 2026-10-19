@@ -34,6 +34,7 @@ import {
   type Fakes,
   type MemoizedStep,
   type ProcessorOutput,
+  applyServerEnvToProcess,
 } from "../helpers/billing";
 import {
   asBillingCommitted,
@@ -361,19 +362,89 @@ describe("D-072 — garde monotone, tests directs en base (sous signet_billing)"
     expect(await readBillingEvents(pro.org.organizationId)).toEqual([]);
   });
 
-  it("marque de plus de 5 minutes dans le futur : SG003, aucune ecriture (borne haute, D-072)", async () => {
-    const pro = await createProOrganization({ name: "D-072 borne haute" });
-    const before = await readSubscriptionRow(pro.org.organizationId);
+  /**
+   * Appelle la fonction avec une marque = `now()` de la transaction + 5 minutes
+   * + `extraMicroseconds`. La marque est calculee DANS la transaction de l'appel :
+   * `now()` y est le meme que celui que voit la fonction.
+   */
+  async function applyAtBoundary(value: ApplyInput, extraMicroseconds: number): Promise<string> {
+    const fn = await findApplyFunction();
+    return asBillingCommitted({}, async (client) => {
+      const { rows: marks } = await client.query<{ mark: string }>(
+        `SELECT to_char((now() + interval '5 minutes' + make_interval(secs => $1::double precision / 1000000))
+                          AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS mark`,
+        [extraMicroseconds],
+      );
+      const mark = marks[0]?.mark ?? "";
+      const { rows } = await client.query<{ result: string }>(`SELECT ${fn.qualifiedName}($1::jsonb) AS result`, [
+        JSON.stringify({ ...value, stripe_read_at: mark }),
+      ]);
+      return rows[0]?.result ?? "";
+    });
+  }
 
-    await expect(
-      applyResult(input({
+  it("marque exactement a now() + 5 minutes : acceptee (limite incluse)", async () => {
+    const pro = await createProOrganization({ name: "D-076 limite exacte" });
+
+    const result = await applyAtBoundary(
+      input({
         stripe_subscription_id: pro.subscriptionId,
         stripe_customer_id: pro.customerId,
         metadata_organization_id: pro.org.organizationId,
-        stripe_read_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
         cancel_at_period_end: true,
-      })),
-    ).rejects.toMatchObject({ code: "SG003" });
+      }),
+      0,
+    );
+
+    expect(result).toBe("updated");
+    expect(await readSubscriptionRow(pro.org.organizationId)).toMatchObject({ cancel_at_period_end: true });
+  });
+
+  it("marque une microseconde au-dela de now() + 5 minutes : SG008 (refus rejouable), aucune ecriture", async () => {
+    const pro = await createProOrganization({ name: "D-076 au-dela de la limite" });
+    const before = await readSubscriptionRow(pro.org.organizationId);
+
+    await expect(
+      applyAtBoundary(
+        input({
+          stripe_subscription_id: pro.subscriptionId,
+          stripe_customer_id: pro.customerId,
+          metadata_organization_id: pro.org.organizationId,
+          cancel_at_period_end: true,
+        }),
+        1,
+      ),
+    ).rejects.toMatchObject({ code: "SG008" });
     expect(await readSubscriptionRow(pro.org.organizationId)).toEqual(before);
+  });
+
+  it("SG008 est rejoue : applyStripeSubscription le leve (erreur ordinaire), il ne le rend pas comme refus definitif", async () => {
+    applyServerEnvToProcess();
+    const { applyStripeSubscription } = await import("../../apps/web/src/lib/inngest/billing-db");
+    const pro = await createProOrganization({ name: "D-076 rejouable" });
+    const before = await readSubscriptionRow(pro.org.organizationId);
+
+    await expect(
+      applyStripeSubscription(
+        input({
+          stripe_subscription_id: pro.subscriptionId,
+          stripe_customer_id: pro.customerId,
+          metadata_organization_id: pro.org.organizationId,
+          stripe_read_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "SG008" });
+    expect(await readSubscriptionRow(pro.org.organizationId)).toEqual(before);
+  });
+});
+
+describe("D-072 — limite de concurrence Inngest par abonnement", () => {
+  it("la fonction n'execute qu'un pas a la fois par abonnement Stripe (cle = champ subscriptionId de l'evenement)", async () => {
+    applyServerEnvToProcess();
+    const { processStripeEvent } = await import("../../apps/web/src/lib/inngest/process-stripe-event");
+    const { stripeSubscriptionEventData } = await import("../../apps/web/src/lib/inngest/client");
+
+    expect(processStripeEvent.opts.concurrency).toEqual({ key: "event.data.subscriptionId", limit: 1 });
+    expect(Object.keys(stripeSubscriptionEventData.shape), "la cle vise un champ reel de l'evenement").toContain("subscriptionId");
   });
 });
