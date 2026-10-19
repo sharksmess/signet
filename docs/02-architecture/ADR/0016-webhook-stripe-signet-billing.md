@@ -66,7 +66,7 @@ connexion `signet_billing` (`lib/inngest/billing-db.ts`), ce qu'impose `no-restr
     chez Stripe (Stripe n'en fournit pas) ; deux relectures tres proches peuvent etre ordonnees a
     l'inverse de l'etat qu'elles portent, a la latence reseau pres ;
   - la marque vient de l'horloge de chaque instance : un ecart entre instances fausse l'ordre a
-    hauteur de cet ecart. Une marque de plus de 5 minutes dans le futur de la base leve `SG003`
+    hauteur de cet ecart. Une marque de plus de 5 minutes dans le futur de la base leve `SG008`, refus **rejouable** (D-076)
     (sinon une instance en avance figerait l'organisation : tous les etats suivants seraient
     `stale`) ; un `stale` est journalise ;
   - deux executions concurrentes du meme abonnement ne sont pas ordonnees par la garde mais par la
@@ -101,6 +101,7 @@ connexion `signet_billing` (`lib/inngest/billing-db.ts`), ce qu'impose `no-restr
 | `SG005` | organisation non resolue | journalise, `NonRetriableError` |
 | `SG006` | incoherence Stripe (Q-7) | journalise, `NonRetriableError` |
 | `SG007` | mutation de `billing_event` (trigger) | sans objet |
+| `SG008` | marque de relecture plus de 5 minutes dans le futur de la base (horloge d'instance en avance, D-076) | **rejoue** par Inngest (le pas memorise passe quand l'horloge de la base a rattrape la marque) |
 | autre | base indisponible, privilege retire | rejoue par Inngest |
 
 Les cas « sans effet » levent plutot que de rendre un statut : regle 3 de

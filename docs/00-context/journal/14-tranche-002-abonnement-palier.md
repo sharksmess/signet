@@ -13,12 +13,14 @@
 - Seconde serie de relectures, en contexte neuf : securite PASS, contrats PASS, code PASS avec trois A CORRIGER.
 - Phase 5 (2026-10-19) : corrections decidees par l'humain (D-072) : limite de concurrence Inngest par abonnement, limites de la garde ecrites dans ADR-0016, borne haute de `stripe_read_at` et commentaire corriges en place dans 0013 (hors `main`), `409` decrit dans le contrat et son message, trois tests directs de la garde, ligne au backlog sur `canceled_by`, memoire des relecteurs committee. Suite : 277/277 en 24 fichiers.
 - Troisieme relecture de code (seule, contexte neuf) : `REVIEW: FAIL` pour un seul A CORRIGER documentaire (ce journal, son index et le journal de tranche en retard sur D-072), corrige ensuite ; une suggestion sur la borne haute (refus definitif) est soumise a l'humain.
+- Phase 6 (2026-10-19, D-076) : borne haute de `stripe_read_at` en refus rejouable (`SG008`), test a la limite exacte des 5 minutes, test de la limite de concurrence Inngest, ERD complete ; puis quatrieme relecture de code en contexte neuf.
 
 ## Decisions
 - D-057 a D-064 : gate d'ouverture (humain ; claude-code).
 - D-065, D-067 : regles de l'humain pour l'implementation, signature `jsonb`, codes `SGxxx`, Stripe 10 s et une relance (humain).
 - D-066, D-069 : decisions locales des phases 1 et 3 (claude-code).
-- D-068, D-070, D-071, D-072 : validations et arbitrages de l'humain (refus non rejouables, 503 au contrat, `instrumentation.ts`, corrections des deux series de relectures, perimetre elargi deux fois).
+- D-068, D-070, D-071, D-072, D-076 : validations et arbitrages de l'humain (refus non rejouables, 503 au contrat, `instrumentation.ts`, corrections des deux series de relectures, perimetre elargi deux fois).
+- D-073 a D-075 (projet) : explications en langage courant avant chaque commande ; plan de la semaine (toutes les fonctionnalites d'ici vendredi, mise en ligne visee le week-end, aucun controle supprime) ; abonnement payant conserve, vrais paiements actives apres validation du compte Stripe.
 Le detail est dans `docs/DECISIONS.md`.
 
 ## Preuves
@@ -32,7 +34,7 @@ Le detail est dans `docs/DECISIONS.md`.
 - Un trigger `BEFORE TRUNCATE` sur `billing_event` cassait la remise a zero de la base de test : retire, limite ecrite dans ADR-0016.
 
 ## Etat a la fin
-Code, migrations 0011 a 0013, tests et documentation sur la branche `slice/002-abonnement-palier`. Securite et contrats : PASS (seconde serie). Code : FAIL a la troisieme relecture, pour le seul retard de documentation corrige depuis. Cloture (`close-slice.sh`) et livraison (`ship-slice.sh`) en attente de la decision humaine (nouvelle relecture de code, et suite donnee a la suggestion sur la borne haute).
+Code, migrations 0011 a 0013, tests et documentation sur la branche `slice/002-abonnement-palier`. Securite et contrats : PASS (seconde serie). Code : quatrieme relecture apres D-076 ; si PASS, cloture (`close-slice.sh`) et livraison (`ship-slice.sh`) enchainees, sur accord de l'humain (D-076).
 
 ## Etape suivante
 Decision humaine ; puis relecture de code PASS, `bash scripts/close-slice.sh`, `bash scripts/ship-slice.sh`, fusion par l'humain sur preuves.

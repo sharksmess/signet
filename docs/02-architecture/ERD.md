@@ -53,6 +53,8 @@ dans des migrations SQL versionnees, dans la meme tranche que la table qu'ils pr
   abonnement deja rattache, client different, prix non Pro, identifiant deja rattache ailleurs).
   Aucune ecriture ; la fonction Inngest les journalise sans nouvelle tentative.
   `SG007` — mutation de `billing_event` refusee par le trigger `billing_event_immutable` (§8.2).
+  `SG008` — marque de relecture Stripe plus de 5 minutes dans le futur de la base, levee par
+  `apply_stripe_subscription` (0013, D-076) : refus **rejouable**, jamais definitif.
 
 ### Ecarts assumes par rapport aux defauts de better-auth
 
@@ -975,7 +977,7 @@ enregistre un nom, jamais une somme de controle : une modification ne serait jam
 | **`0010_reimpose_role_attributes.sql`** | MINEUR-10 : leve si un role `signet_*` est membre d'un role ; `ALTER ROLE` des quatre roles (attributs du tableau « Roles Postgres », §1) | 010 |
 | **`0011_billing_role.sql`** | Q-1 : role `signet_billing` (creation idempotente, aucun droit) ; INFO-1 : leve sur toute appartenance impliquant un des cinq roles (deux sens) et sur tout reglage `pg_db_role_setting` ; `ALTER ROLE` des cinq roles | 002 |
 | **`0012_billing_event.sql`** | §8.2 : table `billing_event` (partie generee par `pnpm db:generate`, fichier renomme depuis `0002_regular_ricochet.sql`, etiquette alignee dans `meta/_journal.json`) ; RLS, politiques `billing_event_*` et `subscription_definer_*`, triggers d'immutabilite, `signet.reject_mutation()`, `signet.apply_stripe_subscription(jsonb)` (ADR-0016), `USAGE` du schema `signet` et `EXECUTE` de la fonction a `signet_billing` | 002 |
-| **`0013_subscription_sync_guard.sql`** | D-071 : colonne `subscription.stripe_synced_at` (generee, fichier renomme depuis `0003_ambiguous_naoko.sql`) ; `apply_stripe_subscription` remplacee : cle d'entree `stripe_read_at` et garde monotone (resultat `stale`), metadonnee d'organisation comparee en `uuid` (audit-002 CRITIQUE-1), passage en Free decide par le statut relu seulement | 002 |
+| **`0013_subscription_sync_guard.sql`** | D-071 : colonne `subscription.stripe_synced_at` (generee, fichier renomme depuis `0003_ambiguous_naoko.sql`) ; `apply_stripe_subscription` remplacee : cle d'entree `stripe_read_at` et garde monotone (resultat `stale`), metadonnee d'organisation comparee en `uuid` (audit-002 CRITIQUE-1), passage en Free decide par le statut relu seulement ; borne haute de `stripe_read_at` (plus de 5 minutes dans le futur de la base : `SG008`, refus rejouable, D-072, D-076) | 002 |
 
 Aucune des trois migrations 0009 a 0011 ne touche une table, une colonne ou un index : `pnpm db:generate`
 ne produit aucune difference, `packages/db/src/schema/*` est inchange. 0012 ajoute

@@ -58,6 +58,8 @@ Les identifiants ne sont jamais renumerotes (D-025) : une tranche inseree prend 
 
 ## Notes
 
+- **Plan de la semaine du 2026-10-19 (D-074)** : toutes les fonctionnalites de Signet d'ici vendredi, mise en ligne visee le week-end, sans supprimer aucun controle (tests, trois relecteurs, accord humain). **Paiements (D-075)** : l'abonnement payant est conserve ; les vrais paiements seront actives apres la validation du compte Stripe, le lancement pouvant se faire en formule gratuite.
+
 - Aucune tranche ne couvre l'edition de lien/collection ni la suppression d'un lien isole : hors-perimetre explicite du PRD (US-10 ne couvre que la suppression d'une collection entiere).
 - Toute tranche qui ferait apparaitre une fonctionnalite listee en hors-perimetre (recherche, tags, import Slack, etc.) est un signal du risque #1 du PRD (derive de perimetre) et doit etre refusee ou renvoyee en backlog explicite, pas glissee dans une tranche existante.
 - Avant tout choix d'hebergement (audit-001 MINEUR-11) : fixer l'en-tete IP de confiance et les proxys de confiance de better-auth (`advanced.ipAddress.ipAddressHeaders`/`trustedProxies`) et le consigner dans ADR-0010. Sans cela, le limiteur de debit est contournable ou bloque tous les utilisateurs selon le proxy.
