@@ -36,12 +36,15 @@ import {
   type ProcessorOutput,
 } from "../helpers/billing";
 import {
+  asBillingCommitted,
+  callApply,
   closeBillingPool,
   findApplyFunction,
   readBillingEvents,
   readLinkQuota,
   readSubscriptionRow,
   setSubscriptionDirect,
+  type ApplyInput,
 } from "../helpers/billing-db";
 import type { CapturedInngestEvent } from "./fakes/fake-inngest";
 
@@ -290,5 +293,87 @@ describe("review-002 6 — INNGEST_EVENT_KEY hors mode developpement", () => {
     expect(message).toContain("INNGEST_EVENT_KEY");
     expect(message).not.toContain("signkey-test");
     expect(message).not.toContain("sk_test_");
+  });
+});
+
+describe("D-072 — garde monotone, tests directs en base (sous signet_billing)", () => {
+  function input(overrides: Partial<ApplyInput> & Pick<ApplyInput, "stripe_subscription_id" | "metadata_organization_id">): ApplyInput {
+    return {
+      stripe_event_id: uniqueId("evt_guard"),
+      stripe_read_at: new Date().toISOString(),
+      occurred_at: new Date(Date.now() - 60_000).toISOString(),
+      event_type: "customer.subscription.updated",
+      stripe_customer_id: uniqueId("cus_guard"),
+      stripe_status: "active",
+      is_pro_price: true,
+      cancel_at_period_end: false,
+      current_period_end: new Date(Date.now() + 10 * 24 * 3600 * 1000).toISOString(),
+      metadata_requested_by: null,
+      ...overrides,
+    };
+  }
+
+  async function apply(value: ApplyInput): Promise<void> {
+    const fn = await findApplyFunction();
+    await asBillingCommitted({}, (client) => callApply(client, fn, value));
+  }
+
+  async function applyResult(value: ApplyInput): Promise<string> {
+    const fn = await findApplyFunction();
+    return asBillingCommitted({}, async (client) => {
+      const { rows } = await client.query<{ result: string }>(`SELECT ${fn.qualifiedName}($1::jsonb) AS result`, [
+        JSON.stringify(value),
+      ]);
+      return rows[0]?.result ?? "";
+    });
+  }
+
+  it("marque egale a la derniere appliquee : l'etat s'applique (comparaison stricte), il n'est pas `stale`", async () => {
+    const pro = await createProOrganization({ name: "D-072 egalite" });
+    const readAt = new Date(Date.now() - 1_000).toISOString();
+    const base = { stripe_subscription_id: pro.subscriptionId, stripe_customer_id: pro.customerId, metadata_organization_id: pro.org.organizationId };
+    await apply(input({ ...base, stripe_read_at: readAt }));
+
+    const result = await applyResult(input({ ...base, stripe_read_at: readAt, cancel_at_period_end: true }));
+
+    expect(result).toBe("updated");
+    expect(await readSubscriptionRow(pro.org.organizationId)).toMatchObject({ tier: "pro", cancel_at_period_end: true });
+  });
+
+  it("etat perime d'un AUTRE abonnement que celui rattache : `stale` est rendu avant le controle de coherence (pas de SG006)", async () => {
+    const pro = await createProOrganization({ name: "D-072 stale avant SG006" });
+    await apply(input({
+      stripe_subscription_id: pro.subscriptionId,
+      stripe_customer_id: pro.customerId,
+      metadata_organization_id: pro.org.organizationId,
+    }));
+    const before = await readSubscriptionRow(pro.org.organizationId);
+
+    const result = await applyResult(input({
+      stripe_subscription_id: uniqueId("sub_other"),
+      stripe_customer_id: pro.customerId,
+      metadata_organization_id: pro.org.organizationId,
+      stripe_read_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+    }));
+
+    expect(result).toBe("stale");
+    expect(await readSubscriptionRow(pro.org.organizationId)).toEqual(before);
+    expect(await readBillingEvents(pro.org.organizationId)).toEqual([]);
+  });
+
+  it("marque de plus de 5 minutes dans le futur : SG003, aucune ecriture (borne haute, D-072)", async () => {
+    const pro = await createProOrganization({ name: "D-072 borne haute" });
+    const before = await readSubscriptionRow(pro.org.organizationId);
+
+    await expect(
+      applyResult(input({
+        stripe_subscription_id: pro.subscriptionId,
+        stripe_customer_id: pro.customerId,
+        metadata_organization_id: pro.org.organizationId,
+        stripe_read_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+        cancel_at_period_end: true,
+      })),
+    ).rejects.toMatchObject({ code: "SG003" });
+    expect(await readSubscriptionRow(pro.org.organizationId)).toEqual(before);
   });
 });
