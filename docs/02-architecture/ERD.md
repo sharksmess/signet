@@ -743,6 +743,7 @@ d'exprimer cette regle en RLS, donc en base, plutot qu'en garde applicative.
 | `stripe_subscription_id` | `text` | **NULL autorise** | `NULL` sur le palier Free : il n'existe aucun abonnement Stripe. |
 | `current_period_end` | `timestamptz` | **NULL autorise** | `NULL` sur Free : aucune periode de facturation. |
 | `cancel_at_period_end` | `boolean` | `NOT NULL DEFAULT false` | Annulation programmee (Stripe). |
+| `stripe_synced_at` | `timestamptz` | **NULL autorise** (0013, D-071) | `NULL` tant qu'aucun etat Stripe n'a ete applique. Instant de la relecture Stripe du dernier etat applique par `apply_stripe_subscription` : garde monotone, un etat relu plus ancien est ignore (ADR-0016). Jamais lu par l'API. |
 | `created_at` | `timestamptz` | `NOT NULL DEFAULT now()` | |
 | `updated_at` | `timestamptz` | `NOT NULL DEFAULT now()` | |
 
@@ -974,13 +975,14 @@ enregistre un nom, jamais une somme de controle : une modification ne serait jam
 | **`0010_reimpose_role_attributes.sql`** | MINEUR-10 : leve si un role `signet_*` est membre d'un role ; `ALTER ROLE` des quatre roles (attributs du tableau « Roles Postgres », §1) | 010 |
 | **`0011_billing_role.sql`** | Q-1 : role `signet_billing` (creation idempotente, aucun droit) ; INFO-1 : leve sur toute appartenance impliquant un des cinq roles (deux sens) et sur tout reglage `pg_db_role_setting` ; `ALTER ROLE` des cinq roles | 002 |
 | **`0012_billing_event.sql`** | §8.2 : table `billing_event` (partie generee par `pnpm db:generate`, fichier renomme depuis `0002_regular_ricochet.sql`, etiquette alignee dans `meta/_journal.json`) ; RLS, politiques `billing_event_*` et `subscription_definer_*`, triggers d'immutabilite, `signet.reject_mutation()`, `signet.apply_stripe_subscription(jsonb)` (ADR-0016), `USAGE` du schema `signet` et `EXECUTE` de la fonction a `signet_billing` | 002 |
+| **`0013_subscription_sync_guard.sql`** | D-071 : colonne `subscription.stripe_synced_at` (generee, fichier renomme depuis `0003_ambiguous_naoko.sql`) ; `apply_stripe_subscription` remplacee : cle d'entree `stripe_read_at` et garde monotone (resultat `stale`), metadonnee d'organisation comparee en `uuid` (audit-002 CRITIQUE-1), passage en Free decide par le statut relu seulement | 002 |
 
 Aucune des trois migrations 0009 a 0011 ne touche une table, une colonne ou un index : `pnpm db:generate`
 ne produit aucune difference, `packages/db/src/schema/*` est inchange. 0012 ajoute
 `packages/db/src/schema/billing.ts`.
 
 **Numerotation** : `drizzle-kit` numerote les fichiers qu'il genere d'apres son propre journal
-(`meta/_journal.json`), qui ne compte que les migrations generees (0002, 0003, puis 0012). Le
+(`meta/_journal.json`), qui ne compte que les migrations generees (0002, 0003, puis 0012, 0013). Le
 fichier genere est renomme au numero suivant du dossier, et l'etiquette du journal alignee.
 
 ---
