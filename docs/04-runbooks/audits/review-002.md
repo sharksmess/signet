@@ -82,3 +82,57 @@ Aucun.
 - **Manquant :** la limite residuelle de l'horloge de la base dans ADR-0016, et deux retouches de l'entree 14 du journal de projet. Rien qui engage l'exactitude ni la suite.
 
 REVIEW: PASS
+
+---
+
+# Sixieme relecture (D-079, reouverture apres CI Build rouge, 0c6d9de..8e8e1a5)
+
+## Methode
+J'ai relu `git diff 0c6d9de..HEAD`, soit 4 commits : 09334e8 (reouverture, D-079), fa84dab (test rouge), a1cfa0b (correction), 8e8e1a5 (journaux). J'ai relu aussi les modules qui entourent la correction : `lib/env.ts`, `lib/stripe.ts`, `lib/auth.ts`, `lib/db.ts`, `instrumentation.ts`, et les tests d'AC15 dans `tests/billing/environment.test.ts:197-256`. Documents lus : D-079 dans le registre, ADR-0016, `002-progress.md` (Phase 8), FRICTION et l'entree 14 du journal de projet.
+
+J'ai lance `pnpm run check` moi-meme : typecheck et lint sont verts. Je n'ai pas relance `pnpm test`, parce que la base de test est partagee avec les relectures paralleles. Je reprends le resultat de l'implementeur (283/283) et je n'ai pas rejoue l'etape Build. J'ai verifie le rouge de fa84dab par lecture : dans `client.ts`, a 0c6d9de, la ligne 20 est `const env = getServerEnv();`, et c'est le seul appel de premier niveau a un accesseur liste. Dans `process-stripe-event.ts`, `inngest.createFunction` n'etait pas un accesseur liste a cette date. Le message du commit et le journal disent bien la meme chose.
+
+## Verification des points demandes
+1. **Exactitude.** Le comportement a l'execution est inchange :
+   - Le client, la fonction et le gestionnaire sont memoises par `??=`. Les trois ont la meme forme que `getStripe()`.
+   - `serve()` recoit le meme client que `createFunction`, puisque les deux passent par `getInngest()`.
+   - AC15 : `stubProductionServe()` appelle `vi.resetModules()` avant le `import()` dynamique de la route. Le gestionnaire memoise vient donc d'un module neuf a chaque test, construit avec l'environnement de production simule, et le test recoit toujours 401.
+   - AC13 : le refus de demarrer reste dans `instrumentation.ts`, qui n'est pas touche. `startup.test.ts` n'est pas modifie.
+   - Si l'environnement est invalide, la construction leve. Rien n'est memoise dans ce cas, donc l'appel suivant reessaie. Cela ne peut pas arriver une fois le serveur demarre.
+   - Le typage passe par `ReturnType<typeof create...>`, sans `any`.
+2. **Le test `build-env.test.ts` discrimine reellement.** Le detecteur a lui-meme un test positif et un test negatif (`:85-95`). Un garde-fou (`:97-102`) empeche qu'un renommage d'accesseur desarme le test. Le parcours AST exclut correctement le corps des fonctions, des fleches et des methodes, mais garde les initialiseurs `static` et les blocs `static`, qui s'executent eux aussi au chargement. Ses angles morts ne sont ecrits nulle part : voir le constat 1.
+3. **Autres modules.** Aucun appel de premier niveau a `getServerEnv`, `parseServerEnv`, `billingDatabaseUrl`, `getStripe`, `getInngest` ni `getProcessStripeEvent` dans `apps/web/src`. Seul `lib/auth.ts:34-40` lit l'environnement au chargement, directement dans `process.env` : `getAuthPool()`, `requiredEnv("BETTER_AUTH_SECRET")` et `buildRateLimitOptions(process.env)`. Ces trois variables sont posees par l'etape Build, donc ce n'est pas le defaut de D-079. C'est en revanche la meme classe de risque, et le test ne la couvre pas (constat 1).
+4. **Documentation.** D-079 donne la cause, les options ecartees A et C ainsi que la suppression de l'etape Build, et le decideur humain. ADR-0016 (`:170-173`), l'en-tete de `env.ts`, la Phase 8 du journal (avec l'option ecartee « le SDK lit `INNGEST_DEV` »), FRICTION et l'entree 14 sont a jour. Aucune dependance nouvelle : `typescript` etait deja dans le `package.json` racine. Les commits suivent Conventional Commits, le test est committe avant la correction, et chaque couche a son commit.
+
+## Constats
+
+### A CORRIGER
+1. **Les angles morts du test statique ne sont pas ecrits.**
+   - **Emplacement :** `tests/billing/build-env.test.ts:1-19` et `:29-36`.
+   - **Constat :** l'en-tete dit que le test « refuse tout appel » a un accesseur, sans en donner les limites. Le detecteur ne voit pas :
+     - un accesseur absent de `ENV_ACCESSORS`, par exemple un futur `getResend()` ;
+     - un appel indirect, c'est-a-dire une fonction locale qui appelle `getServerEnv()` et qui est elle-meme appelee au premier niveau ;
+     - une fonction immediatement appelee, `(() => getServerEnv())()` ;
+     - `getServerEnv.call(...)` ;
+     - une lecture directe de `process.env` au chargement, comme dans `lib/auth.ts:34-40`.
+   - **Consequence :** un lecteur ou un auditeur peut croire que le test garantit l'invariant de D-079. En realite, le vrai filet reste l'etape Build de la CI, et celle-ci ne tourne qu'apres le push. La tranche 003, en ajoutant un client paresseux sans l'inscrire dans la liste, peut repasser au vert en local et casser le Build comme dans la PR #26.
+   - **Direction :** lister ces limites dans l'en-tete du test, avec la regle « tout nouvel accesseur d'environnement s'ajoute a `ENV_ACCESSORS` ». Si possible, mentionner aussi cette regle dans l'en-tete de `env.ts`. La couverture de fond est deja prevue dans la ligne FRICTION : rejouer l'etape Build dans `close-slice.sh`, usine 1.6.
+
+### SUGGESTION
+2. **Noms obsoletes apres le renommage.**
+   - **Emplacement :** `docs/03-slices/002-progress.md:80`, qui dit « export nomme `processStripeEvent` », et `docs/03-slices/000-backlog.md:75`, qui dit « appeler `processStripeEvent.opts.onFailure` ».
+   - **Constat :** depuis a1cfa0b, l'export s'appelle `getProcessStripeEvent()`.
+   - **Consequence :** celui qui reprendra cette entree du backlog cherchera un symbole qui n'existe plus.
+   - **Direction :** dans le backlog, remplacer par `getProcessStripeEvent().opts.onFailure`. Dans le journal, ajouter une note « renomme par D-079 » plutot que reecrire l'historique.
+3. **Minuterie laissee en place sur un chemin qui ne devrait pas arriver.**
+   - **Emplacement :** `apps/web/src/app/api/webhooks/stripe/route.ts:43-46`.
+   - **Constat :** `getInngest()` est desormais appele apres `setTimeout`. S'il levait (environnement invalide), la minuterie ne serait jamais annulee.
+   - **Consequence :** aucune en pratique, parce que la route lit deja `getServerEnv()` plus tot pour le secret du webhook et que `instrumentation.ts` refuse de demarrer.
+   - **Direction :** appeler `getInngest()` avant de creer la minuterie, si la route est retouchee.
+
+## Bilan
+- **Solide :** la correction est minimale, sur le modele deja eprouve de `getStripe()`. Le comportement a l'execution est inchange (AC13, AC14, AC15) et le rouge avant la correction est verifiable. Le registre explique la cause, ecrit les options ecartees et nomme le decideur humain.
+- **Fragile :** l'invariant « pas de lecture de l'environnement au chargement » repose sur une liste d'accesseurs tenue a la main. Ses angles morts ne sont pas ecrits.
+- **Manquant :** l'ecriture de ces limites, et deux noms obsoletes dans le journal et le backlog. Rien qui engage l'exactitude.
+
+REVIEW: PASS

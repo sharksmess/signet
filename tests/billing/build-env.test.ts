@@ -16,6 +16,16 @@
  * a un accesseur qui lit l'environnement du serveur, directement (`env.ts`) ou
  * au premier usage (clients paresseux). Le premier niveau exclut le corps des
  * fonctions, fleches et methodes, executes plus tard.
+ *
+ * Angles morts (sixieme relecture de code, review-002) : le test ne voit que
+ * les accesseurs LISTES dans `ENV_ACCESSORS`, appeles par leur nom. Il ne voit
+ * pas un accesseur absent de la liste, un appel indirect (fonction locale qui
+ * appelle un accesseur, fonction appelee immediatement, `.call(...)`), ni une
+ * lecture directe de `process.env` au chargement (`lib/auth.ts` lit ainsi les
+ * trois variables que l'etape Build pose). Regle : tout nouvel accesseur qui
+ * lit l'environnement du serveur, ou un client construit au premier usage,
+ * s'ajoute a `ENV_ACCESSORS` dans le meme commit. Le filet complet reste
+ * l'etape Build de la CI (FRICTION 2026-10-19).
  */
 import { describe, it, expect } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
