@@ -3,10 +3,10 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : corrections des relectures (D-071) faites ; seconde serie de relectures (contexte neuf) en cours. Premiere serie : `audit-002.md` FAIL (CRITIQUE-1), `contracts-002.md` PASS, `review-002.md` FAIL (deux bloquants)
+- Statut : corrections de la seconde serie de relectures (D-072) faites ; relecture de code seule en contexte neuf, puis cloture si PASS. Seconde serie : `audit-002.md` PASS, `contracts-002.md` PASS, `review-002.md` PASS avec trois A CORRIGER (traites, D-072)
 - Branche : slice/002-abonnement-palier
-- Dernier commit : voir `git log` (corrections D-071 commitees par couche le 2026-10-19 ; avant : 366190d docs(erd), 8652f9e rapports, 6de91b2, e0c47b2, e141728 D-070)
-- Prochaine etape : verdicts de la seconde serie de relectures (`audit-002.md`, `contracts-002.md`, `review-002.md` reecrits), puis decision humaine ; si les trois passent : `bash scripts/close-slice.sh`, `bash scripts/ship-slice.sh`.
+- Dernier commit : 32abc19 docs(slice-002): rapports de la seconde serie de relectures (corrections D-072 commitees ensuite ; avant : a049621 docs D-071, 2accc16 tests, 563f580 api, d9a1b62 billing, d67dfe6 migration 0013)
+- Prochaine etape : relecture de code seule (`code-reviewer`, contexte neuf) ; si `REVIEW: PASS`, `bash scripts/close-slice.sh` puis `bash scripts/ship-slice.sh` ; arret sur le lien de la PR.
 
 ## Couches
 - [x] Migration
@@ -16,8 +16,8 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 - [x] Logique metier : `lib/env.ts`, `lib/stripe.ts`, `lib/inngest/*`, `lib/billing/subscriptions.ts` (316c9c6, 07cead4)
 - [x] API : `subscription` GET/POST, webhook Stripe, `/api/inngest` (07cead4)
 - [ ] UI — sans objet (Q-6, D-057)
-- [x] Documentation : ADR-0015 (d1e5051), ADR-0016, ADR-0011, ADR-0007, ERD, runbook (ee43428), contrat `subscriptions.ts` (07cead4), `.env*.example` et CI (115a813) ; reste : journal de projet 14
-- [x] Suite complete verte (242 tests) + `pnpm run check`
+- [x] Documentation : ADR-0015 (d1e5051), ADR-0016, ADR-0011, ADR-0007, ERD, runbook (ee43428), contrat `subscriptions.ts` (07cead4), `.env*.example` et CI (115a813), journal de projet 14 (a049621)
+- [x] Suite complete verte (277 tests, 24 fichiers, apres D-072) + `pnpm run check`
 
 ## Blocages
 <!-- cause, essais, options. Vide = aucun. -->
@@ -28,6 +28,7 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 - ~~Questions 503 et `instrumentation.ts`~~ : tranchees le 2026-10-15 (D-070) : 503 au contrat, `instrumentation.ts` dans le perimetre avec un test. `.env.test.local` complete par l'humain (bloc Facturation).
 - ~~Perimetre fige~~ : elargi par l'humain (93403bb, D-070).
 - ~~Relectures, premiere serie (2026-10-15)~~ : audit FAIL (CRITIQUE-1, UUID compare en texte), review FAIL (etat perime rejoue, auteur d'une resiliation par Stripe seul) ; decisions humaines D-071, perimetre elargi a `packages/db/src/schema/organizations.ts` (d5cc5ee). Corrections faites, seconde serie lancee.
+- ~~Relectures, seconde serie (2026-10-19)~~ : audit PASS, contrats PASS, code PASS avec trois A CORRIGER ; decision humaine de les corriger avant la cloture (D-072), fait.
 
 ## Decisions
 <!-- Toute decision prise sans l'humain, avec sa raison. Reprise dans la PR. -->
@@ -70,6 +71,7 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
   - Regle de lint : selecteurs `no-restricted-syntax` pour `import()`, `require()` et `process.env.DATABASE_URL_BILLING` ; esquery n'accepte pas de `/` dans une expression reguliere de selecteur, meme echappe : la barre est ecrite `\x2F`). Limite : un `import()` d'une chaine calculee n'est pas detecte (ecrit dans ADR-0016).
   - `DATABASE_URL_BILLING` toujours validee au demarrage (`instrumentation.ts`) mais retiree de `ServerEnv` ; `billingDatabaseUrl()` revalide l'environnement a chaque construction du pool (une seule fois par processus).
 
+- Phase 5, apres la seconde serie de relectures (D-072) : concurrence Inngest par abonnement ; borne haute de `stripe_read_at` (5 minutes, SG003) et commentaire de la garde corriges en place dans 0013 (hors `main`, precedent D-016) ; 409 decrit (contrat et message) ; trois tests directs de la garde dans `review-corrections.test.ts` (plutot que `database.test.ts`, pour ne pas modifier un test existant) ; ligne au backlog sur `canceled_by` ; commentaires perimes ; memoire des relecteurs committee.
 ## Tests ecrits (test-writer, avant implementation)
 Chemins et noms que les tests supposent (a respecter ou a renegocier avec l'orchestrateur, pas a contourner dans les tests) :
 - Fonction Inngest : `apps/web/src/lib/inngest/process-stripe-event.ts`, export nomme `processStripeEvent`.

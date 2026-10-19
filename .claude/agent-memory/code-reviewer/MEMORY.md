@@ -1,1 +1,2 @@
 - [No pnpm test in parallel reviews](feedback_parallel_reviews_no_pnpm_test.md) — shared test DB/port; use orchestrator's result, `pnpm run check` is safe
+- [Review file and verdict](feedback_review_file_verdict.md) — write audits/review-NNN.md via Write tool, last line REVIEW: PASS/FAIL

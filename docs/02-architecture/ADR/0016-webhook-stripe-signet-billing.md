@@ -31,7 +31,7 @@ La route webhook ne lit ni n'ecrit la base. Seul le module de la fonction Innges
 connexion `signet_billing` (`lib/inngest/billing-db.ts`), ce qu'impose `no-restricted-imports`
 (AC16, D-058) : la fonction tourne dans le meme processus que les routes.
 
-## `signet.apply_stripe_subscription(p_input jsonb) RETURNS text` (migration 0012)
+## `signet.apply_stripe_subscription(p_input jsonb) RETURNS text` (migration 0012, remplacee par 0013)
 
 - Proprietaire `signet_definer`, `SECURITY DEFINER`, `SET search_path = pg_catalog, signet, public,
   pg_temp`, tables qualifiees, `REVOKE ALL FROM PUBLIC`, `EXECUTE` au seul `signet_billing`.
@@ -61,6 +61,20 @@ connexion `signet_billing` (`lib/inngest/billing-db.ts`), ce qu'impose `no-restr
   l'ecriture echoue, `deleted` traite entre-temps, puis rejeu par Inngest du pas memorise. Revient
   partiellement sur Q-2 (« aucune colonne nouvelle ») ; la garde porte sur l'instant de RELECTURE
   (milliseconde), pas sur `event.created` (seconde) ecarte par Q-2.
+  **Limites restantes (D-072, review-002 et audit-002 de la seconde serie)** :
+  - la marque est l'instant ou l'instance a **recu** la reponse de Stripe, pas l'instant de l'etat
+    chez Stripe (Stripe n'en fournit pas) ; deux relectures tres proches peuvent etre ordonnees a
+    l'inverse de l'etat qu'elles portent, a la latence reseau pres ;
+  - la marque vient de l'horloge de chaque instance : un ecart entre instances fausse l'ordre a
+    hauteur de cet ecart. Une marque de plus de 5 minutes dans le futur de la base leve `SG003`
+    (sinon une instance en avance figerait l'organisation : tous les etats suivants seraient
+    `stale`) ; un `stale` est journalise ;
+  - deux executions concurrentes du meme abonnement ne sont pas ordonnees par la garde mais par la
+    limite de concurrence Inngest `{ key: event.data.subscriptionId, limit: 1 }` (D-072). Inngest
+    limite les **pas en cours**, pas les executions en attente de relance : le rejeu d'un pas
+    memorise apres une panne reste le cas de la garde, qui le couvre.
+  Ecarte : une marque fournie par Stripe (aucune n'existe sur l'objet abonnement) ; un numero de
+  sequence par abonnement tenu par Stripe (meme raison).
 - **Coherence (Q-7)** : autre abonnement deja rattache, client Stripe different, prix qui n'est pas
   `STRIPE_PRICE_ID_PRO` (D-068), identifiant deja rattache a une autre organisation : `SG006`.
   Organisation non resolue (metadonnee absente, mal formee, organisation inexistante) : `SG005`.
