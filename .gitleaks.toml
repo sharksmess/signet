@@ -19,4 +19,9 @@ regexes = [
   '''^signkey-test-0123456789abcdef0123456789abcdef$''',
   # BETTER_AUTH_SECRET de .env.example : consigne a remplacer, pas une valeur.
   '''^au-moins-32-caracteres-aleatoires-a-generer$''',
+  # INVITATION_TOKEN_KEY de test (D-096) : base64url de textes en clair de
+  # 32 octets, "cle-de-test-inventee-tranche-003" (.env.test.example) et
+  # "ci-only-invitation-key-invente-1" (.github/workflows/ci.yml).
+  '''^Y2xlLWRlLXRlc3QtaW52ZW50ZWUtdHJhbmNoZS0wMDM$''',
+  '''^Y2ktb25seS1pbnZpdGF0aW9uLWtleS1pbnZlbnRlLTE$''',
 ]
