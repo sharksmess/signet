@@ -19,9 +19,12 @@ import { NextRequest } from "next/server";
 import { serve } from "inngest/next";
 import { getInngest } from "../../../lib/inngest/client";
 import { getProcessStripeEvent } from "../../../lib/inngest/process-stripe-event";
+import { getSendInvitationEmail } from "../../../lib/inngest/send-invitation-email";
 
+// Fonctions servies : traitement des evenements Stripe (002) et envoi de
+// l'e-mail d'invitation (003, ADR-0017).
 function createHandler() {
-  return serve({ client: getInngest(), functions: [getProcessStripeEvent()] });
+  return serve({ client: getInngest(), functions: [getProcessStripeEvent(), getSendInvitationEmail()] });
 }
 
 let handler: ReturnType<typeof createHandler> | null = null;
