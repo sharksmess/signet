@@ -8,7 +8,7 @@
 
 ## Contexte
 
-ADR-0003 fixe le stockage : 32 octets aleatoires, seule leur empreinte SHA-256 est en base, le secret
+ADR-0003 fixe le stockage : 32 octets aleatoires, seule leur empreinte SHA-256 (haché des octets, avant encodage, D-090) est en base, le secret
 n'existe en clair « que le temps de composer l'e-mail ». ADR-0006 decouple l'envoi de la creation :
 l'e-mail part d'une fonction Inngest, executee apres la reponse `201`. Les deux exigences se
 heurtent : la fonction qui compose l'e-mail ne s'execute pas dans la requete qui a genere le secret,

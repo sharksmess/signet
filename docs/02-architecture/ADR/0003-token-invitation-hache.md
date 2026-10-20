@@ -54,7 +54,8 @@ fonctionnel. Demi-mesure, ecartee.
 ### Option C — Jeton aleatoire, seule son empreinte SHA-256 est stockee
 
 Le serveur genere 32 octets aleatoires cryptographiques, transmet leur encodage base64url dans
-l'URL, et ne stocke que `sha256(secret)` dans `invitation.token_hash`. La verification recalcule
+l'URL, et ne stocke que `sha256(secret)` — haché des 32 octets, avant encodage base64url
+(precise par D-090) — dans `invitation.token_hash`. La verification recalcule
 l'empreinte et cherche `WHERE token_hash = ?`. Le secret en clair n'existe qu'en memoire, le
 temps de composer l'e-mail.
 
@@ -79,7 +80,8 @@ avant son expiration.
 
 ## Decision
 
-**Option C.** `invitation.token_hash bytea NOT NULL` contenant `sha256(secret)`, avec
+**Option C.** `invitation.token_hash bytea NOT NULL` contenant `sha256(secret)` (les 32 octets
+du secret, avant encodage base64url, D-090), avec
 `CHECK (octet_length(token_hash) = 32)` et un index unique. Le secret d'URL est genere par un
 CSPRNG (32 octets), transmis en base64url, et n'est jamais persiste ni journalise.
 `invitation.id` reste un UUIDv7 purement identifiant, sans valeur d'authentification.

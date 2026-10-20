@@ -453,7 +453,7 @@ Voir [ADR-0003](ADR/0003-token-invitation-hache.md) pour le choix de stockage du
 | `organization_id` | `uuid` | `NOT NULL REFERENCES organization(id) ON DELETE CASCADE` | US-02.1 : l'invitation est liee a l'organisation. |
 | `email` | `text` | `NOT NULL`, `CHECK (email = lower(email))`, `CHECK (char_length(email) <= 254)`, memes regles de forme que `app_user.email` | Stockee en minuscules pour que l'unicite et le rapprochement de compte soient deterministes sans extension `citext`. |
 | `role` | `text` | `NOT NULL DEFAULT 'member' CHECK (role = 'member')` | **Decide le 2026-09-22** : inviter un owner est impossible, une invitation cree toujours un `member` — coherent avec l'owner unique et immuable (§4). Le `CHECK` n'est plus une valeur par defaut a confirmer, c'est la regle. |
-| `token_hash` | `bytea` | `NOT NULL`, `CHECK (octet_length(token_hash) = 32)` | SHA-256 du secret d'URL. Le secret en clair n'est jamais ecrit en base. |
+| `token_hash` | `bytea` | `NOT NULL`, `CHECK (octet_length(token_hash) = 32)` | `sha256` des 32 octets du secret, avant encodage base64url (D-090) : jamais le haché du texte du lien. Le secret en clair n'est jamais ecrit en base. |
 | `invited_by_user_id` | `uuid` | `NOT NULL REFERENCES app_user(id) ON DELETE RESTRICT` | Tracabilite : qui a ouvert l'acces. `RESTRICT` — voir §9 (suppression de compte). |
 | `created_at` | `timestamptz` | `NOT NULL DEFAULT now()` | |
 | `expires_at` | `timestamptz` | `NOT NULL DEFAULT (now() + interval '7 days')`, `CHECK (expires_at > created_at)`, `CHECK (expires_at <= created_at + interval '7 days')` | US-02.1 : les 7 jours sont dans la base, pas dans une constante applicative qui derive. Le second `CHECK` fait du delai un **maximum** impose : aucun appelant ne peut fabriquer une invitation a duree illimitee. |
@@ -519,7 +519,9 @@ Fige en UTC, l'emission dure toujours 168 heures. **Pour 006** : un `UPDATE` ree
 dans le fuseau de la session ; `accept_invitation` devra figer `TimeZone = 'UTC'` elle aussi, sinon
 une invitation qui chevauche le passage a l'heure d'ete serait refusee (`23514`) sous un fuseau a
 changement d'heure.
-Le texte ci-dessous est celui de la decision du 2026-09-22, toujours valable pour le corps.
+Le texte ci-dessous est celui de la decision du 2026-09-22 : valable pour le corps de la fonction
+(purge puis `INSERT`) ; pour la RLS, il est remplace par les politiques owner seul ci-dessus
+(D-086 P-3).
 Decision du 2026-09-22 : une invitation en attente et non expiree pour (organisation, e-mail)
 retourne 409 ; une fois expiree, une nouvelle invitation est permise, **sans action manuelle**.
 Comme l'index partiel ne peut pas exclure les lignes expirees de son predicat, la fonction fait
@@ -542,7 +544,8 @@ Le `DELETE` ne retire que des lignes deja mortes fonctionnellement (expirees, ja
 il ne contourne jamais le refus d'un doublon reellement actif, qui reste porte par l'index unique.
 **Pas de `SECURITY DEFINER` ici** : l'appelant (owner) est deja dans un contexte tenant valide
 (session authentifiee, `SET LOCAL app.organization_id`), la RLS ordinaire de `invitation`
-(`organization_id = current_org()`) s'applique normalement sous le role `signet_app`. Ajouter
+(`organization_id = current_org()` **et** role owner, politiques `invitation_owner_*`, D-086 P-3)
+s'applique normalement sous le role `signet_app`. Ajouter
 cette fonction a la liste fermee des points d'entree pre-tenant serait une escalade de privilege
 non justifiee — elle n'en fait pas partie.
 
