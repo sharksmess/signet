@@ -33,6 +33,8 @@ export const createInvitation: ApiContract<
     { status: 403, code: "INSUFFICIENT_ROLE", trigger: "appelant membre mais role = member (US-02.2)" },
     { status: 422, code: "VALIDATION_FAILED", trigger: "email absent ou malforme" },
     { status: 409, code: "INVITATION_ALREADY_PENDING", trigger: "decision du 2026-09-22 : une invitation non consommee et non expiree existe deja pour (organizationId, email) — index unique partiel invitation_pending_idx (ERD §5)." },
+    { status: 409, code: "ALREADY_MEMBER", trigger: "D-086 Q-2 (tranche 003) : l'adresse normalisee (minuscules) est deja celle d'un membre de l'organisation, owner compris (l'owner qui s'invite lui-meme) ; aucune invitation creee, aucun e-mail." },
+    { status: 503, code: "SERVICE_UNAVAILABLE", trigger: "D-086 Q-3 (tranche 003) : la file d'attente (Inngest) refuse l'evenement d'envoi ou ne repond pas dans le delai ; la mise en file precede le COMMIT, la transaction est annulee : aucune invitation creee, un nouvel appel est possible aussitot (pas de 409)." },
   ],
   idempotency:
     "non-idempotente : chaque appel reussi cree une nouvelle invitation avec un nouveau token et une nouvelle expiration a 7 jours. Un rejeu tant que la precedente est encore en attente ET valide retourne 409 INVITATION_ALREADY_PENDING. Si la precedente est expiree, `signet.create_invitation()` la purge automatiquement avant d'inserer la nouvelle (ERD §5) — l'owner n'a rien a faire de special pour reinviter apres expiration, un simple appel repete suffit.",
