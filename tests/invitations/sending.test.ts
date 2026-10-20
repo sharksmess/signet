@@ -90,7 +90,10 @@ describe("AC2 — e-mail et lien (US-02.3)", () => {
     expect(token, "base64url de 32 octets (43 caracteres, sans remplissage)").toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(Buffer.from(token ?? "", "base64url").length).toBe(32);
     const row = await readSingleInvitation(emitted.org.organizationId, emitted.email);
-    expect(sha256(token ?? "").equals(row.token_hash), "sha256(jeton) = token_hash de la ligne").toBe(true);
+    // D-090 (ADR-0003) : empreinte des 32 octets du secret, avant encodage, et non du texte du lien.
+    const secret = Buffer.from(token ?? "", "base64url");
+    expect(sha256(secret).equals(row.token_hash), "sha256(32 octets du secret) = token_hash de la ligne").toBe(true);
+    expect(sha256(token ?? "").equals(row.token_hash), "l'empreinte n'est pas celle du texte base64url").toBe(false);
   });
 
   it("AC2 : le jeton scelle dans l'evenement s'ouvre avec la cle de test (AES-256-GCM, donnees authentifiees = invitationId) et correspond au lien de l'e-mail", async () => {
