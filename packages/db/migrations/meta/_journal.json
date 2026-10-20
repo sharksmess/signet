@@ -29,6 +29,13 @@
       "when": 1792415511616,
       "tag": "0013_subscription_sync_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792507608099,
+      "tag": "0014_invitation",
+      "breakpoints": true
     }
   ]
 }
