@@ -27,7 +27,7 @@
 - **CI de la PR #28 rouge a l'etape Build.** La liste noire de `scripts/ci-build.sh` (1.6.0) effacait `APP_ENV` mais laissait passer `AUTH_RATE_LIMIT=off` du job de CI : le build refusait le limiteur coupe hors test. Invisible en local, le terminal n'ayant aucune des deux variables. Corrige par l'usine 1.6.2 (environnement vide, liste blanche), reproduit puis verifie en local (D-085).
 
 ## Etat a la fin
-Usine 1.6.1 publiee ; adoption en PR #28 (283 tests, garde-fou verifie : ecriture dans `.gates/` refusee). Objectif A fixe (D-083).
+Usine 1.6.2 publiee (1.6.0, 1.6.1 puis 1.6.2) ; adoption en PR #28 (283 tests, garde-fou verifie : ecriture dans `.gates/` refusee). Objectif A fixe (D-083).
 
 ## Etape suivante
 Tranche 003 (invitation d'un membre), avec une fausse messagerie en test : aucun fournisseur d'e-mails reel (D-083).
