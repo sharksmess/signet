@@ -20,7 +20,11 @@ Ordre de dependance technique d'abord, risque decroissant en departage a profond
 
 Les identifiants ne sont jamais renumerotes (D-025) : une tranche inseree prend le prochain numero libre, et l'ordre d'execution est ecrit ici.
 
-001 (close) -> 010 (close) -> **011** -> 002 -> 003 -> 004 -> 005 -> 006 -> 007 -> 008 -> 009
+001 (close) -> 010 (close) -> 011 (close) -> 002 (close) -> **003** -> 006 -> 004 (en mode autonome) -> 005 -> 012 (ecrans)
+
+Objectif A (D-083, D-084) : la sequence ci-dessus termine l'usine. 007, 008 et 009 sont hors objectif (backlog), avec la mise en ligne et les vrais paiements.
+
+Tranche **012 — Ecrans** (nouvelle, prochain numero libre selon D-025) : page de connexion et d'inscription, page de l'organisation (palier, membres, collections), page d'une collection et de ses liens. Depend de 001 a 006. Cadrage a ecrire a son ouverture.
 
 ## Tranche 010 — cadrage (decision D-022)
 
