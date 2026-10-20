@@ -322,7 +322,7 @@ describe("AC15 — fonctions et catalogue (D-033, ADR-0011)", () => {
     const { rows } = await asBypassRls((client) =>
       client.query<{ polname: string; polcmd: string; roles: string[]; qual: string | null; withcheck: string | null }>(
         `SELECT pol.polname, pol.polcmd::text AS polcmd,
-                ARRAY(SELECT CASE WHEN o = 0 THEN 'public' ELSE (SELECT rolname FROM pg_roles WHERE oid = o) END
+                ARRAY(SELECT CASE WHEN o = 0 THEN 'public' ELSE (SELECT rolname::text FROM pg_roles WHERE oid = o) END
                         FROM unnest(pol.polroles) AS o) AS roles,
                 pg_get_expr(pol.polqual, pol.polrelid) AS qual,
                 pg_get_expr(pol.polwithcheck, pol.polrelid) AS withcheck
