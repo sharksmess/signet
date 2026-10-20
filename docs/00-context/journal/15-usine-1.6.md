@@ -24,6 +24,7 @@
 ## Incidents
 - **Garde-fous inoperants sur le poste.** A l'installation de la 1.6.0, les tests de l'usine ont echoue (55/114) : le poste n'a ni jq ni Python, seulement l'alias `python3` du Microsoft Store ; les hooks lisaient une commande vide et autorisaient tout, sans le dire. Depuis quand : non etabli (l'adoption de la 1.5.0 le 07/10 etait passee). Les regles ont ete tenues par l'agent lui-meme, et tout le code a ete relu par trois relecteurs et valide par l'humain ; mais la garantie mecanique manquait. Corrige : jq installe (`winget install jqlang.jq`, jq-1.8.2), usine 1.6.1.
 - Deux serveurs Next oublies depuis les 24 et 25/09 (ancien worktree d'agent) consommaient de la memoire : voir `docs/04-runbooks/FRICTION.md`.
+- **CI de la PR #28 rouge a l'etape Build.** La liste noire de `scripts/ci-build.sh` (1.6.0) effacait `APP_ENV` mais laissait passer `AUTH_RATE_LIMIT=off` du job de CI : le build refusait le limiteur coupe hors test. Invisible en local, le terminal n'ayant aucune des deux variables. Corrige par l'usine 1.6.2 (environnement vide, liste blanche), reproduit puis verifie en local (D-085).
 
 ## Etat a la fin
 Usine 1.6.1 publiee ; adoption en PR #28 (283 tests, garde-fou verifie : ecriture dans `.gates/` refusee). Objectif A fixe (D-083).
