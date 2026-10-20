@@ -2,3 +2,4 @@
 - [Verifier les tests, pas que le correctif](feedback_verifier-les-tests-pas-que-le-correctif.md) — derouler chaque test d'anti-regression dans les deux etats (avant/apres correctif)
 - [Rapport rendu en texte](feedback_rapport-rendu-en-texte.md) — ne pas ecrire audit-NNN.md soi-meme : rendre le rapport integral, l'orchestrateur le persiste
 - [UUID compare en texte](project_uuid-casse-comparaison-texte.md) — Zod accepte les majuscules, uuid::text est minuscule : chercher les comparaisons texte (audit 002)
+- [Prealables fournisseur e-mail](project_fournisseur-email-prealables.md) — vrai fournisseur = limite d envois + nom d org dans le corps deviennent MAJEUR (audit 003)

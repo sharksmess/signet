@@ -102,3 +102,105 @@ Aucun.
 - **Manquant** : la mise en cohérence du contrat et de l'ERD avec D-090 (risque direct pour 006) et un test du refus de clé côté route.
 
 REVIEW: PASS
+
+---
+
+## Seconde relecture — 2026-10-20 (HEAD 945f2b9, apres les corrections D-095)
+
+> Note de l'orchestrateur : rapport rendu par `code-reviewer`, en contexte neuf, sans ecriture dans le depot, recopie tel quel. Resultat de la suite transmis au relecteur : `pnpm test` 31/31 fichiers, 364/364 tests, 0 echec (execute par l'orchestrateur au premier plan sur 945f2b9). Ce verdict remplace celui de la premiere relecture.
+
+# Seconde relecture de code : tranche 003, invitation d'un membre (HEAD 945f2b9)
+
+**Méthode.** J'ai lu :
+- les corrections, `git diff b9e75a2..945f2b9` : quatre commits. Seuls la documentation et un nouveau fichier de test changent, aucun fichier source ;
+- `tests/invitations/review-corrections.test.ts` en entier ;
+- les sources qu'il exerce : `apps/web/src/lib/invitations/invitations.ts`, `apps/web/src/lib/inngest/send-invitation-email.ts`, `invitationTokenKey` dans `apps/web/src/lib/env.ts`, la route, `apps/web/src/lib/db.ts` ;
+- les aides de test : `runSender`, `applyServerEnvToProcess`, `errorName` et `errorMessage` ;
+- la documentation : `review-003.md`, D-086 à D-095, le contrat, ERD §5 et §RLS, ADR-0003, ADR-0017, le journal de tranche, le backlog, `.gates/scope-003.txt` ;
+- pour la tranche entière (`git diff main..HEAD`) : statistiques par fichier, `package.json` et lockfile, migrations, recherche de `any`, `TODO`, `@ts-` et `eslint-disable`.
+
+Je n'ai pas lancé la suite. Je m'appuie sur le résultat de l'orchestrateur sur 945f2b9 : 31 fichiers, 364 tests, 0 échec. Je n'ai rien écrit dans le dépôt.
+
+## Suivi des cinq corrections D-095
+
+| D-095 | review-003 | État | Vérification |
+|---|---|---|---|
+| 1. Contrat et ERD alignés sur D-090 et P-3 | A CORRIGER 2 | **corrigé** | La convention « empreinte » et AC2 du contrat (l.63, l.66) disent désormais « 32 octets avant encodage, jamais le haché du texte ». Même formulation dans ERD `token_hash` (l.456). La phrase RLS de l'ERD est corrigée (l.522-524, l.547). ADR-0003 (l.57, l.83) et ADR-0017 (l.11) le précisent. J'ai cherché « sha256 / empreinte / current_org » dans le contrat, l'ERD et les deux ADR : il ne reste aucune formulation contraire. |
+| 2. Écart du commit c3e1c3e | A CORRIGER 1 | **corrigé** | Section « Écarts » de `003-progress.md` : cause, conséquence (`git bisect`), neutralisation par le squash, leçon. L'historique n'est pas réécrit, conformément à D-095. |
+| 3. Refus de `INVITATION_TOKEN_KEY` côté émission | A CORRIGER 3 | **corrigé** | Voir l'analyse ci-dessous. Une réserve en Suggestion 1. |
+| 4. D-091, `TimeZone=UTC` | A CORRIGER 4 | **corrigé** | Garde sur `proconfig` et test de comportement qui tranche quelle que soit la date. |
+| 5. D-093, journal d'abandon, AC14 sur `console.error` | A CORRIGER 5 | **corrigé** | Trois tests. Une réserve en Suggestion 2. |
+
+Aucun test existant n'est modifié : le diff de test `b9e75a2..945f2b9` ne contient que l'ajout de `review-corrections.test.ts`. Le décompte est cohérent : 10 tests (1 + 4 + 1 + 1 + 3), 354 + 10 = 364. Le journal l'indique aussi.
+
+### Ces tests échoueraient-ils si le code était faux ? Vérifié par lecture
+
+**Correction 3** (l.81-120). Le témoin positif prouve que la clé de test permet l'émission dans ce processus. Ensuite, quatre clés refusées : absente, texte quelconque, 31 octets, 33 octets. Pour chacune, le test vérifie l'échec, le nom de la variable, l'absence de la valeur et de la vraie clé, zéro ligne et zéro événement, y compris dans les corps bruts reçus par le faux Inngest. Le test échouerait dans trois cas :
+- un repli sur une clé aléatoire, qui créerait une ligne et un événement ;
+- une lecture de la clé déplacée après `sendEventWithDeadline`, qui laisserait un événement ;
+- un message qui citerait la valeur.
+
+`invitationTokenKey()` relit `process.env` à chaque appel, et `vi.resetModules()` écarte tout cache. Le refus est donc bien celui de la clé surchargée.
+
+**Correction 4** (l.122-179). L'assertion `proconfig` contient `TimeZone=UTC` est une garde durable : elle ne dépend ni de la date ni du fuseau de la CI. Le test de comportement fabrique un fuseau POSIX `AAA0BBB,Jn,Jm` :
+- la transition tombe entre 2 et 5 jours plus tard (6 jours au plus en année bissextile, car `Jn` ignore le 29 février) ;
+- les bornes 2 et 364 et la règle « hémisphère sud » couvrent la fin d'année ;
+- une précondition vérifiée sur la même transaction (`wall != 604800`) prouve que le fuseau est discriminant.
+
+`set_config(..., true)` agit dans la transaction de `asTenant`, que `create_invitation` hérite. Sans `SET TimeZone`, l'invitation durerait 167 h ou 169 h et le test échouerait. Si PostgreSQL refusait la règle POSIX, `set_config` lèverait et le test échouerait bruyamment, sans faux vert.
+
+**Correction 5** (l.182-242) :
+- L'appel direct de `reportAbandonedInvitation` vérifie un seul `console.error`, la présence de l'identifiant et du nom d'erreur, et l'absence de l'e-mail, du `sealedToken` et de la clé. Il vérifie aussi que `log`, `info` et `warn` ne sont pas appelés. Un passage à `console.log` serait détecté.
+- Le test D-093 vérifie `errorName != NonRetriableError` et zéro tentative d'envoi.
+- Le test AC14 pose l'espion sur `console.error` seul. J'ai vérifié que `runSender` n'installe aucune capture de console qui fausserait l'espion. Une journalisation déplacée vers `log` donnerait `named.length = 0`, donc un échec.
+
+## BLOQUANT
+Aucun.
+
+## A CORRIGER
+Aucun.
+
+## SUGGESTION
+
+**1. Le test de la correction 3 ne prouve pas « avant toute écriture », seulement « rien ne subsiste ».**
+- **Emplacement** : `tests/invitations/review-corrections.test.ts:81` (titre du `describe`) ; `apps/web/src/lib/invitations/invitations.ts:71-73`.
+- **Constat** : si l'appel `invitationTokenKey()` était déplacé dans la transaction, avant la mise en file (par exemple juste avant `sealSecret`, l.121), le `ROLLBACK` de `withTenant` effacerait la ligne. Le test resterait vert alors que l'ordre affirmé par le commentaire de la ligne 71 et par le titre ne serait plus respecté.
+- **Conséquence** : nulle sur ce qu'on observe de l'extérieur (zéro ligne, zéro événement, même erreur). Le titre promet un peu plus que ce qui est prouvé.
+- **Direction** : soit reformuler le titre (« aucune ligne ni événement ne subsiste »), soit vérifier en plus qu'aucune connexion ni requête n'est ouverte pendant le refus.
+
+**2. Le branchement `onFailure` -> `reportAbandonedInvitation` n'est pas exercé.**
+- **Emplacement** : `apps/web/src/lib/inngest/send-invitation-email.ts:66-68`.
+- **Constat** : le test appelle la fonction directement, comme le demandait review-003. Mais l'extraction `event.data.event` et `event.data.run_id` n'est couverte par rien.
+- **Conséquence** : une erreur de champ produirait « invitation inconnu » dans le journal d'abandon, donc une perte de diagnostic, sans fuite.
+- **Direction** : au backlog, avec la future procédure de renvoi : exécuter `onFailure` via `@inngest/test` ou un événement `inngest/function.failed` simulé.
+
+**3. Le pool applicatif ouvert par le témoin positif n'est jamais fermé.**
+- **Emplacement** : `tests/invitations/review-corrections.test.ts:82-92` ; `apps/web/src/lib/db.ts:33-41`.
+- **Constat** : après `vi.resetModules()`, le témoin crée une nouvelle instance de `appPool` dans le module de l'application. `closeAllPools()` ne ferme que les pools des aides de test.
+- **Conséquence** : une connexion `signet_app` reste inactive jusqu'à la fin du worker. C'est sans effet aujourd'hui, mais la base de test est partagée entre relecteurs parallèles.
+- **Direction** : fermer le pool chargé en fin de test, si le module expose une fermeture, ou l'ajouter au backlog d'outillage de test.
+
+**4. Les cas « 31 et 33 octets » n'atteignent jamais le `refine`.**
+- **Emplacement** : `apps/web/src/lib/env.ts:129-132`.
+- **Constat** : 43 caractères base64url se décodent toujours en 32 octets, donc le `.refine` ne peut pas échouer. Les cas 31 et 33 octets (42 et 44 caractères) sont refusés par la longueur de la regex.
+- **Conséquence** : le `refine` est du code mort. Ce n'est pas une faille.
+- **Direction** : le retirer, ou le commenter comme simple défense.
+
+## Tranche entière (`main..HEAD`), contrôle bref
+- **Dépendances** : aucune nouvelle. Ni `package.json` ni le lockfile ne changent.
+- **Migrations** : une seule nouvelle, `0014_invitation.sql`, avec son snapshot et l'entrée `_journal`. Aucune migration existante n'est modifiée. L'ERD est à jour, table des migrations comprise.
+- **Interdits** : aucun `any`, `TODO`, `@ts-` ni `eslint-disable` ajouté.
+- **Périmètre** : tous les fichiers touchés sont couverts par `.gates/scope-003.txt`. La route passe par le motif à crochets échappés, conformément à D-094.
+- **Isolation tenant** : filtre `organization_id` explicite sur les deux lectures de `member` et sur le résultat de `create_invitation`. La RLS owner seul est testée sous `signet_app`.
+- **Jeton** : il est absent de la réponse, de l'événement en clair, des pas mémorisés et des journaux (AC3). Les nouveaux tests ajoutent l'absence de la clé et du `sealedToken` dans les journaux d'abandon et d'AC14. La route ne renvoie que `code` et `message` typés. Un refus de clé donne un 500 générique sans valeur.
+- **Régressions introduites par les corrections** : aucune. Aucun fichier source n'est modifié, aucun test existant non plus.
+- **Historique** : les quatre commits de correction suivent Conventional Commits, avec le trailer `Slice: 003`, et donnent le pourquoi dans le corps quand il n'est pas évident.
+- **Registre** : D-086 à D-095 sont continus, sans identifiant réutilisé. D-095 dit qui a décidé, la portée, les options écartées et les liens. Le backlog contient audit-003 MINEUR-1 et MINEUR-2 comme préalables au fournisseur réel, avec la condition qui fait passer MINEUR-1 en MAJEUR.
+- **Hors défaut, comme annoncé** : le journal de projet 16 sera écrit par l'orchestrateur.
+
+## Bilan
+- **Solide** : les cinq corrections sont réelles et complètes. Les nouveaux tests échoueraient si le comportement était faux, y compris le test de fuseau, qui s'appuie sur une précondition vérifiée et non sur la date. Le contrat, l'ERD et les deux ADR ne contredisent plus D-090 ni P-3, ce qui écarte le risque pour la tranche 006.
+- **Fragile** : la preuve « avant toute écriture » repose sur le `ROLLBACK`, pas sur l'ordre des appels. Le branchement `onFailure` n'est pas exercé.
+- **Manquant** : rien qui bloque la clôture. Restent le journal de projet 16 (orchestrateur) et `pnpm db:migrate` sur la base de développement (action humaine).
+
+REVIEW: PASS
