@@ -227,7 +227,7 @@ export async function asTableOwner<T>(fn: (client: PoolClient) => Promise<T>): P
 export async function resetDatabase(): Promise<void> {
   await asBypassRls(async (client) => {
     await client.query(
-      "TRUNCATE TABLE subscription, organization_link_usage, member, organization, " +
+      "TRUNCATE TABLE invitation, subscription, organization_link_usage, member, organization, " +
         "session, account, verification, app_user RESTART IDENTITY CASCADE",
     );
   });

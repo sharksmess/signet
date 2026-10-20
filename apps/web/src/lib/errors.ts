@@ -4,7 +4,9 @@
  * invariants qui ne devraient jamais arriver."). Chaque code correspond
  * exactement a un `errors[]` de `docs/02-architecture/api-contracts/organizations.ts`
  * ou `subscriptions.ts` (tranche 002 ; `SERVICE_UNAVAILABLE` : webhook,
- * AC14, file d'attente indisponible, D-070).
+ * AC14, file d'attente indisponible, D-070), ou `invitations.ts` (tranche 003 :
+ * `INVITATION_ALREADY_PENDING`, `ALREADY_MEMBER`, et `SERVICE_UNAVAILABLE` quand
+ * la file refuse l'evenement d'invitation, D-086 Q-2, Q-3).
  */
 
 export type ApiErrorCode =
@@ -15,7 +17,9 @@ export type ApiErrorCode =
   | "ALREADY_ON_TIER"
   | "STRIPE_UNAVAILABLE"
   | "INVALID_SIGNATURE"
-  | "SERVICE_UNAVAILABLE";
+  | "SERVICE_UNAVAILABLE"
+  | "INVITATION_ALREADY_PENDING"
+  | "ALREADY_MEMBER";
 
 export interface ApiError {
   status: 400 | 401 | 403 | 404 | 409 | 422 | 502 | 503;
@@ -79,7 +83,21 @@ export const invalidSignature = (): ApiError => ({
   message: "Signature invalide.",
 });
 
-/** AC14 : 5xx pour que l'emetteur renvoie l'evenement ; aucun detail interne. */
+/** Tranche 003, AC8 : une invitation en attente et non expiree existe pour (organisation, e-mail). */
+export const invitationAlreadyPending = (): ApiError => ({
+  status: 409,
+  code: "INVITATION_ALREADY_PENDING",
+  message: "Une invitation est deja en attente pour cette adresse.",
+});
+
+/** Tranche 003, AC12 (D-086 Q-2) : l'adresse est deja celle d'un membre, owner compris. */
+export const alreadyMember = (): ApiError => ({
+  status: 409,
+  code: "ALREADY_MEMBER",
+  message: "Cette adresse est deja celle d'un membre de l'organisation.",
+});
+
+/** AC14 (002) et AC13 (003) : 5xx, aucun detail interne. */
 export const serviceUnavailable = (): ApiError => ({
   status: 503,
   code: "SERVICE_UNAVAILABLE",

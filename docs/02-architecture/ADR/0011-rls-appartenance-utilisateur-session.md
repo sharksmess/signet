@@ -208,6 +208,12 @@ Tableau « source du contexte » complete par la tranche 002 :
 | `apply_stripe_subscription(jsonb)` (0012) | `signet_billing` seul | efface `app.organization_id` en premiere instruction ; puis organisation de la ligne `subscription` deja rattachee a l'identifiant d'abonnement Stripe (lecture par `subscription_definer_stripe_lookup`), a defaut `metadata.organization_id` de l'abonnement relu chez Stripe avec la cle secrete, posee par le serveur au Checkout apres controle du role owner ; une metadonnee contraire a la ligne deja rattachee leve `SG004` (ADR-0016) |
 | `reject_mutation()` (0012, trigger, `SECURITY INVOKER`) | aucun (trigger) | sans objet : ne lit aucune table |
 
+Complete par la tranche 003 (ADR-0017) :
+
+| Fonction | Executable par | Source du contexte |
+|---|---|---|
+| `create_invitation(p_organization_id, p_email, p_token_hash)` (0014, `SECURITY INVOKER`) | `signet_app` seul | aucune : la fonction ne pose rien et s'execute sous la RLS de l'appelant ; `current_org()` (contexte de la session, verifie) et la jointure owner des politiques `invitation_owner_*` font la barriere. `invited_by_user_id = current_user_id()`. Contexte etranger, member ou contexte absent : `DELETE` sans effet, `INSERT` refuse (`42501`) |
+
 ### e) Fonctions dependant de l'utilisateur de session (AC4)
 
 **`signet.organizations_for_user(p_user_id)`.** La garde actuelle `p_user_id IS NULL OR p_user_id

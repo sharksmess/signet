@@ -94,6 +94,15 @@ Tranche **012 — Ecrans** (nouvelle, prochain numero libre selon D-025) : page 
 - Tester les options de `ban-ts-comment` (`ts-expect-error`, `ts-ignore`, `ts-nocheck` a `true`), pas seulement sa severite, dans `tests/stack-upgrade/lint-scope.test.ts` (review-011 SUGGESTION 4).
 - Rendre le test Dependabot structurel (parseur YAML, si une dependance est actee) ou au minimum controler l'indentation d'`ignore:` par rapport a `groups:` (review-011 SUGGESTION 5).
 - Tester la reponse 405 sur une methode non exportee des Route Handlers : comportement de Next non fixe par un test (contracts-011, point non couvert).
+- **Issus de la tranche 003 (D-086, ADR-0017)**, hors objectif A sauf mention :
+  - fournisseur d'e-mails reel (domaine d'envoi, SPF/DKIM, e-mail HTML eventuel) ; verifier qu'il respecte `Idempotency-Key` (double envoi residuel, ADR-0017 §5) ;
+  - **limite d'envois par organisation et par owner, prealable au fournisseur reel** (D-086 Q-4), a traiter avec audit-001 MINEUR-5 et audit-002 MINEUR-1 ;
+  - **audit-003 MINEUR-1, prealable au fournisseur reel (D-095)** : le nom d'organisation, texte libre de l'owner (URL acceptees), est repris dans le corps de l'e-mail d'invitation (`lib/invitations/email.ts`) ; le delimiter clairement comme contenu fourni par un utilisateur, ou filtrer URL et domaines dans le nom. Inoffensif sans fournisseur ; **devient MAJEUR avec le fournisseur reel** (hameconnage depuis le domaine d'envoi de Signet) ;
+  - **audit-003 MINEUR-2, prealable au fournisseur reel (D-095)** : la connexion `signet_app` reste tenue jusqu'a 5 s pendant la mise en file (`withTenant` englobe `sendEventWithDeadline`, choix D-086 Q-3) ; un incident Inngest amplifie par des emissions paralleles epuise le pool. A inclure dans la limite par organisation et par owner ci-dessus, avec un plafond de mises en file simultanees sur la route d'emission ;
+  - renvoi manuel d'une invitation (nouvel evenement scelle, jamais relecture d'un secret) et revocation (colonne `revoked_at`, revue de `invitation_pending_idx`, ADR-0003 « Signal de reexamen ») ; liste des invitations en attente par l'API (aucune route de lecture en 003). Tant que le renvoi manque, un envoi abandonne bloque l'adresse jusqu'a l'expiration (7 jours) ;
+  - purge periodique des invitations perimees (cron Inngest sur `invitation_expires_idx`) ; la seule purge actuelle est celle de `create_invitation`, pour le couple reinvite ;
+  - rotation de `INVITATION_TOKEN_KEY` : une nouvelle cle rend inouvrables les evenements en attente (envoi abandonne, journalise) ; procedure a double cle (identifiant de cle dans le `sealedToken`) ;
+  - **pour 006** : `accept_invitation` doit figer `TimeZone = 'UTC'` comme `create_invitation` (D-091), sinon un `UPDATE` d'une invitation qui chevauche le passage a l'heure d'ete est refuse (`23514`) sous un fuseau a changement d'heure (ERD §5).
 - Le detail complet de chaque tranche (perimetre fichiers, contrat de donnees, contrat d'API, criteres d'acceptation AC1-AC5, anti-regression) est ecrit au moment de son ouverture, au format `templates/SLICE.md`, dans `docs/03-slices/<id>-<nom>.md`.
 
 ## Questions d'architecture ouvertes

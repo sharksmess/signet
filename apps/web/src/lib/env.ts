@@ -12,6 +12,8 @@
  * Gardes croisees :
  * - `STRIPE_API_BASE_URL` (faux Stripe des tests, D-059) n'est acceptee qu'avec
  *   `APP_ENV=test`, meme garde que `AUTH_RATE_LIMIT=off` (ADR-0010) ;
+ * - `EMAIL_CAPTURE_URL` (fausse messagerie des tests, D-087, tranche 003) :
+ *   meme garde, `APP_ENV=test` seulement ;
  * - le mode developpement d'Inngest (`INNGEST_DEV`, signature des appels
  *   desactivee) n'est accepte qu'avec `APP_ENV=test` ou `development` (A2) ;
  * - hors mode developpement, `INNGEST_SIGNING_KEY` et `INNGEST_EVENT_KEY` sont
@@ -46,6 +48,9 @@ const serverEnvSchema = z
     STRIPE_WEBHOOK_SECRET: z.string().regex(/^whsec_[A-Za-z0-9_]+$/),
     STRIPE_PRICE_ID_PRO: z.string().regex(/^price_[A-Za-z0-9_]+$/),
     STRIPE_API_BASE_URL: httpUrl.optional(),
+    // Fausse messagerie des tests (D-087). Absente : aucun fournisseur, l'envoi
+    // echoue au premier message (EMAIL_PROVIDER_NOT_CONFIGURED, AC14).
+    EMAIL_CAPTURE_URL: httpUrl.optional(),
     // URL du serveur de developpement Inngest (ou du faux des tests), ou `1`.
     INNGEST_DEV: z.union([z.literal("1"), httpUrl]).optional(),
     INNGEST_SIGNING_KEY: z.string().regex(/^signkey-[a-z]+-[0-9a-f]{32,}$/).optional(),
@@ -54,6 +59,9 @@ const serverEnvSchema = z
   .superRefine((env, ctx) => {
     if (env.STRIPE_API_BASE_URL !== undefined && env.APP_ENV !== "test") {
       ctx.addIssue({ code: "custom", path: ["STRIPE_API_BASE_URL"], message: "acceptee seulement avec APP_ENV=test" });
+    }
+    if (env.EMAIL_CAPTURE_URL !== undefined && env.APP_ENV !== "test") {
+      ctx.addIssue({ code: "custom", path: ["EMAIL_CAPTURE_URL"], message: "acceptee seulement avec APP_ENV=test" });
     }
     const devMode = env.INNGEST_DEV !== undefined;
     if (devMode && env.APP_ENV === "production") {
@@ -106,6 +114,30 @@ export function parseServerEnv(raw: Record<string, string | undefined>): ServerE
 /** Reserve a `lib/inngest/billing-db.ts` (AC16, D-071) : URL de la connexion `signet_billing`, validee. */
 export function billingDatabaseUrl(): string {
   return validate(process.env).DATABASE_URL_BILLING;
+}
+
+/**
+ * Cle de scellement du jeton d'invitation (tranche 003, D-086 Q-1, ADR-0017) :
+ * 32 octets encodes en base64url (43 caracteres, sans remplissage).
+ *
+ * Validee au PREMIER USAGE (scellement par la route, ouverture par la fonction
+ * d'envoi), pas par `parseServerEnv` : l'environnement de production de 002
+ * reste valide sans elle (AC16). Absente ou mal formee : erreur qui nomme la
+ * variable, jamais sa valeur ; la cle n'est jamais journalisee. Invariant de
+ * deploiement, d'ou le `throw`.
+ */
+const invitationTokenKeySchema = z
+  .string()
+  .regex(/^[A-Za-z0-9_-]{43}$/)
+  .refine((value) => Buffer.from(value, "base64url").length === 32);
+
+export const INVITATION_TOKEN_KEY_REFUSED =
+  "INVITATION_TOKEN_KEY : absente ou mal formee (32 octets encodes en base64url attendus).";
+
+export function invitationTokenKey(): Buffer {
+  const parsed = invitationTokenKeySchema.safeParse(process.env.INVITATION_TOKEN_KEY);
+  if (!parsed.success) throw new Error(INVITATION_TOKEN_KEY_REFUSED);
+  return Buffer.from(parsed.data, "base64url");
 }
 
 let cached: ServerEnv | null = null;

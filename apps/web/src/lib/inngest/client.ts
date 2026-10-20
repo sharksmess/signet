@@ -60,3 +60,52 @@ export const stripeSubscriptionEventData = z.object({
 });
 
 export type StripeSubscriptionEventData = z.infer<typeof stripeSubscriptionEventData>;
+
+/** Evenement mis en file par l'emission d'une invitation (tranche 003, ADR-0017). */
+export const INVITATION_CREATED_EVENT = "signet/invitation.created";
+
+/**
+ * Donnees de l'evenement d'invitation : exactement ce qu'il faut pour composer
+ * l'e-mail sans relire la base (ADR-0006, AC15). Jamais le jeton en clair :
+ * `sealedToken` est le secret scelle (AES-256-GCM, `lib/invitations/token.ts`).
+ * `strict` : une cle inconnue est refusee a la lecture par la fonction d'envoi.
+ */
+export const invitationCreatedEventData = z
+  .object({
+    invitationId: z.string().uuid(),
+    organizationId: z.string().uuid(),
+    email: z.string().min(3).max(254),
+    // 120 caracteres hors espaces de bord en base (organization_name_length_chk) ;
+    // la borne ne fait que refuser une entree de file aberrante.
+    organizationName: z.string().min(1).max(1000),
+    sealedToken: z.string().regex(/^[A-Za-z0-9_-]+$/).max(256),
+  })
+  .strict();
+
+export type InvitationCreatedEventData = z.infer<typeof invitationCreatedEventData>;
+
+/**
+ * Mise en file bornee : `true` si la file a accepte l'evenement avant
+ * `deadlineMs`, `false` si elle l'a refuse ou n'a pas repondu a temps (meme
+ * principe que le webhook Stripe, D-065 regle 3). Ne leve pas.
+ */
+export async function sendEventWithDeadline(
+  event: { id: string; name: string; data: Record<string, unknown> },
+  deadlineMs: number,
+): Promise<boolean> {
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<false>((resolve) => {
+    timer = setTimeout(() => resolve(false), deadlineMs);
+  });
+  const sent = getInngest()
+    .send(event)
+    .then(
+      () => true,
+      () => false,
+    );
+  try {
+    return await Promise.race([sent, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}

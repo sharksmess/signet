@@ -224,6 +224,7 @@ describe("AC15 — gestionnaire /api/inngest hors mode developpement", () => {
     for (const [key, value] of Object.entries(production)) vi.stubEnv(key, value);
     vi.stubEnv("INNGEST_DEV", undefined);
     vi.stubEnv("STRIPE_API_BASE_URL", undefined);
+    vi.stubEnv("EMAIL_CAPTURE_URL", undefined);
     vi.resetModules();
   }
 

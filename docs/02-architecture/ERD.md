@@ -453,7 +453,7 @@ Voir [ADR-0003](ADR/0003-token-invitation-hache.md) pour le choix de stockage du
 | `organization_id` | `uuid` | `NOT NULL REFERENCES organization(id) ON DELETE CASCADE` | US-02.1 : l'invitation est liee a l'organisation. |
 | `email` | `text` | `NOT NULL`, `CHECK (email = lower(email))`, `CHECK (char_length(email) <= 254)`, memes regles de forme que `app_user.email` | Stockee en minuscules pour que l'unicite et le rapprochement de compte soient deterministes sans extension `citext`. |
 | `role` | `text` | `NOT NULL DEFAULT 'member' CHECK (role = 'member')` | **Decide le 2026-09-22** : inviter un owner est impossible, une invitation cree toujours un `member` — coherent avec l'owner unique et immuable (§4). Le `CHECK` n'est plus une valeur par defaut a confirmer, c'est la regle. |
-| `token_hash` | `bytea` | `NOT NULL`, `CHECK (octet_length(token_hash) = 32)` | SHA-256 du secret d'URL. Le secret en clair n'est jamais ecrit en base. |
+| `token_hash` | `bytea` | `NOT NULL`, `CHECK (octet_length(token_hash) = 32)` | `sha256` des 32 octets du secret, avant encodage base64url (D-090) : jamais le haché du texte du lien. Le secret en clair n'est jamais ecrit en base. |
 | `invited_by_user_id` | `uuid` | `NOT NULL REFERENCES app_user(id) ON DELETE RESTRICT` | Tracabilite : qui a ouvert l'acces. `RESTRICT` — voir §9 (suppression de compte). |
 | `created_at` | `timestamptz` | `NOT NULL DEFAULT now()` | |
 | `expires_at` | `timestamptz` | `NOT NULL DEFAULT (now() + interval '7 days')`, `CHECK (expires_at > created_at)`, `CHECK (expires_at <= created_at + interval '7 days')` | US-02.1 : les 7 jours sont dans la base, pas dans une constante applicative qui derive. Le second `CHECK` fait du delai un **maximum** impose : aucun appelant ne peut fabriquer une invitation a duree illimitee. |
@@ -490,11 +490,38 @@ une invitation expiree redevient acceptable. L'etat derive n'a pas ce mode de de
 - `INDEX invitation_expires_idx ON invitation (expires_at) WHERE accepted_at IS NULL` — purge
   periodique par Inngest des invitations perimees.
 
-**RLS** : `USING`/`WITH CHECK (organization_id = signet.current_org())`. La lecture par jeton se
-fait hors contexte tenant via `signet.lookup_invitation()`, qui ne divulgue que le nom de
-l'organisation et l'e-mail cible.
+**RLS** (0014, tranche 003 ; **owner seul**, D-086 P-3, qui remplace le `current_org()` seul de
+la version initiale de cette section) : `ENABLE`/`FORCE` ; trois politiques `TO signet_app`, meme
+texte que `subscription_owner_only` (§8.1) :
 
-**Emission (US-02.1) — `signet.create_invitation(organization_id, email, invited_by_user_id)`.**
+| Politique | Commande | Predicat (`USING` ou `WITH CHECK`) |
+|---|---|---|
+| `invitation_owner_read` | `SELECT` | `organization_id = signet.current_org() AND EXISTS (member m : m.organization_id = current_org(), m.user_id = current_user_id(), m.role = 'owner')` |
+| `invitation_owner_insert` | `INSERT` | idem, en `WITH CHECK` |
+| `invitation_owner_delete` | `DELETE` | idem (sert seulement a la purge de `create_invitation`) |
+
+Privileges : `GRANT SELECT, INSERT, DELETE ON invitation TO signet_app` ; ni `UPDATE` ni
+`TRUNCATE` ; aucun privilege pour `signet_auth` ni `signet_billing`. Un member ne voit ni n'emet
+aucune invitation. **Hors 003 (tranche 006)** : politiques `signet_definer` sur `context_org()`,
+`GRANT UPDATE`, `lookup_invitation`, `accept_invitation`. La lecture par jeton se fera hors
+contexte tenant via `signet.lookup_invitation()`, qui ne divulgue que le nom de l'organisation et
+l'e-mail cible.
+
+**Emission (US-02.1) — `signet.create_invitation(p_organization_id uuid, p_email text,
+p_token_hash bytea) RETURNS invitation`** (0014, tranche 003). Signature arretee par la tranche :
+`invited_by_user_id = signet.current_user_id()`, **jamais un parametre** (on n'emet pas au nom d'un
+tiers) ; **aucun parametre de date** (`created_at`, `expires_at` prennent leur valeur par defaut) ;
+`SECURITY INVOKER`, `SET search_path = pg_catalog, signet, public, pg_temp`, tables qualifiees,
+`REVOKE ALL FROM PUBLIC`, `EXECUTE` a `signet_app` seul. `SET TimeZone = 'UTC'` (D-091) : le
+`DEFAULT now() + interval '7 days'` et le `CHECK` ajoutent 7 jours en heure **murale** du fuseau de
+la session ; sous un fuseau a changement d'heure, la duree reelle serait de 167 ou 169 heures.
+Fige en UTC, l'emission dure toujours 168 heures. **Pour 006** : un `UPDATE` reevalue le `CHECK`
+dans le fuseau de la session ; `accept_invitation` devra figer `TimeZone = 'UTC'` elle aussi, sinon
+une invitation qui chevauche le passage a l'heure d'ete serait refusee (`23514`) sous un fuseau a
+changement d'heure.
+Le texte ci-dessous est celui de la decision du 2026-09-22 : valable pour le corps de la fonction
+(purge puis `INSERT`) ; pour la RLS, il est remplace par les politiques owner seul ci-dessus
+(D-086 P-3).
 Decision du 2026-09-22 : une invitation en attente et non expiree pour (organisation, e-mail)
 retourne 409 ; une fois expiree, une nouvelle invitation est permise, **sans action manuelle**.
 Comme l'index partiel ne peut pas exclure les lignes expirees de son predicat, la fonction fait
@@ -517,9 +544,24 @@ Le `DELETE` ne retire que des lignes deja mortes fonctionnellement (expirees, ja
 il ne contourne jamais le refus d'un doublon reellement actif, qui reste porte par l'index unique.
 **Pas de `SECURITY DEFINER` ici** : l'appelant (owner) est deja dans un contexte tenant valide
 (session authentifiee, `SET LOCAL app.organization_id`), la RLS ordinaire de `invitation`
-(`organization_id = current_org()`) s'applique normalement sous le role `signet_app`. Ajouter
+(`organization_id = current_org()` **et** role owner, politiques `invitation_owner_*`, D-086 P-3)
+s'applique normalement sous le role `signet_app`. Ajouter
 cette fonction a la liste fermee des points d'entree pre-tenant serait une escalade de privilege
 non justifiee — elle n'en fait pas partie.
+
+**Concurrence (AC10)** : deux emissions simultanees pour le meme couple se serialisent — sur
+l'entree d'index en attente de `invitation_pending_idx` (la seconde attend le `COMMIT` de la
+premiere puis leve `23505`), ou, si une ligne expiree existe, sur le verrou pris par le premier
+`DELETE` (le second ne trouve plus la ligne, puis son `INSERT` leve `23505`). L'application
+traduit `23505` sur `invitation_pending_idx` en `409 INVITATION_ALREADY_PENDING`.
+
+**Adresse deja membre (D-086 Q-2)** : refusee par l'application avant `create_invitation`
+(`409 ALREADY_MEMBER`, owner compris), par une lecture de `member` jointe a `app_user`
+(`lower(email)`), dans la transaction de l'owner. Aucune contrainte de base : la condition
+traverse deux tables.
+
+**Jeton et envoi** : voir ADR-0003 (empreinte) et ADR-0017 (scellement dans l'evenement,
+lien a fragment, `503` si la file refuse l'evenement avant le `COMMIT`).
 
 **Consommation atomique a usage unique (US-03.3)** — `signet.accept_invitation()` :
 
@@ -928,7 +970,7 @@ jointure ecrite dans la politique (la sonde `member` est dans la fonction).
 | `session`, `account`, `verification` | non (hors tenant) | aucun acces pour `signet_app` | — | aucune |
 | `organization` | `id` (lui-meme) | `id = current_org()` | 0 | `context_org()` ; axe `current_user_id()` en lecture |
 | `member` | direct | `organization_id = current_org()` | 0 | `context_org()` ; `user_id = current_user_id()` en lecture |
-| `invitation` | direct | `organization_id = current_org()` | 0 | a definir en 003/006, sur `context_org()` |
+| `invitation` | direct | `current_org()` **et** role owner, en `SELECT`, `INSERT`, `DELETE` (0014, D-086 P-3) ; aucun `UPDATE` | 1 (`member`) | aucune en 003 ; a definir en 006 (acceptation), sur `context_org()` |
 | `collection` | direct | `organization_id = current_org()` | 0 | — |
 | `link` | **direct** (denormalise, verrouille par FK composite) | `organization_id = current_org()` | 0 | triggers de compteur : `context_org()` sur `organization_link_usage` |
 | `organization_link_usage` | `organization_id` (PK) | `organization_id = current_org()`, lecture seule | 0 | `context_org()` en ecriture |
@@ -956,7 +998,7 @@ n'a pas de cle etrangere sur `organization_id`, precisement pour ne pas cascader
 Chaque etape comprend, dans la **meme migration**, la table et sa politique RLS. Une table livree
 sans politique est une table ouverte le temps que la migration suivante arrive.
 
-### Migrations appliquees (etat au 2026-10-15)
+### Migrations appliquees (etat au 2026-10-20)
 
 Les fichiers de `packages/db/migrations/` presents dans `main` sont immuables (`migrate.ts`
 enregistre un nom, jamais une somme de controle : une modification ne serait jamais rejouee).
@@ -976,13 +1018,15 @@ enregistre un nom, jamais une somme de controle : une modification ne serait jam
 | **`0011_billing_role.sql`** | Q-1 : role `signet_billing` (creation idempotente, aucun droit) ; INFO-1 : leve sur toute appartenance impliquant un des cinq roles (deux sens) et sur tout reglage `pg_db_role_setting` ; `ALTER ROLE` des cinq roles | 002 |
 | **`0012_billing_event.sql`** | §8.2 : table `billing_event` (partie generee par `pnpm db:generate`, fichier renomme depuis `0002_regular_ricochet.sql`, etiquette alignee dans `meta/_journal.json`) ; RLS, politiques `billing_event_*` et `subscription_definer_*`, triggers d'immutabilite, `signet.reject_mutation()`, `signet.apply_stripe_subscription(jsonb)` (ADR-0016), `USAGE` du schema `signet` et `EXECUTE` de la fonction a `signet_billing` | 002 |
 | **`0013_subscription_sync_guard.sql`** | D-071 : colonne `subscription.stripe_synced_at` (generee, fichier renomme depuis `0003_ambiguous_naoko.sql`) ; `apply_stripe_subscription` remplacee : cle d'entree `stripe_read_at` et garde monotone (resultat `stale`), metadonnee d'organisation comparee en `uuid` (audit-002 CRITIQUE-1), passage en Free decide par le statut relu seulement ; marque `stripe_read_at` prise sur l'horloge de la base par la fonction Inngest (D-077), sans borne haute | 002 |
+| **`0014_invitation.sql`** | §5 : table `invitation` (generee, fichier renomme depuis `0004_worthless_stephen_strange.sql`, etiquette alignee, D-088) ; RLS activee et forcee ; politiques `invitation_owner_read`/`_insert`/`_delete` (`TO signet_app`, `current_org()` et role owner, D-086 P-3) ; `GRANT SELECT, INSERT, DELETE` a `signet_app` ; `signet.create_invitation(p_organization_id, p_email, p_token_hash)` `SECURITY INVOKER`, `TimeZone = 'UTC'` (D-091), `EXECUTE` a `signet_app` seul | 003 |
 
 Aucune des trois migrations 0009 a 0011 ne touche une table, une colonne ou un index : `pnpm db:generate`
 ne produit aucune difference, `packages/db/src/schema/*` est inchange. 0012 ajoute
-`packages/db/src/schema/billing.ts`.
+`packages/db/src/schema/billing.ts`, 0014 `packages/db/src/schema/invitations.ts`.
 
 **Numerotation** : `drizzle-kit` numerote les fichiers qu'il genere d'apres son propre journal
-(`meta/_journal.json`), qui ne compte que les migrations generees (0002, 0003, puis 0012, 0013). Le
+(`meta/_journal.json`), qui ne compte que les migrations generees (0002, 0003, puis 0012, 0013,
+0014). Le
 fichier genere est renomme au numero suivant du dossier, et l'etiquette du journal alignee.
 
 ---
@@ -1002,11 +1046,15 @@ invitation expiree n'empeche plus une nouvelle invitation) ; suppression d'un co
 (hors perimetre confirme — les FK d'auteur restent en `RESTRICT`, aucun chemin de suppression de
 compte n'est prevu par ce MVP).
 
+**Resolue le 2026-10-20 (D-086 Q-2, tranche 003)** : invitation d'une adresse deja membre de
+l'organisation (ancienne question 1) — **refus a l'emission**, `409 ALREADY_MEMBER`, owner compris
+(controle applicatif dans la transaction d'emission, sur la forme normalisee de l'adresse,
+`lower(app_user.email)`). Ecartes : acceptation sans effet en 006 (e-mail inutile, adresse
+bloquee 7 jours) ; reutiliser `INVITATION_ALREADY_PENDING` (faux).
+
 **Encore ouvertes :**
 
-1. **Invitation d'une adresse deja membre de l'organisation.** Non traitee par le PRD ni par les
-   decisions du 2026-09-22. Aucune contrainte de base ne l'empeche aujourd'hui. Refus a l'emission,
-   ou acceptation sans effet ?
+1. *(resolue, voir ci-dessus ; numero conserve pour les references)*
 2. **Que se passe-t-il pour le dernier owner qui veut quitter l'organisation ?** US-04.3 l'interdit,
    le schema l'interdit aussi, et la decision du 2026-09-22 (owner unique, transfert de propriete
    hors perimetre) le confirme explicitement : il n'existe **aucun** chemin de sortie pour un

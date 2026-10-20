@@ -60,6 +60,12 @@ jobs:
       TEST_SERVER_ENV_STRIPE_API_BASE_URL: http://localhost:12111
       TEST_SERVER_ENV_INNGEST_DEV: http://localhost:12112
       TEST_SERVER_ENV_APP_URL: http://localhost:3100
+      # Tranche 003 (D-086, D-087) : valeurs inventees. Cle de scellement du
+      # jeton d'invitation (texte "ci-only-invitation-key-invente-1", 32 octets
+      # en base64url), partagee par le serveur et la suite ; fausse messagerie
+      # demarree par les tests sur ce port local.
+      TEST_SERVER_ENV_INVITATION_TOKEN_KEY: Y2ktb25seS1pbnZpdGF0aW9uLWtleS1pbnZlbnRlLTE
+      TEST_SERVER_ENV_EMAIL_CAPTURE_URL: http://localhost:12113
       # Limiteur de debit better-auth coupe pour la suite de tests : accepte
       # seulement avec APP_ENV=test, sinon le serveur refuse de demarrer (ADR-0010).
       AUTH_RATE_LIMIT: "off"
