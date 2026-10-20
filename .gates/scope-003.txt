@@ -29,3 +29,5 @@ apps/web/src/lib/errors.ts
 tests/invitations/**
 tests/helpers/db.ts
 tests/helpers/invitations*.ts
+apps/web/src/app/api/organizations/\[organizationId\]/invitations/*
+tests/billing/environment.test.ts
