@@ -3,13 +3,13 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : tests ecrits (avant implementation)
+- Statut : implementation en cours
 - Branche : slice/003-invitation-membre
-- Dernier commit : `test(invitations): tests d'acceptation de la tranche 003` (parent : a249ffe chore(slice-003): ouvrir la tranche)
-- Prochaine etape : implementer couche par couche (migration `0014_*`, acces donnees, logique metier, API, fonction Inngest) jusqu'a ce que `tests/invitations/**` passe ; ajouter les variables a `.env.example`, `.env.test.example` et au workflow CI (les tests `environment.test.ts` les verifient)
+- Dernier commit : `9289cbb feat(db): table invitation, RLS owner et create_invitation invoker`
+- Prochaine etape : acces donnees et logique metier (`apps/web/src/lib/invitations/*` : jeton, scellement, emission sous `withTenant`), puis route, puis fonction Inngest et expediteur
 
 ## Couches
-- [ ] Migration
+- [x] Migration — `9289cbb` (0014, `tests/helpers/db.ts` : `invitation` au TRUNCATE). `database.test.ts` : 18/19 ; reste AC15 « politiques », voir Blocages
 - [ ] Acces donnees
 - [ ] Logique metier
 - [ ] API
@@ -53,9 +53,12 @@ Assistants : `tests/helpers/invitations.ts`, `invitations-db.ts`, `invitations-f
 <!-- cause, essais, options. Vide = aucun. -->
 - Action humaine attendue avant la premiere execution de la suite : ajouter a `.env.test.local` (valeurs inventees) `TEST_SERVER_ENV_INVITATION_TOKEN_KEY` (32 octets en base64url, 43 caracteres) et `TEST_SERVER_ENV_EMAIL_CAPTURE_URL` (URL locale, port explicite, par exemple `http://localhost:12113`, port de la fausse messagerie). Une seule variable pour la cle : la suite la reporte dans son propre processus par `applyServerEnvToProcess` (`TEST_SERVER_ENV_X` -> `X`). L'implementeur ajoute les memes noms a `.env.test.example` et au workflow CI.
 - Les verifications de ce journal ont ete faites avec ces deux variables posees dans le terminal (valeurs inventees), sans toucher `.env.test.local`.
+- (implementeur) **Defaut de test, en attente de l'humain** : `tests/invitations/database.test.ts`, AC15 « invitation a la RLS activee ET forcee... » echoue pour une mauvaise raison. La colonne `roles` (`ARRAY(SELECT CASE ... rolname ...)`) est de type `name[]`, que le pilote `pg` ne decode pas : le test recoit la chaine `'{signet_app}'` et `toEqual(["signet_app"])` echoue. Le test de 002 (`tests/billing/database.test.ts`) a la meme requete mais n'utilise que `.includes`, qui marche sur une chaine. Le test ne contredit pas le contrat : je ne l'ai pas modifie (consigne). Correction proposee (renforce, n'affaiblit pas) : `(SELECT rolname::text FROM pg_roles WHERE oid = o)`. A trancher : autoriser cette correction (ligne au registre, regle D-065 n°2).
+- (implementeur) `pnpm db:migrate` sur la base de developpement : refuse, `DATABASE_URL_MIGRATE n'est pas definie` (aucun `.env` charge depuis `packages/db`). Action humaine ; la base de test est migree par le globalSetup.
 
 ## Decisions
 <!-- Toute decision prise sans l'humain, avec sa raison. Reprise dans la PR. -->
 - Gate d'ouverture : D-086 (humain). Decisions locales : D-087 (expediteur et fausse messagerie), D-088 (une seule migration), D-089 (ADR-0017 reserve).
 - `create_invitation` sans parametre `p_id` : avec l'option B, le scellement se fait apres l'insertion avec l'`id` retourne par la base ; l'identifiant n'a pas a etre genere cote application.
+- **D-091** (implementeur) — `signet.create_invitation` porte `SET TimeZone = 'UTC'`. Raison : le DEFAULT `now() + interval '7 days'` et le CHECK ajoutent 7 jours en heure murale du fuseau de la session ; sous Europe/Paris, la semaine du 25 octobre donne 169 h (constate : `lifetime = 608400` au lieu de 604800). Fige en UTC, l'emission dure 168 h exactement quel que soit le fuseau du serveur. Ecartes : `interval '168 hours'` dans le DEFAULT et le CHECK (le CHECK refuserait les lignes d'arrangement des tests, calculees en heure murale, et s'ecarte du texte de l'ERD) ; reglage du fuseau par base ou par role (D-064 : aucun reglage par role ; etat de cluster hors migration). Consequence pour 006 : un `UPDATE` reevalue le CHECK dans le fuseau de la session ; `accept_invitation` devra figer `TimeZone = 'UTC'` lui aussi (note ajoutee a l'ERD §5).
 - Tests : le module de la fonction d'envoi est importe par un chemin tenu dans une constante (`tests/helpers/invitations.ts`), pour que `tsc` reste vert tant que le fichier n'existe pas ; l'echec attendu est « module introuvable » a l'execution.
