@@ -20,7 +20,11 @@ Ordre de dependance technique d'abord, risque decroissant en departage a profond
 
 Les identifiants ne sont jamais renumerotes (D-025) : une tranche inseree prend le prochain numero libre, et l'ordre d'execution est ecrit ici.
 
-001 (close) -> 010 (close) -> **011** -> 002 -> 003 -> 004 -> 005 -> 006 -> 007 -> 008 -> 009
+001 (close) -> 010 (close) -> 011 (close) -> 002 (close) -> **003** -> 006 -> 004 (en mode autonome) -> 005 -> 012 (ecrans)
+
+Objectif A (D-083, D-084) : la sequence ci-dessus termine l'usine. 007, 008 et 009 sont hors objectif (backlog), avec la mise en ligne et les vrais paiements.
+
+Tranche **012 — Ecrans** (nouvelle, prochain numero libre selon D-025) : page de connexion et d'inscription, page de l'organisation (palier, membres, collections), page d'une collection et de ses liens. Depend de 001 a 006. Cadrage a ecrire a son ouverture.
 
 ## Tranche 010 — cadrage (decision D-022)
 
@@ -58,7 +62,8 @@ Les identifiants ne sont jamais renumerotes (D-025) : une tranche inseree prend 
 
 ## Notes
 
-- **Plan de la semaine du 2026-10-19 (D-074)** : toutes les fonctionnalites de Signet d'ici vendredi, mise en ligne visee le week-end, sans supprimer aucun controle (tests, trois relecteurs, accord humain). **Paiements (D-075)** : l'abonnement payant est conserve ; les vrais paiements seront actives apres la validation du compte Stripe, le lancement pouvant se faire en formule gratuite.
+- **Objectif A (D-083, 2026-10-20, remplace D-074)** : l'usine est terminee quand sont faits : usine 1.6.1 adoptee ; tranche invitations (fausse messagerie en test, aucun fournisseur reel) ; tranche collections realisee en mode autonome ; tranche quota de 50 liens ; tranche ecrans (connexion et pages principales) ; un second projet demarre avec l'usine sans la modifier. Puis une presentation et un etat des lieux complet. **Hors objectif, au backlog** : mise en ligne, vrais paiements, autres tranches de Signet. Ecarte : (B) Signet complet et en ligne.
+- ~~Plan de la semaine du 2026-10-19 (D-074)~~, remplace par D-083 : toutes les fonctionnalites de Signet d'ici vendredi, mise en ligne visee le week-end, sans supprimer aucun controle (tests, trois relecteurs, accord humain). **Paiements (D-075)** : l'abonnement payant est conserve ; les vrais paiements seront actives apres la validation du compte Stripe, le lancement pouvant se faire en formule gratuite.
 
 - Aucune tranche ne couvre l'edition de lien/collection ni la suppression d'un lien isole : hors-perimetre explicite du PRD (US-10 ne couvre que la suppression d'une collection entiere).
 - Toute tranche qui ferait apparaitre une fonctionnalite listee en hors-perimetre (recherche, tags, import Slack, etc.) est un signal du risque #1 du PRD (derive de perimetre) et doit etre refusee ou renvoyee en backlog explicite, pas glissee dans une tranche existante.

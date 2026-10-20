@@ -50,6 +50,7 @@
     ]
   },
   "permissions": {
+    "defaultMode": "acceptEdits",
     "allow": [
       "Bash(git status*)",
       "Bash(git diff*)",

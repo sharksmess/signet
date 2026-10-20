@@ -21,6 +21,7 @@ En tant que <role>, je peux <action> afin de <benefice>.
 |  |  |  |  |  |  |
 
 ## Criteres d'acceptation
+<!-- Format lu par scripts/close-slice.sh : « - [ ] AC1 — titre », coche « - [x] » une fois prouve. -->
 - [ ] AC1 — <cas nominal>
 - [ ] AC2 — <cas d'erreur metier>
 - [ ] AC3 — <cas limite : doublon, expiration, concurrence, valeur absente>

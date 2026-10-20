@@ -29,7 +29,7 @@ Les tranches s'executent **l'une apres l'autre**, chacune sur sa branche depuis 
 Arrete-toi immediatement et attends l'humain si :
 - Un audit rend un verdict CRITIQUE, meme si tu penses pouvoir le corriger.
 - `contract-guardian` rend BREAKING.
-- `code-reviewer` rend `REVIEW: CHANGES` une deuxieme fois apres correctifs.
+- `code-reviewer` rend `REVIEW: FAIL` une deuxieme fois apres correctifs.
 - Une meme tranche echoue deux fois de suite.
 - Une tranche exige d'ecrire hors de son perimetre.
 - Une dependance nouvelle serait necessaire.
