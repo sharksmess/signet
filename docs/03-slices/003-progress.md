@@ -3,16 +3,16 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : implementation en cours
+- Statut : **bloque sur la couche API** (perimetre : le hook refuse le fichier de la route, voir Blocages)
 - Branche : slice/003-invitation-membre
-- Dernier commit : `9289cbb feat(db): table invitation, RLS owner et create_invitation invoker`
-- Prochaine etape : acces donnees et logique metier (`apps/web/src/lib/invitations/*` : jeton, scellement, emission sous `withTenant`), puis route, puis fonction Inngest et expediteur
+- Dernier commit : voir `git log` ; dernier commit de code `cd18daf feat(invitations): fonction Inngest d'envoi et expediteur d'e-mails`, puis commit de documentation (ADR-0017, ERD, contrat, env, CI)
+- Prochaine etape : des que l'humain a corrige le motif du perimetre, ecrire `apps/web/src/app/api/organizations/[organizationId]/invitations/route.ts` (contenu pret, voir « Route en attente »), puis `pnpm test` complet et `pnpm run check`
 
 ## Couches
 - [x] Migration — `9289cbb` (0014, `tests/helpers/db.ts` : `invitation` au TRUNCATE). `database.test.ts` : 18/19 ; reste AC15 « politiques », voir Blocages
-- [ ] Acces donnees
-- [ ] Logique metier
-- [ ] API
+- [x] Acces donnees et logique metier — `c3e1c3e` (`lib/invitations/token.ts`, `contracts.ts`, `invitations.ts`, `env.ts`, `errors.ts`). Non exercee par les tests tant que la route manque ; `pnpm run check` vert
+- [x] Fonction Inngest et expediteur — `cd18daf` (`lib/inngest/send-invitation-email.ts`, `lib/email/sender.ts`, `lib/invitations/email.ts`, `client.ts`, `/api/inngest`). Verifiee par une sonde temporaire non committee (evenement forge et scelle avec la cle de test : nominal, memorisation, 500, muette, reponse perdue, alteration, autre cle, fournisseur absent, cle invalide : 2/2 verts)
+- [ ] API — **bloquee** (perimetre)
 - [ ] UI (sans objet : ecrans en tranche 012)
 - [ ] Suite complete verte + `pnpm run check`
 
@@ -49,16 +49,30 @@ Assistants : `tests/helpers/invitations.ts`, `invitations-db.ts`, `invitations-f
 - **Migration** : fichier `packages/db/migrations/0014_*.sql` ; la fonction `signet.create_invitation(p_organization_id uuid, p_email text, p_token_hash bytea)` doit porter exactement ces noms d'arguments ; l'`EXECUTE` n'est accorde qu'a `signet_app` (ni `PUBLIC`, `signet_auth`, `signet_billing`, `signet_owner`).
 - **Remise a zero** : `tests/helpers/db.ts` n'a pas ete modifie. Son `TRUNCATE ... organization ... CASCADE` vide deja `invitation` (cle etrangere vers `organization`) ; y nommer `invitation` avant que la table existe ferait echouer toutes les suites existantes. L'implementeur peut l'ajouter dans la couche migration, apres creation de la table.
 
+## Route en attente (a ecrire des que le perimetre est corrige)
+Fichier `apps/web/src/app/api/organizations/[organizationId]/invitations/route.ts`, `POST` seul :
+session (`auth.api.getSession`, sinon `401`) ; corps JSON objet (sinon `422 VALIDATION_FAILED`) ;
+`createInvitation` du contrat (`@/lib/invitations/contracts`) sur `{ ...body, organizationId }`
+(le chemin fait autorite) ; `normalizedEmail` sur `parsed.data.email` (sinon `422`) ;
+`createInvitation` de `@/lib/invitations/invitations` avec `userId = session.user.id`,
+`organizationId` en minuscules, e-mail normalise ; erreur -> `{ code, message }` au statut de
+l'erreur ; succes -> `201` avec `{ id, organizationId, email, expiresAt }`. Meme forme que la route
+`subscription` de 002.
+
 ## Blocages
 <!-- cause, essais, options. Vide = aucun. -->
 - Action humaine attendue avant la premiere execution de la suite : ajouter a `.env.test.local` (valeurs inventees) `TEST_SERVER_ENV_INVITATION_TOKEN_KEY` (32 octets en base64url, 43 caracteres) et `TEST_SERVER_ENV_EMAIL_CAPTURE_URL` (URL locale, port explicite, par exemple `http://localhost:12113`, port de la fausse messagerie). Une seule variable pour la cle : la suite la reporte dans son propre processus par `applyServerEnvToProcess` (`TEST_SERVER_ENV_X` -> `X`). L'implementeur ajoute les memes noms a `.env.test.example` et au workflow CI.
 - Les verifications de ce journal ont ete faites avec ces deux variables posees dans le terminal (valeurs inventees), sans toucher `.env.test.local`.
 - (implementeur) **Defaut de test, en attente de l'humain** : `tests/invitations/database.test.ts`, AC15 « invitation a la RLS activee ET forcee... » echoue pour une mauvaise raison. La colonne `roles` (`ARRAY(SELECT CASE ... rolname ...)`) est de type `name[]`, que le pilote `pg` ne decode pas : le test recoit la chaine `'{signet_app}'` et `toEqual(["signet_app"])` echoue. Le test de 002 (`tests/billing/database.test.ts`) a la meme requete mais n'utilise que `.includes`, qui marche sur une chaine. Le test ne contredit pas le contrat : je ne l'ai pas modifie (consigne). Correction proposee (renforce, n'affaiblit pas) : `(SELECT rolname::text FROM pg_roles WHERE oid = o)`. A trancher : autoriser cette correction (ligne au registre, regle D-065 n°2).
+- (implementeur) **Perimetre, action humaine requise** : `gate-check.sh` refuse `apps/web/src/app/api/organizations/[organizationId]/invitations/route.ts`. Cause : le hook compare chaque motif par `case "$REL" in $pat)` ; dans `apps/web/src/app/api/organizations/[organizationId]/invitations/*`, `[organizationId]` est une classe de caracteres (un seul caractere), jamais le dossier `[organizationId]`. Essai : une ecriture, refusee ; aucun contournement. Options : ajouter au perimetre `apps/web/src/app/api/organizations/\[organizationId\]/invitations/*` (crochets echappes) ou `apps/web/src/app/api/organizations/*/invitations/*`. Consigne dans FRICTION.md.
 - (implementeur) `pnpm db:migrate` sur la base de developpement : refuse, `DATABASE_URL_MIGRATE n'est pas definie` (aucun `.env` charge depuis `packages/db`). Action humaine ; la base de test est migree par le globalSetup.
 
 ## Decisions
 <!-- Toute decision prise sans l'humain, avec sa raison. Reprise dans la PR. -->
 - Gate d'ouverture : D-086 (humain). Decisions locales : D-087 (expediteur et fausse messagerie), D-088 (une seule migration), D-089 (ADR-0017 reserve).
 - `create_invitation` sans parametre `p_id` : avec l'option B, le scellement se fait apres l'insertion avec l'`id` retourne par la base ; l'identifiant n'a pas a etre genere cote application.
+- **D-092** (implementeur) — refus attendus de l'emission sans `throw` : point de sauvegarde autour de `create_invitation`, du scellement et de la mise en file ; `ROLLBACK TO SAVEPOINT` puis `409` ou `503`. Ecartes : exception sentinelle pour declencher le `ROLLBACK` de `withTenant` ; modifier `withTenant` (hors perimetre).
+- **D-093** (implementeur) — fonction d'envoi : refus de `INVITATION_TOKEN_KEY` rejouable (redeploiement), jeton inouvrable et fournisseur absent `NonRetriableError` levees hors du pas sur une issue sans secret ; delais 5 s (file, route) et 8 s (envoi HTTP). Ecartes : refus de cle non rejouable ; `NonRetriableError` levee dans le pas.
+- Autres choix sans portee de decision : sujet fixe « Invitation a rejoindre une organisation sur Signet » ; caracteres de controle du nom d'organisation remplaces par des espaces dans le corps ; schema `strict` des donnees de l'evenement a la lecture ; `normalizedEmail` (minuscules, 254, forme de `app_user.email`) applique apres le schema du contrat, qui ne borne pas la longueur.
 - **D-091** (implementeur) — `signet.create_invitation` porte `SET TimeZone = 'UTC'`. Raison : le DEFAULT `now() + interval '7 days'` et le CHECK ajoutent 7 jours en heure murale du fuseau de la session ; sous Europe/Paris, la semaine du 25 octobre donne 169 h (constate : `lifetime = 608400` au lieu de 604800). Fige en UTC, l'emission dure 168 h exactement quel que soit le fuseau du serveur. Ecartes : `interval '168 hours'` dans le DEFAULT et le CHECK (le CHECK refuserait les lignes d'arrangement des tests, calculees en heure murale, et s'ecarte du texte de l'ERD) ; reglage du fuseau par base ou par role (D-064 : aucun reglage par role ; etat de cluster hors migration). Consequence pour 006 : un `UPDATE` reevalue le CHECK dans le fuseau de la session ; `accept_invitation` devra figer `TimeZone = 'UTC'` lui aussi (note ajoutee a l'ERD §5).
 - Tests : le module de la fonction d'envoi est importe par un chemin tenu dans une constante (`tests/helpers/invitations.ts`), pour que `tsc` reste vert tant que le fichier n'existe pas ; l'echec attendu est « module introuvable » a l'execution.

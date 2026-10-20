@@ -1,6 +1,6 @@
 # ADR-0003 — Stockage du jeton d'invitation : empreinte SHA-256, jamais le secret
 
-- **Statut** : accepte
+- **Statut** : accepte ; **complete par [ADR-0017](0017-envoi-invitation-jeton-scelle.md)** (tranche 003, D-089) : transport du secret jusqu'a la fonction d'envoi (scellement AES-256-GCM dans l'evenement), lien a fragment `#token=` qui remplace le point de vigilance « secret dans le chemin », empreinte des 32 octets avant encodage (D-090)
 - **Date** : 2026-09-22
 - **Phase** : 2 — architecture
 
