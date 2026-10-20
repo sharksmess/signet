@@ -3,10 +3,15 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : **tests verts**. Suite complete : 30 fichiers, 354 tests, 0 echec ; `pnpm run check` vert. AC1 a AC16 coches dans le contrat de tranche
+- Statut : **tests verts**, corrections de la relecture faites (D-095). Suite complete : 31 fichiers, 364 tests, 0 echec ; `pnpm run check` vert. AC1 a AC16 coches dans le contrat de tranche
 - Branche : slice/003-invitation-membre
-- Dernier commit : `87e68ea test(invitations): rolname::text et EMAIL_CAPTURE_URL retiree (D-094)` (puis ce journal)
-- Prochaine etape : relecteurs (`security-auditor`, `contract-guardian`, `code-reviewer`), puis `close-slice.sh` — par l'orchestrateur
+- Dernier commit : `4e59d61 test(invitations): cle refusee a l'emission, D-091, D-093, abandon` (puis ce journal)
+- Prochaine etape : cloture (`close-slice.sh`, journal de projet 16) — par l'orchestrateur
+
+## Corrections de la relecture (review-003 A CORRIGER, D-095)
+1. Contrat (convention « empreinte », AC2), ERD §5 (`token_hash`, RLS owner seul), ADR-0003 et ADR-0017 alignes sur D-090 et P-3 — `85f41c9`.
+2. Ecart du commit `c3e1c3e` consigne (section « Ecarts ») ; backlog : audit-003 MINEUR-1 et MINEUR-2 en prealables au fournisseur reel — `49ec960`.
+3. a 5. Nouveau fichier `tests/invitations/review-corrections.test.ts` (10 tests, ajouts seulement) — `4e59d61` : refus de `INVITATION_TOKEN_KEY` dans `createInvitation` (absente, texte, 31 et 33 octets ; temoin positif), `TimeZone=UTC` dans `proconfig` et 168 h sous un fuseau POSIX construit pour changer d'heure dans les 7 jours (precondition verifiee, discriminant quelle que soit la date), `reportAbandonedInvitation` sur `console.error` seul, refus de cle rejouable, AC14 sur `console.error`.
 
 ## Couches
 - [x] Migration — `9289cbb` (0014, `tests/helpers/db.ts` : `invitation` au TRUNCATE). `database.test.ts` 19/19 apres `87e68ea` (D-094)
