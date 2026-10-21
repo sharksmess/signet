@@ -34,7 +34,9 @@ if (-not (Test-Path $Local)) {
   [IO.File]::WriteAllText((Join-Path (Get-Location) $Local), "", (New-Object Text.UTF8Encoding($false)))
 }
 $ex = Parse $Example; $lo = Parse $Local
-$missing = @($ex.Map.Keys | Where-Object { -not $lo.Map.Contains($_) })
+# Une variable vide dans le modele est facultative (usine 1.6.3) : ni exigee, ni signalee vide.
+$optional = @($ex.Map.Keys | Where-Object { -not $ex.Map[$_].Trim() })
+$missing = @($ex.Map.Keys | Where-Object { -not $lo.Map.Contains($_) -and $optional -notcontains $_ })
 
 if ($Fill -and $missing.Count -gt 0) {
   $add = New-Object System.Text.StringBuilder
@@ -55,7 +57,7 @@ if ($Fill -and $missing.Count -gt 0) {
   $prefix = if ($raw.Length -gt 0 -and -not $raw.EndsWith("`n")) { "`r`n" } else { "" }
   [IO.File]::AppendAllText($full, $prefix + $add.ToString(), (New-Object Text.UTF8Encoding($false)))
   $lo = Parse $Local
-  $missing = @($ex.Map.Keys | Where-Object { -not $lo.Map.Contains($_) })
+  $missing = @($ex.Map.Keys | Where-Object { -not $lo.Map.Contains($_) -and $optional -notcontains $_ })
 }
 
 $problems = 0
@@ -67,7 +69,7 @@ function Report($title, $names) {
   }
 }
 Report "Variables du modele absentes de $Local :" $missing
-Report "Variables vides :" @($lo.Map.Keys | Where-Object { -not $lo.Map[$_].Trim() })
+Report "Variables vides :" @($lo.Map.Keys | Where-Object { -not $lo.Map[$_].Trim() -and $optional -notcontains $_ })
 Report "Etiquette a remplacer encore presente :" @($lo.Map.Keys | Where-Object { $lo.Map[$_] -match $placeholder })
 Report "URL Postgres sans mot de passe :" @($lo.Map.Keys | Where-Object { $lo.Map[$_] -match '^\s*postgres(ql)?://[^:/@]+(:)?@' })
 Report "Variables en double :" @($lo.Dups)
