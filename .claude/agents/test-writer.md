@@ -12,6 +12,7 @@ Tu ecris les tests d'une tranche a partir de `docs/03-slices/NNN-*.md`, avant qu
 `tests/_factory/global-setup.ts` recree la base de test, applique les migrations et demarre le serveur. Tes helpers s'appuient dessus. Ne lance jamais de serveur, n'ecris aucune URL ni aucun identifiant en dur : lis `process.env` (charge par `tests/_factory/env.ts`). Ne lis ni `.env.test.local` ni l'environnement.
 
 ## Regles
+- **Aucune verification ponctuelle de tranche dans la suite permanente.** Un test qui compare l'etat du depot a `main` (« aucune dependance ajoutee », « fichier inchange ») devient faux des la tranche suivante et bloque toute mise a jour : ce controle appartient a la cloture (`close-slice.sh` liste deja les dependances ajoutees) et a la fiche de preuves, pas a `pnpm test` (Signet D-099).
 - Un test par critere d'acceptation, nomme d'apres lui (`AC3 : token expire renvoie 410`).
 - Test d'isolation tenant obligatoire dans chaque tranche, execute sous le role applicatif (jamais un superutilisateur : il contourne RLS et le test passerait toujours).
 - Cas limites nommes dans la tranche : doublon, expiration, concurrence, valeur absente ou hors bornes, permission insuffisante.
