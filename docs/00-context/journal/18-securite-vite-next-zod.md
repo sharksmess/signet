@@ -20,7 +20,7 @@
 - Residu hors `--prod` : `next` 16.3.8 et `zod` 4.6.5 dans l'arbre de developpement (D-100).
 
 ## Etat a la fin
-PR ouverte. La PR #30 (usine 1.6.3, journal 17) reste a fusionner : `docs/DECISIONS.md` et `docs/00-context/JOURNAL.md` se rebasent alors trivialement.
+PR #31 fusionnee (commit e260fee). La PR #30 (usine 1.6.3, journal 17) a ete rebasee sur main, conflits de `docs/DECISIONS.md` et `docs/00-context/JOURNAL.md` resolus dans l'ordre des numeros.
 
 ## Etape suivante
 Fusion de cette PR, puis de #30 rebasee ; tranche 006 (acceptation d'une invitation).
