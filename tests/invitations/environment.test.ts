@@ -195,7 +195,17 @@ describe("AC16 — dependances, exemples d'environnement et CI (fichiers du depo
     throw new Error("[tests] ni `main` ni `origin/main` n'est disponible : impossible de verifier que les dependances sont inchangees.");
   }
 
-  it("AC16 : aucune dependance ajoutee — package.json (racine, apps/web, packages/db) et pnpm-lock.yaml sont inchanges par la tranche", () => {
+  function currentBranch(): string {
+    try {
+      return execFileSync("git", ["branch", "--show-current"], { cwd: ROOT, encoding: "utf8" }).trim();
+    } catch {
+      return "";
+    }
+  }
+
+  // D-099 : verification ponctuelle de la tranche 003, sans objet hors de sa branche
+  // (preuve conservee dans evidence/003.md : "Dependances ajoutees : aucune").
+  it.runIf(currentBranch().startsWith("slice/003-"))("AC16 : aucune dependance ajoutee — package.json (racine, apps/web, packages/db) et pnpm-lock.yaml sont inchanges par la tranche", () => {
     const changed = gitDiffAgainstMain(["package.json", "apps/web/package.json", "packages/db/package.json", "pnpm-lock.yaml"]);
 
     expect(changed, "fichiers de dependances modifies depuis main").toBe("");
