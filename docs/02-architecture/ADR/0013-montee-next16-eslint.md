@@ -188,3 +188,11 @@ Origine : `apps/web/src/lib/auth.ts` est evalue a l'import des Route Handlers pe
 - **Dependabot** : les majeures d'`eslint` (D-043) et de `typescript` (commit 948df22) sont ignorees dans `.github/dependabot.yml` (D-048) ; signal de reexamen de chaque regle en commentaire, en plus de celui de cet ADR.
 - **Preuve** : `pnpm install --frozen-lockfile`, `pnpm run check`, `pnpm test` (13 fichiers, 107 tests), `pnpm audit --prod --audit-level=high` (aucune vulnerabilite connue) : tous verts le 2026-10-07.
 - **Hors perimetre** : `next@16.4.0` (`latest` depuis le 2026-10-06T18:35Z) n'est pas un correctif de securite ; il arrivera par la PR Dependabot hebdomadaire.
+
+## 2026-10-25 — Passage a 16.4.3, avec vite 8.3.5 et zod 4.6.7
+
+- **Decisions** : D-098 (vite), D-099 (test AC16 de 003), D-100 (next, zod) ; branche `fix/vite-8.3.3`, une seule PR parce que chaque correctif seul laissait `pnpm audit --prod --audit-level=high` rouge.
+- **Versions** : `next` (`apps/web`) et `eslint-config-next` (racine) 16.3.8 → **16.4.3**, toujours de meme version (AC1 de 011) ; `zod` (racine et `apps/web`) 4.6.5 → **4.6.7** ; `vite` par `overrides` `>=8.3.3` (**8.3.5** installee), `rolldown` 1.2.15 avec elle. Publication : `next@16.4.3` le 2026-10-23T13:40Z, `eslint-config-next@16.4.3` le 2026-10-23T13:28Z, `zod@4.6.7` le 2026-10-12T16:29Z, `vite@8.3.5` le 2026-10-21T06:38Z : quarantaine pnpm respectee, aucune exclusion.
+- **Avis corriges** : GHSA-2464-fhr4-w9xw et GHSA-673q-mjm6-r5xr (critiques), GHSA-p3m5-59mp-jv5r (high) sur `next` <=16.4.0 ; GHSA-mrhx-c7xc-m3w5 (high) sur `zod` <4.6.6 ; GHSA-587h-7wmj-h5pm (high) sur `vite` 8.3.0 a 8.3.2. Signet n'expose aucune des fonctions visees de Next (ni `use cache`, ni Server Actions, ni `next/image`).
+- **Residu hors `--prod`** : `next` 16.3.8 (pair d'`inngest` sous `@inngest/test`, racine sans `next`) et `zod` 4.6.5 (sous `eslint-plugin-react-hooks`) restent dans l'arbre de developpement, sans entree externe (D-100).
+- **Preuve** : `pnpm audit --prod --audit-level=high` (aucune vulnerabilite connue), `pnpm test`, `pnpm run check`, CI de la PR.

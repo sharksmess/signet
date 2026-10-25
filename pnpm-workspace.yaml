@@ -20,3 +20,5 @@ overrides:
   source-map-js: ">=1.2.2"
   # GHSA-wq5f-xc86-pv6w : CVE-2026-96889 dans librsvg embarque (via next).
   sharp: ">=0.35.5"
+  # GHSA-587h-7wmj-h5pm : launch-editor contournable sous Windows (via better-auth > vitest).
+  vite: ">=8.3.3"
