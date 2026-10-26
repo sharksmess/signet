@@ -68,6 +68,7 @@ Blocage de perimetre `_contract.ts` leve par l'humain (D-109).
 - D-105 a D-108 validees par l'humain (D-110).
 
 ### Orchestration (claude-code, 2026-10-26)
+- **`.gates/current-slice` committe tard** : l'orchestrateur l'avait cru volontairement non suivi (absent de `main`, en realite retire par chaque cloture) et ne l'avait pas mis dans le commit d'ouverture, contrairement a 002 et 003 ; `close-slice.sh` a refuse la cloture (arbre non propre), seul echec, tous les controles etant verts. Committe avant la seconde execution de la cloture.
 - **D-109** : `minRole` elargi a `"authenticated"` et `acceptInvitation` mis a jour, dans la session principale, a la demande explicite de l'humain, apres `scope-add` de `_contract.ts` (commits a4f8917, 8d7fde5).
 - **Relectures** : `security-auditor` AUDIT: PASS (aucun CRITIQUE/MAJEUR/MINEUR ; INFO-1 a 3), `contract-guardian` CONTRACTS: PASS, `code-reviewer` REVIEW: PASS (5 A CORRIGER, 6 SUGGESTION) ; rapports tels quels dans `docs/04-runbooks/audits/{audit,contracts,review}-006.md`.
 - **Suite donnee (D-110)** : A CORRIGER 1 a 3 et SUGGESTION 1 a 5 au backlog (tests manquants de D-106, D-108, D-107 ; ce ne sont pas des defauts de comportement, mais des decisions sans preuve automatique — a signaler a l'humain pour la fusion) ; A CORRIGER 4 (registre D-110, ce journal), 5 (FRICTION) et SUGGESTION 6 (renvois D-102, ADR-0018) traites dans la documentation par l'orchestrateur.
