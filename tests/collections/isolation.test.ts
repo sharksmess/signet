@@ -161,7 +161,7 @@ describe("AC5 (c) — contexte etranger force en base, role signet_app", () => {
     await expectAppCanInsertCollection();
 
     const seen = await asTenant({ organizationId: org.organizationId }, async (client) =>
-      (await client.query("SELECT id FROM collection WHERE organization_id = $1", [org.organizationId])).rows,
+      (await client.query<{ id: string }>("SELECT id FROM collection WHERE organization_id = $1", [org.organizationId])).rows,
     );
     expect(seen).toEqual([]);
 

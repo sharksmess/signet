@@ -268,7 +268,7 @@ describe("AC8 — les contraintes refusent en base (connexion d'administration)"
       try {
         // Transaction toujours annulee : le garde-fou differe du dernier owner ne s'execute jamais.
         await client.query("DELETE FROM organization WHERE id = $1", [org.organizationId]);
-        return (await client.query("SELECT id FROM collection WHERE id = $1", [row.id])).rows;
+        return (await client.query<{ id: string }>("SELECT id FROM collection WHERE id = $1", [row.id])).rows;
       } finally {
         await client.query("ROLLBACK");
       }
