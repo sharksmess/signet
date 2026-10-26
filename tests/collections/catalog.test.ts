@@ -155,7 +155,7 @@ describe("AC8 — colonnes, contraintes et index (ERD §6.1)", () => {
     expect(lengthCheck).toMatch(/>= 1\b/);
     expect(lengthCheck).toMatch(/<= 100\b/);
     const trimCheck = checks.find((c) => !c.includes("char_length"));
-    expect(normalized(trimCheck)).toContain("name = btrim name");
+    expect(squash(trimCheck), "CHECK (name = btrim(name)) exactement").toMatch(/^CHECK [(]+name = btrim[(]name[)]+$/);
   });
 
   it("AC8 : l'index collection_org_name_ci_idx est unique, sur (organization_id, lower(btrim(name))) ; aucun autre index que la cle primaire et UNIQUE (id, organization_id)", async () => {
