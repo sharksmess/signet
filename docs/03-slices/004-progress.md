@@ -5,7 +5,7 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 ## Etat
 - Statut : implementation terminee ; 1 test en echec, defaut du test lui-meme (voir Blocages), decision humaine attendue
 - Branche : slice/004-creation-collection
-- Dernier commit : 1d2b39f test(slice-004): typer deux lectures de collection pour le lint
+- Dernier commit : 714ace9 test(slice-004): corriger l'assertion du CHECK name = btrim(name)
 - Prochaine etape : arbitrage humain sur l'assertion `name = btrim name` de `catalog.test.ts` ; puis relecteurs (`security-auditor`, `contract-guardian`, `code-reviewer`), registre (decisions de ce journal), journal de projet 20, fiche de preuves (AC9), `close-slice.sh`
 - Resultats : `pnpm exec vitest run tests/collections` 56 passes / 1 en echec (57) ; `pnpm test` 486 passes, 1 en echec, 1 ignore (488), 41 fichiers, 124,65 s ; `pnpm run check` vert (typecheck + eslint)
 - D-113 : deja applique dans le commit d'ouverture 255fd28 (`tests/stack-upgrade/lint-scope.test.ts`, delai propre de 60 s sur les quatre `it`) ; rien a faire dans l'implementation. La mention « appliquer D-113 » de la version precedente de ce journal etait erronee.
@@ -35,3 +35,4 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 - La reponse `201` reprend `organization_id` et `name` tels que rendus par `RETURNING` (donc la forme enregistree en base), et `created_at.toISOString()` (UTC, millisecondes).
 - Deux `client.query` des tests deja ecrits (`catalog.test.ts` l. 271, `isolation.test.ts` l. 164) recoivent un parametre de type `<{ id: string }>` : `pnpm run check` les refusait (`no-unsafe-return`). Aucune assertion modifiee. Ecarte : desactiver la regle (interdit), laisser `check` rouge.
 - `pnpm db:migrate` n'a pas ete lance sur la base de developpement (`DATABASE_URL_MIGRATE` absente du shell de l'agent) ; 0016 est appliquee a la base de test par le globalSetup.
+- Correction du test AC8 (`tests/collections/catalog.test.ts`, CHECK `name = btrim(name)`, D-115) : l'assertion passait par `normalized()`, qui retire les parentheses, et cherchait `name = btrim name`, chaine inatteignable (defaut du test, pas du code). Remplacee par une regex ancree sur la definition Postgres, `^CHECK [(]+name = btrim[(]name[)]+$`, qui tolere les parentheses doublees mais echoue si la contrainte disparait ou devient autre chose (ex. `name = lower(name)`).
