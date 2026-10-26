@@ -3,10 +3,10 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : implementation terminee ; suite complete verte, `pnpm run check` vert ; AC1 a AC14 coches
+- Statut : **rouverte (D-111)** ; tests de D-106, D-107, D-108 ajoutes et prouves par mutation ; suite complete verte (37 fichiers, 430 passes, 1 ignore), `pnpm typecheck` et `pnpm run check` verts
 - Branche : slice/006-acceptation-invitation
-- Dernier commit : voir `git log` (contrat `minRole` apres 23828ff)
-- Prochaine etape : trois relecteurs (`security-auditor`, `contract-guardian`, `code-reviewer`), journal de projet 19, `close-slice.sh`, `ship-slice.sh`
+- Dernier commit de code : 34a0203 `test(slice-006): preuves automatiques de D-106, D-107 et D-108`
+- Prochaine etape : `code-reviewer` seul, en contexte neuf ; si PASS, `close-slice.sh` puis `git push` sur la PR #33 (D-111)
 - **Blocage de perimetre leve** : l'humain a ajoute `docs/02-architecture/api-contracts/_contract.ts` au perimetre (`scope-add`) ; `minRole` elargi a `"authenticated"` et `acceptInvitation` mis a jour (D-109), par claude-code dans la session principale, a la demande explicite de l'humain (deux lignes, l'implementeur ayant rendu la main).
 - Note : `pnpm test -- <fichier>` lance toute la suite ; cibler un fichier par `pnpm test <fichier>`
 
@@ -20,6 +20,7 @@ Tous sous `tests/invitation-acceptance/` ; aides dans `tests/helpers/invitations
 | AC4 (proconfig), AC12 (catalogue), AC13 (a, b, c, d) | `catalog.test.ts` |
 | AC6 (deux POST simultanes) | `concurrency.test.ts` |
 | AC11, AC14 | `token-leak.test.ts` |
+| D-106, D-107, D-108 (reouverture D-111) | `decisions.test.ts` |
 | Q-3 (D-102) | `tests/invitations/database.test.ts` (modifie, voir Decisions) |
 
 AC14 « aucune dependance ajoutee » : verification ponctuelle de la fiche de preuves (usine 1.6.4, D-099), aucun test permanent. Le test AC14 ecrit ne porte que sur la variable d'environnement : la route ne cite pas la cle de scellement et ne lit pas `process.env`.
@@ -72,3 +73,26 @@ Blocage de perimetre `_contract.ts` leve par l'humain (D-109).
 - **D-109** : `minRole` elargi a `"authenticated"` et `acceptInvitation` mis a jour, dans la session principale, a la demande explicite de l'humain, apres `scope-add` de `_contract.ts` (commits a4f8917, 8d7fde5).
 - **Relectures** : `security-auditor` AUDIT: PASS (aucun CRITIQUE/MAJEUR/MINEUR ; INFO-1 a 3), `contract-guardian` CONTRACTS: PASS, `code-reviewer` REVIEW: PASS (5 A CORRIGER, 6 SUGGESTION) ; rapports tels quels dans `docs/04-runbooks/audits/{audit,contracts,review}-006.md`.
 - **Suite donnee (D-110)** : A CORRIGER 1 a 3 et SUGGESTION 1 a 5 au backlog (tests manquants de D-106, D-108, D-107 ; ce ne sont pas des defauts de comportement, mais des decisions sans preuve automatique — a signaler a l'humain pour la fusion) ; A CORRIGER 4 (registre D-110, ce journal), 5 (FRICTION) et SUGGESTION 6 (renvois D-102, ADR-0018) traites dans la documentation par l'orchestrateur.
+
+### Reouverture D-111 (implementeur, 2026-10-26)
+Tests ajoutes dans `tests/invitation-acceptance/decisions.test.ts` (aides dans `tests/helpers/invitations-accept.ts` : `nonCanonicalVariants`, `loadAcceptModule`, `closeServerAppPool`, `waitForAcceptBlockedOnLock`) ; aucun test existant ni code de production modifie. Commit 34a0203.
+
+Decisions locales :
+- **Un fichier neuf plutot qu'un ajout a `acceptance-api.test.ts`** : les trois decisions ont leur propre motif de reouverture, et D-108 se teste hors de la route ; regroupees, elles se relisent et se mutent ensemble. Ecarte : disperser les cas dans AC3, AC9 et AC10 (les tests existants restent inchanges, regle de la mission).
+- **D-107 : textes ecrits en clair dans le test, jamais importes de `lib/errors.ts`** : sinon un texte modifie modifierait aussi l'attendu et la mutation passerait. Le 401 (« Aucune session valide. ») n'est pas dans la liste de D-107 : c'est le texte de 002, verifie tel quel parce que la route le renvoie.
+- **D-108 : `acceptInvitation` importee dans le processus de test** (chemin relatif, comme `process-stripe-event` et `send-invitation-email` deja charges par la suite), environnement du serveur de test pose par `applyServerEnvToProcess` (`DATABASE_URL_APP` de la base de test, jamais lu ni affiche) ; le pool de `lib/db.ts` est ferme en `afterAll`. Aucun alias `@/` dans `accept.ts`, `token.ts`, `errors.ts`, `db.ts` : aucun contournement necessaire.
+- **D-108, branche `pending` + meme adresse** : atteinte avec un `userId` sans ligne `app_user` (compte supprime, puis UUID jamais cree) : la sous-requete d'adresse de l'`UPDATE` rend NULL, zero ligne, `lookup_invitation` rend `pending`. Verifie aussi avec l'adresse de session en casse differente.
+- **`SG002` atteignable** : `userId = ""` -> `app.user_id` vide -> `current_user_id()` NULL -> `SG002`.
+- **`23503` atteignable, de facon deterministe** : une suppression du compte non validee est tenue (connexion d'administration, `lock_timeout` 10 s) ; l'`UPDATE` voit encore la ligne `app_user`, puis la verification de la cle etrangere `invitation.accepted_by_user_id` attend le verrou de ligne ; une fois l'attente constatee dans `pg_stat_activity` (`wait_event_type = 'Lock'`), la suppression est validee et la verification echoue en `23503`. Le code reellement leve a ete lu dans le journal de la mutation (voir ci-dessous). Ecarte : ne couvrir que `SG002` (la moitie de `IDENTITY_LOST` resterait sans preuve).
+
+Preuves par mutation (code de production modifie temporairement, test lance, puis restaure ; `git diff -- apps packages` vide verifie avant le commit ; aucune mutation committee) :
+
+| Decision | Mutation | Test(s) en echec | Message |
+|---|---|---|---|
+| D-106 | `token.ts` : condition `secret.toString("base64url") !== token` retiree | « D-106 (unitaire) : linkTokenToHash rend l'empreinte… » ; « D-106 (API) : les variantes non canoniques d'un jeton reellement emis… » | unitaire : `variante non canonique "9" : refusee: expected Buffer[ 63, 58, … ] to be null` ; API : `D-106 : variante "Z" : HTTP 200 recu, 404 attendu. Corps brut : {"organizationId":"…","role":"member"}` (la variante etait acceptee comme le vrai jeton) |
+| D-107 (texte) | `errors.ts` : message 410 raccourci a « Cette invitation a expire. » | « D-107 : 410 INVITATION_EXPIRED a le corps exact du registre » | `corps exact de D-107 … expected … to strictly equal …`, message attendu / recu affiches |
+| D-107 (422 Zod) | `route.ts` : `validationFailed(parsed.error.message)` au lieu du message fixe | « D-107 : 422 VALIDATION_FAILED au corps strictement identique et exact… » | `D-107 422 : token absent : corps exact de D-107` ; recu : le tableau d'issues de Zod (`"expected": "string"`, `"path": ["token"]`, `Invalid input: expected string, received undefined`) |
+| D-108 (ternaire) | `accept.ts` : branche `pending` forcee a `fail(invitationEmailMismatch())` | « D-108 : userId sans ligne app_user … -> 401 … ; adresse differente -> 403 … » | `D-108 compte supprime, meme adresse` : attendu 401 `UNAUTHENTICATED`, recu 403 `INVITATION_EMAIL_MISMATCH` |
+| D-108 (`IDENTITY_LOST`) | `accept.ts` : bloc `IDENTITY_LOST.has(code)` -> 401 supprime | « D-108 / SG002 : identifiant de session vide… » ; « D-108 / 23503 : compte supprime pendant l'acceptation… » | les deux : `Error: acceptation d'invitation : erreur inattendue (accept_invitation)` ; journal du processus : `(code SG002)` puis `(code 23503)` |
+
+Resultats apres restauration : `decisions.test.ts` 12/12 ; `pnpm test` 37 fichiers, 430 passes, 1 ignore (431) ; `pnpm typecheck` et `pnpm run check` (typecheck + eslint) verts.
