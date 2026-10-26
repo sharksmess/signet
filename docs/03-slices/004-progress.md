@@ -3,10 +3,10 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : ouverte
+- Statut : tests ecrits (echouent tous pour la bonne raison, sauf un test de non-regression)
 - Branche : slice/004-creation-collection
-- Dernier commit : (ouverture) chore(slice-004): ouvrir la tranche
-- Prochaine etape : `test-writer` ecrit les tests de AC1 a AC8 dans `tests/collections/` ; D-113 applique a `tests/stack-upgrade/lint-scope.test.ts`
+- Dernier commit : 105ea37 test(slice-004): criteres d'acceptation de la tranche 004
+- Prochaine etape : implementer couche par couche (migration 0016, schema Drizzle, module `lib/collections`, route POST, erreur COLLECTION_NAME_TAKEN) ; appliquer D-113 a `tests/stack-upgrade/lint-scope.test.ts`
 
 ## Couches
 - [ ] Migration
