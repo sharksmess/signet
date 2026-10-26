@@ -19,3 +19,27 @@ Budget fixe par l'humain : **1 tranche, la 004** (creation d'une collection), se
 - Relectures en parallele : `contract-guardian` **CONTRACTS: PASS** ; `security-auditor` **AUDIT: PASS** (0 critique, 0 majeur ; MINEUR-1 pas de limite de debit, plafond = decision produit ; INFO-1 `pnpm audit` complet rouge en dev seulement ; INFO-2 nom Unicode libre) ; `code-reviewer` **REVIEW: PASS** (3 A CORRIGER, 5 SUGGESTION). Rapports archives tels quels dans `audits/{contracts,audit,review}-004.md` (auditeur sans droit d'ecriture : rapport persiste par l'orchestrateur).
 - Suites (D-116, D-117) : A CORRIGER 1 et 2 + SUGGESTION 1 par l'implementeur (616d428, ffe3ec2 : messages exacts testes, mutation `parsed.error.message` -> 10 echecs, restauree ; politique RLS comparee par egalite et `polcmd`) ; `tests/collections` 72/72, `check` vert. A CORRIGER 3 au registre (D-116). Reste au backlog.
 - AC9 verifie par l'orchestrateur : aucun manifeste, verrou, modele d'environnement ni `env.ts` modifie ; aucune lecture d'environnement dans le nouveau code. AC1 a AC9 coches. Journal de projet 20.
+- Cloture : `close-slice.sh` **CLOTURE REUSSIE** (996d861), 502 passes / 1 ignore, check, audit `--prod`, build CI, gitleaks : PASS ; fiche `evidence/004.md`.
+- Livraison : `ship-slice.sh`, suite rejouee (502 passes), branche poussee, **PR #34** ouverte. Fin : ~21:31. Budget atteint : arret.
+
+## Rapport final
+
+### A decider par l'humain
+1. **Fusion de la PR #34** sur preuves (fiche `evidence/004.md`, trois verdicts PASS, CI).
+2. **Decisions prises en autonomie, a valider** : D-114 (lectures de forme du contrat), D-115 (correction d'une assertion inatteignable du test de catalogue), D-116 (decisions locales de l'implementeur), D-117 (correctifs de relecture avant cloture, reste au backlog).
+3. **Avant la tranche 007** (D-116, backlog) : la politique `collection_isolation` est `FOR ALL` sans role ; le `GRANT DELETE` de 007 laissera la restriction owner purement applicative. A trancher par `db-architect`.
+4. **Decision produit ouverte** (audit-004 MINEUR-1) : plafond de collections par organisation ou par palier, et limite de debit sur la creation.
+5. **Action locale** : `pnpm db:migrate` sur la base de developpement (0016 non appliquee ; variable de migration absente du shell de l'agent).
+
+### Tranches
+- 004 : close, PR #34 ouverte. Aucune tranche arretee.
+
+### Points d'attention
+- D-113 : un echec a froid du test de portee du lint au premier passage malgre 60 s (FRICTION) ; vert dans les trois suites completes ensuite.
+- Echec intermittent `tests/billing/webhook.test.ts` AC7 par un evenement tardif d'un test de 003 (FRICTION, backlog).
+
+### Etat des branches
+- `slice/004-creation-collection` poussee, PR #34. `main` inchangee.
+
+### Arret apres livraison (condition d'arret)
+Push du commit de rapport final refuse par le hook pre-push : vitest n'a pas pu demarrer le processus de `tests/_factory/db-catalog.test.ts` (delai d'attente du worker), 498 autres tests verts, 798 s (FRICTION). Condition « suite complete en echec apres une cloture » : arret, pas de nouvelle tentative. Ce commit et la ligne FRICTION restent **locaux** sur la branche, a pousser par l'humain (ou sur son instruction) une fois le poste verifie.
