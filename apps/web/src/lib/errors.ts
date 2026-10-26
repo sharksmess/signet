@@ -19,10 +19,14 @@ export type ApiErrorCode =
   | "INVALID_SIGNATURE"
   | "SERVICE_UNAVAILABLE"
   | "INVITATION_ALREADY_PENDING"
-  | "ALREADY_MEMBER";
+  | "ALREADY_MEMBER"
+  | "INVITATION_NOT_FOUND"
+  | "INVITATION_EXPIRED"
+  | "INVITATION_ALREADY_USED"
+  | "INVITATION_EMAIL_MISMATCH";
 
 export interface ApiError {
-  status: 400 | 401 | 403 | 404 | 409 | 422 | 502 | 503;
+  status: 400 | 401 | 403 | 404 | 409 | 410 | 422 | 502 | 503;
   code: ApiErrorCode;
   message: string;
 }
@@ -95,6 +99,45 @@ export const alreadyMember = (): ApiError => ({
   status: 409,
   code: "ALREADY_MEMBER",
   message: "Cette adresse est deja celle d'un membre de l'organisation.",
+});
+
+/*
+ * Tranche 006 (acceptation, `acceptInvitation`) : messages fixes, identiques
+ * d'une invitation a l'autre, sans adresse, nom d'organisation, identifiant
+ * ni code SQL (AC10, D-107). Inconnu et malforme partagent le meme corps
+ * (AC3).
+ */
+
+export const invitationNotFound = (): ApiError => ({
+  status: 404,
+  code: "INVITATION_NOT_FOUND",
+  message: "Invitation introuvable.",
+});
+
+export const invitationExpired = (): ApiError => ({
+  status: 410,
+  code: "INVITATION_EXPIRED",
+  message: "Cette invitation a expire. Demander une nouvelle invitation a l'organisation.",
+});
+
+export const invitationAlreadyUsed = (): ApiError => ({
+  status: 409,
+  code: "INVITATION_ALREADY_USED",
+  message: "Cette invitation a deja ete utilisee.",
+});
+
+/** D-102 Q-2 : message fixe, ni l'adresse invitee ni celle du compte. */
+export const invitationEmailMismatch = (): ApiError => ({
+  status: 403,
+  code: "INVITATION_EMAIL_MISMATCH",
+  message: "Cette invitation est adressee a une autre adresse e-mail que celle du compte connecte.",
+});
+
+/** P-5 : meme code que l'emission (003), message adresse a l'invite ; l'invitation n'est pas consommee. */
+export const alreadyMemberOnAcceptance = (): ApiError => ({
+  status: 409,
+  code: "ALREADY_MEMBER",
+  message: "Le compte connecte est deja membre de cette organisation.",
 });
 
 /** AC14 (002) et AC13 (003) : 5xx, aucun detail interne. */

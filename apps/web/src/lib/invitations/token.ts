@@ -71,3 +71,22 @@ export function openSealedSecret(sealedToken: string, invitationId: string, key:
 export function secretToLinkToken(secret: Buffer): string {
   return secret.toString("base64url");
 }
+
+const LINK_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+
+/**
+ * Empreinte d'un jeton presente a l'acceptation (tranche 006, D-090), ou
+ * `null` s'il est malforme. Decodage strict : `Buffer.from(_, "base64url")`
+ * tolere des caracteres hors alphabet, le remplissage et une longueur
+ * quelconque ; le motif les refuse avant tout decodage. La reecriture doit
+ * redonner le texte presente : les deux bits de poids faible du dernier
+ * caractere, ignores au decodage, ne peuvent pas faire de deux textes
+ * differents un meme jeton (D-106). Aucune requete en base pour un jeton
+ * malforme (AC3).
+ */
+export function linkTokenToHash(token: string): Buffer | null {
+  if (!LINK_TOKEN_PATTERN.test(token)) return null;
+  const secret = Buffer.from(token, "base64url");
+  if (secret.length !== TOKEN_BYTES || secret.toString("base64url") !== token) return null;
+  return createHash("sha256").update(secret).digest();
+}

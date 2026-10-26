@@ -310,7 +310,7 @@ describe("AC15 — fonctions et catalogue (D-033, ADR-0011)", () => {
     expect(rows.filter((r) => r.secdef).map((r) => r.proname), "aucune fonction de la migration n'est definer").toEqual([]);
   });
 
-  it("AC15 : invitation a la RLS activee ET forcee, aucune politique TO PUBLIC, aucune politique signet_definer, aucun UPDATE ; owner seul sur current_org() (jamais context_org)", async () => {
+  it("AC15 : invitation a la RLS activee ET forcee, aucune politique TO PUBLIC ; politiques applicables a signet_app : signet_app seulement, aucun UPDATE, owner seul sur current_org() (jamais context_org)", async () => {
     const flags = await asBypassRls((client) =>
       client.query<{ relrowsecurity: boolean; relforcerowsecurity: boolean }>(
         "SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE oid = to_regclass('public.invitation')",
@@ -331,13 +331,17 @@ describe("AC15 — fonctions et catalogue (D-033, ADR-0011)", () => {
     );
     expect(rows.length, "invitation a des politiques").toBeGreaterThan(0);
     expect(rows.filter((r) => r.roles.includes("public")).map((r) => r.polname), "aucune politique TO PUBLIC").toEqual([]);
-    for (const row of rows) {
+    // D-102 Q-3 (regle D-065 n°2) : memes assertions, restreintes aux politiques applicables a signet_app ;
+    // celles de signet_definer (tranche 006) sont verifiees par tests/invitation-acceptance (AC13).
+    const appRows = rows.filter((r) => r.roles.includes("signet_app"));
+    expect(appRows.length, "invitation a des politiques signet_app").toBeGreaterThan(0);
+    for (const row of appRows) {
       expect(row.roles, `${row.polname} : signet_app seulement`).toEqual(["signet_app"]);
       const text = `${row.qual ?? ""} ${row.withcheck ?? ""}`;
       expect(text, `${row.polname} : context_org( interdit aux politiques signet_app`).not.toContain("context_org(");
       expect(text, `${row.polname} : filtre sur le tenant courant`).toContain("current_org(");
     }
-    expect(rows.map((r) => r.polcmd).sort(), "SELECT, INSERT, DELETE seulement (UPDATE : tranche 006)").toEqual(["a", "d", "r"]);
+    expect(appRows.map((r) => r.polcmd).sort(), "SELECT, INSERT, DELETE seulement (UPDATE : tranche 006)").toEqual(["a", "d", "r"]);
   });
 
   it("AC15 : privileges de table — signet_app a SELECT, INSERT, DELETE, ni UPDATE ni TRUNCATE ; signet_auth et signet_billing n'ont aucun privilege", async () => {

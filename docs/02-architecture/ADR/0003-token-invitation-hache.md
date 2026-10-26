@@ -1,6 +1,6 @@
 # ADR-0003 — Stockage du jeton d'invitation : empreinte SHA-256, jamais le secret
 
-- **Statut** : accepte ; **complete par [ADR-0017](0017-envoi-invitation-jeton-scelle.md)** (tranche 003, D-089) : transport du secret jusqu'a la fonction d'envoi (scellement AES-256-GCM dans l'evenement), lien a fragment `#token=` qui remplace le point de vigilance « secret dans le chemin », empreinte des 32 octets avant encodage (D-090)
+- **Statut** : accepte ; **complete par [ADR-0017](0017-envoi-invitation-jeton-scelle.md)** (tranche 003, D-089) : transport du secret jusqu'a la fonction d'envoi (scellement AES-256-GCM dans l'evenement), lien a fragment `#token=` qui remplace le point de vigilance « secret dans le chemin », empreinte des 32 octets avant encodage (D-090) ; **et par [ADR-0018](0018-identite-invite-acceptation.md)** (tranche 006, D-102) : l'acceptation exige une session et l'adresse du compte egale a l'adresse invitee, verifiee par la base ; l'`UPDATE` de consommation ci-dessous recoit donc un predicat d'adresse et `accepted_by_user_id = current_user_id()` (aucun parametre d'utilisateur), sans changer le principe de l'enonce unique
 - **Date** : 2026-09-22
 - **Phase** : 2 — architecture
 

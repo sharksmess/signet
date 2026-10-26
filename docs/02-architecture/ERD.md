@@ -2,7 +2,7 @@
 
 - **Phase** : 2 — architecture
 - **Date** : 2026-09-22
-- **Mise a jour** : 2026-09-29 — tranche 010 (§1, §2.1, §3, §4, §7, §8.1, matrice, migrations)
+- **Mise a jour** : 2026-09-29 — tranche 010 (§1, §2.1, §3, §4, §7, §8.1, matrice, migrations) ; 2026-10-26 — tranche 006 (§0, §1, §2.1, §5, matrice, migrations ; [ADR-0018](ADR/0018-identite-invite-acceptation.md))
 - **Socle** : `stack.json` — Postgres, Drizzle, better-auth, Stripe, Inngest
 - **Isolation** : `shared-schema-rls` — voir [ADR-0001](ADR/0001-isolation-multitenant.md)
 - **Quota Free** : voir [ADR-0002](ADR/0002-quota-free-atomique.md)
@@ -53,6 +53,11 @@ dans des migrations SQL versionnees, dans la meme tranche que la table qu'ils pr
   abonnement deja rattache, client different, prix non Pro, identifiant deja rattache ailleurs).
   Aucune ecriture ; la fonction Inngest les journalise sans nouvelle tentative.
   `SG007` — mutation de `billing_event` refusee par le trigger `billing_event_immutable` (§8.2).
+  `SG008` — `signet.accept_invitation()` : l'utilisateur de session est deja membre de
+  l'organisation de l'invitation (23505 sur `member_org_user_idx`, tranche 006, P-5). Toute
+  l'instruction est annulee, invitation comprise. Erreur metier : `409 ALREADY_MEMBER`.
+  Exception a la regle « `SG002` remonte en 500 » : sur la route d'acceptation, `SG002` et `23503`
+  signalent un compte disparu entre la session et l'appel et sont traduits en `401` (contrat 006).
 
 ### Ecarts assumes par rapport aux defauts de better-auth
 
@@ -158,8 +163,8 @@ exigences.
 |---|---|
 | `signet.create_organization(owner_user_id, org_name)` | US-01.1 : a l'inscription, l'organisation n'existe pas encore, il n'y a pas d'`organization_id` a poser. Cree `organization` + `member` (owner) + `organization_link_usage` + `subscription` (free) en une transaction. **Depuis 0009** : leve `SG002` si `app.user_id` est absent ou si `owner_user_id` en differe (on ne cree pas d'organisation au nom d'un tiers). |
 | `signet.organizations_for_user(user_id)` | Un utilisateur appartient a plusieurs organisations (PRD §unite de compte). Lister ses organisations est le seul besoin legitime de lecture inter-tenant. **Depuis 0009** : leve `SG002` si `app.user_id` est absent ou si `user_id IS DISTINCT FROM current_user_id()` (avant 0009, un `app.user_id` absent ne levait pas). |
-| `signet.lookup_invitation(token_hash)` | L'invite n'est pas encore membre : il n'a aucun contexte tenant. Retourne uniquement le nom de l'organisation, l'e-mail cible et la validite — jamais le contenu de l'organisation. (Tranche 006, non encore ecrite.) |
-| `signet.accept_invitation(token_hash, user_id)` | US-03 : consommation atomique du jeton + creation du `member`, hors contexte tenant. Voir §5. (Tranche 006, non encore ecrite.) Devra, comme `create_organization`, lier `user_id` a `current_user_id()` et poser `app.organization_id` depuis la ligne d'invitation. |
+| `signet.lookup_invitation(p_token_hash bytea)` (0015, tranche 006) | L'invite n'est pas encore membre : il n'a aucun contexte tenant. Retourne uniquement `organization_name`, `email` et `state` (`pending`, `expired`, `accepted`) — jamais le contenu de l'organisation, ni identifiant, ni date, ni inviteur. Leve `SG002` sans utilisateur de session (P-4, a rouvrir par 012). Appelee par la route d'acceptation **apres** l'echec de la consommation seulement ; exposee par aucune route. |
+| `signet.accept_invitation(p_token_hash bytea)` (0015, tranche 006) | US-03 : consommation atomique du jeton + creation du `member`, hors contexte tenant. Voir §5. **Signature arretee par P-2** : aucun parametre `user_id` ; l'utilisateur est `current_user_id()` (comme `invited_by_user_id` de `create_invitation`), garde `SG002` s'il est absent. `app.organization_id` pose depuis la ligne d'invitation. L'adresse du compte doit etre l'adresse invitee, verifiee dans l'`UPDATE` (P-3, ADR-0018). |
 | `signet.apply_stripe_subscription(p_input jsonb)` (0012, tranche 002) | Cinquieme entree, revue d'architecture = **ADR-0016**. Le traitement d'un evenement Stripe n'a pas d'utilisateur de session : il ne peut pas passer par les politiques de `signet_app`. Seul chemin d'ecriture de `subscription` (hors `create_organization`) et de `billing_event`. Executable par `signet_billing` seul. |
 
 ### Specification fonction par fonction (liste obligatoire `rules/drizzle-postgres.md`)
@@ -179,6 +184,8 @@ Les fonctions ecrites ou remplacees a partir de 0009 qualifient en plus leurs ta
 | `propagate_subscription_quota` (trigger, 0005) | `set_config(..., NEW.organization_id, true)` | `organization_link_usage_definer_write` | leve si `<> 1` | aucun (trigger) | pose le sien ; leve `P0001` si le compteur manque |
 | `assert_owner_remains` (trigger, 0004) | `set_config(..., OLD.organization_id, true)` | `organization_definer_context`, `member_definer_context` | sans objet (lecture) | aucun (trigger) | pose le sien |
 | `apply_stripe_subscription` (0012) | efface `app.organization_id`, valide l'entree (`SG003`), puis `set_config` depuis la ligne deja rattachee a l'abonnement Stripe ou, a defaut, la metadonnee relue chez Stripe (ADR-0016) | `subscription_definer_stripe_lookup`, `subscription_definer_read`, `subscription_definer_update`, `billing_event_definer_insert` | leve si `<> 1` sur `subscription` | `signet_billing` | `SG003` (entree `NULL`), contexte ambiant ignore (AC6 c, d) |
+| `lookup_invitation` (0015) | garde d'identite `SG002` ; efface `app.organization_id` ; lecture par empreinte (reglage transitoire `app.invitation_token_hash`, remis a vide aussitot) ; `set_config` depuis `invitation.organization_id` pour lire le nom, efface avant le retour (D-105) | `invitation_definer_token_lookup`, `organization_definer_context` | sans objet (lecture ; organisation invisible = invariant rompu, leve) | `signet_app` | `SG002` ; empreinte `NULL`, de longueur `<> 32` ou inconnue : zero ligne |
+| `accept_invitation` (0015) | garde d'identite `SG002` ; efface `app.organization_id` ; organisation de la ligne trouvee par empreinte (meme lecture transitoire) ; `set_config` depuis cette ligne, efface avant le retour (D-105) | `invitation_definer_token_lookup`, `invitation_definer_context_read`, `invitation_definer_accept`, `app_user_definer_self_read`, `member_definer_context` | `UPDATE` : 0 ou 1 par construction (index unique sur l'empreinte ; 0 = refus, rien d'ecrit) ; `INSERT` du `member` : leve si `<> 1` ; `SG008` si deja membre | `signet_app` | `SG002` ; contexte etranger force ignore (AC5 b) |
 
 Les trois fonctions de trigger recoivent en 0009 `ALTER FUNCTION ... SET search_path = pg_catalog,
 signet, public, pg_temp` (corps inchange ; proposition d'ADR-0011, contestable).
@@ -281,6 +288,17 @@ un compte n'est visible que si l'utilisateur de session est lui-meme membre de l
 contexte (sinon `current_org()` vaut `NULL` et aucune ligne ne l'est). La sous-requete sur
 `member` passe en plus par `member_isolation` : double couverture, sans recursion. Le role `signet_auth` a une politique distincte (`USING (true)`) car
 l'authentification precede necessairement le contexte tenant.
+
+**`signet_definer`, depuis 0015 (tranche 006, P-3, ADR-0018)** : lecture de **sa propre ligne**
+seulement, et des seules colonnes `id` et `email` (`GRANT SELECT (id, email)`), pour le
+rapprochement d'adresse de `accept_invitation` :
+
+```sql
+CREATE POLICY app_user_definer_self_read ON app_user FOR SELECT TO signet_definer
+USING (id = signet.current_user_id());
+```
+
+N'appelle pas `current_org()` (ADR-0011 R1). Aucune ecriture.
 
 ### 2.2 `session`, `account`, `verification`
 
@@ -502,10 +520,29 @@ texte que `subscription_owner_only` (§8.1) :
 
 Privileges : `GRANT SELECT, INSERT, DELETE ON invitation TO signet_app` ; ni `UPDATE` ni
 `TRUNCATE` ; aucun privilege pour `signet_auth` ni `signet_billing`. Un member ne voit ni n'emet
-aucune invitation. **Hors 003 (tranche 006)** : politiques `signet_definer` sur `context_org()`,
-`GRANT UPDATE`, `lookup_invitation`, `accept_invitation`. La lecture par jeton se fera hors
-contexte tenant via `signet.lookup_invitation()`, qui ne divulgue que le nom de l'organisation et
-l'e-mail cible.
+aucune invitation. Ces trois politiques et ces privileges sont **inchanges par 006**.
+
+**`signet_definer` (0015, tranche 006, D-103)** : la seule **ecriture** nouvelle est l'`UPDATE` des
+deux colonnes d'acceptation ; les deux autres politiques sont des lectures (Postgres applique les
+politiques `SELECT` a un `UPDATE ... WHERE ... RETURNING`). Toutes `TO signet_definer` seulement,
+aucune n'appelle `current_org()` (ADR-0011 R1) :
+
+| Politique | Commande | Predicat |
+|---|---|---|
+| `invitation_definer_token_lookup` | `SELECT` | `token_hash = decode(nullif(current_setting('app.invitation_token_hash', true), ''), 'hex')` — reglage transitoire pose puis remis a vide par la fonction (patron `subscription_definer_stripe_lookup`, 0012) ; vide ou absent : aucune ligne |
+| `invitation_definer_context_read` | `SELECT` | `organization_id = signet.context_org()` |
+| `invitation_definer_accept` | `UPDATE` | `USING (organization_id = context_org() AND accepted_at IS NULL)` ; `WITH CHECK (organization_id = context_org() AND accepted_at IS NOT NULL AND accepted_by_user_id = current_user_id())` |
+
+Privileges de `signet_definer` : `GRANT SELECT ON invitation` et `GRANT UPDATE (accepted_at,
+accepted_by_user_id) ON invitation` ; ni `INSERT`, ni `DELETE`, ni `TRUNCATE`, ni `UPDATE` d'une
+autre colonne (test de catalogue AC13 de 006, volet comportemental sous `SET ROLE signet_definer`).
+
+**Lecture par jeton — `signet.lookup_invitation(p_token_hash bytea) RETURNS TABLE
+(organization_name text, email text, state text)`** (0015) : `SECURITY DEFINER`, `STABLE`, garde
+`SG002`, contexte ambiant efface ; empreinte `NULL` ou de longueur `<> 32` : aucune ligne ; lit la
+ligne par empreinte, pose le contexte depuis elle pour lire le nom de l'organisation, l'efface
+avant le retour. `state` derive : `accepted` si `accepted_at IS NOT NULL`, sinon `expired` si
+`expires_at <= now()`, sinon `pending`. Rien d'autre n'est revele. `SET TimeZone = 'UTC'`.
 
 **Emission (US-02.1) — `signet.create_invitation(p_organization_id uuid, p_email text,
 p_token_hash bytea) RETURNS invitation`** (0014, tranche 003). Signature arretee par la tranche :
@@ -515,10 +552,10 @@ tiers) ; **aucun parametre de date** (`created_at`, `expires_at` prennent leur v
 `REVOKE ALL FROM PUBLIC`, `EXECUTE` a `signet_app` seul. `SET TimeZone = 'UTC'` (D-091) : le
 `DEFAULT now() + interval '7 days'` et le `CHECK` ajoutent 7 jours en heure **murale** du fuseau de
 la session ; sous un fuseau a changement d'heure, la duree reelle serait de 167 ou 169 heures.
-Fige en UTC, l'emission dure toujours 168 heures. **Pour 006** : un `UPDATE` reevalue le `CHECK`
-dans le fuseau de la session ; `accept_invitation` devra figer `TimeZone = 'UTC'` elle aussi, sinon
-une invitation qui chevauche le passage a l'heure d'ete serait refusee (`23514`) sous un fuseau a
-changement d'heure.
+Fige en UTC, l'emission dure toujours 168 heures. Un `UPDATE` reevalue le `CHECK` dans le fuseau
+de la session : `accept_invitation` (0015) fige donc `TimeZone = 'UTC'` elle aussi, sans quoi une
+invitation qui chevauche le passage a l'heure d'ete serait refusee (`23514`) sous un fuseau a
+changement d'heure (AC4 de 006).
 Le texte ci-dessous est celui de la decision du 2026-09-22 : valable pour le corps de la fonction
 (purge puis `INSERT`) ; pour la RLS, il est remplace par les politiques owner seul ci-dessus
 (D-086 P-3).
@@ -563,23 +600,32 @@ traverse deux tables.
 **Jeton et envoi** : voir ADR-0003 (empreinte) et ADR-0017 (scellement dans l'evenement,
 lien a fragment, `503` si la file refuse l'evenement avant le `COMMIT`).
 
-**Consommation atomique a usage unique (US-03.3)** — `signet.accept_invitation()` :
+**Consommation atomique a usage unique (US-03.3)** — `signet.accept_invitation(p_token_hash
+bytea) RETURNS TABLE (organization_id uuid)`** (0015, tranche 006 ; signature P-2, aucun parametre
+d'utilisateur ; rapprochement d'adresse P-3, ADR-0018) :
 
 ```sql
-UPDATE invitation
-   SET accepted_at = now(), accepted_by_user_id = p_user_id
- WHERE token_hash = p_token_hash
-   AND accepted_at IS NULL
-   AND expires_at > now()
-RETURNING organization_id, email;
+UPDATE public.invitation i
+   SET accepted_at = now(), accepted_by_user_id = <current_user_id()>
+ WHERE i.token_hash = p_token_hash
+   AND i.accepted_at IS NULL
+   AND i.expires_at > now()
+   AND i.email = (SELECT lower(u.email) FROM public.app_user u WHERE u.id = <current_user_id()>)
+RETURNING i.organization_id;
 ```
 
-Un seul enonce. Deux clics concurrents sur le meme lien : le premier verrouille la ligne, le
-second attend puis re-evalue le predicat sur la ligne mise a jour (`READ COMMITTED`), voit
-`accepted_at IS NOT NULL` et ne retourne aucune ligne. La fonction leve alors une erreur typee
-et **aucun `member` n'est cree** — exactement US-03.3. Aucune lecture prealable, donc aucune
-fenetre entre verification et ecriture. L'insertion du `member` a lieu dans la meme transaction,
-apres le `RETURNING`.
+Un seul enonce decide. Avant lui, la fonction lit l'organisation de la ligne par empreinte
+(`invitation_definer_token_lookup`) pour poser `app.organization_id` : cette lecture ne decide
+rien. Deux clics concurrents sur le meme lien : le premier verrouille la ligne, le second attend
+puis re-evalue le predicat sur la ligne mise a jour (`READ COMMITTED`), voit
+`accepted_at IS NOT NULL` et ne modifie rien. **Zero ligne** (inconnue, expiree, deja utilisee,
+autre adresse, compte disparu) : la fonction retourne zero ligne, n'ecrit rien et ne leve pas ;
+l'application distingue ensuite par `lookup_invitation` (`404`, `410`, `409`, `403`). **Une
+ligne** : `INSERT INTO member (organization_id, user_id, role) VALUES (<org>, current_user_id(),
+'member')` dans la meme instruction (`member_definer_context`) ; deja membre (`23505` sur
+`member_org_user_idx`) : `SG008`, toute l'instruction est annulee et l'invitation reste non
+consommee (P-5). `SET TimeZone = 'UTC'` (D-091). Le contexte pose est efface avant le retour
+(D-105).
 
 ---
 
@@ -966,11 +1012,11 @@ jointure ecrite dans la politique (la sonde `member` est dans la fonction).
 
 | Table | `organization_id` | Politique RLS (`signet_app`) | Jointures dans la politique | Politiques `signet_definer` |
 |---|---|---|---|---|
-| `app_user` | non (hors tenant) | visible si co-membre de l'organisation courante | 1 (`member`) | aucune |
+| `app_user` | non (hors tenant) | visible si co-membre de l'organisation courante | 1 (`member`) | sa propre ligne, colonnes `(id, email)`, en lecture (`app_user_definer_self_read`, 0015) |
 | `session`, `account`, `verification` | non (hors tenant) | aucun acces pour `signet_app` | — | aucune |
 | `organization` | `id` (lui-meme) | `id = current_org()` | 0 | `context_org()` ; axe `current_user_id()` en lecture |
 | `member` | direct | `organization_id = current_org()` | 0 | `context_org()` ; `user_id = current_user_id()` en lecture |
-| `invitation` | direct | `current_org()` **et** role owner, en `SELECT`, `INSERT`, `DELETE` (0014, D-086 P-3) ; aucun `UPDATE` | 1 (`member`) | aucune en 003 ; a definir en 006 (acceptation), sur `context_org()` |
+| `invitation` | direct | `current_org()` **et** role owner, en `SELECT`, `INSERT`, `DELETE` (0014, D-086 P-3) ; aucun `UPDATE` | 1 (`member`) | lecture par empreinte (`app.invitation_token_hash`) et sur `context_org()` ; `UPDATE` des seules colonnes `accepted_at`, `accepted_by_user_id`, ligne non acceptee de `context_org()`, acceptee par `current_user_id()` (0015, D-103) |
 | `collection` | direct | `organization_id = current_org()` | 0 | — |
 | `link` | **direct** (denormalise, verrouille par FK composite) | `organization_id = current_org()` | 0 | triggers de compteur : `context_org()` sur `organization_link_usage` |
 | `organization_link_usage` | `organization_id` (PK) | `organization_id = current_org()`, lecture seule | 0 | `context_org()` en ecriture |
@@ -998,7 +1044,7 @@ n'a pas de cle etrangere sur `organization_id`, precisement pour ne pas cascader
 Chaque etape comprend, dans la **meme migration**, la table et sa politique RLS. Une table livree
 sans politique est une table ouverte le temps que la migration suivante arrive.
 
-### Migrations appliquees (etat au 2026-10-20)
+### Migrations appliquees (etat au 2026-10-26)
 
 Les fichiers de `packages/db/migrations/` presents dans `main` sont immuables (`migrate.ts`
 enregistre un nom, jamais une somme de controle : une modification ne serait jamais rejouee).
@@ -1019,15 +1065,18 @@ enregistre un nom, jamais une somme de controle : une modification ne serait jam
 | **`0012_billing_event.sql`** | §8.2 : table `billing_event` (partie generee par `pnpm db:generate`, fichier renomme depuis `0002_regular_ricochet.sql`, etiquette alignee dans `meta/_journal.json`) ; RLS, politiques `billing_event_*` et `subscription_definer_*`, triggers d'immutabilite, `signet.reject_mutation()`, `signet.apply_stripe_subscription(jsonb)` (ADR-0016), `USAGE` du schema `signet` et `EXECUTE` de la fonction a `signet_billing` | 002 |
 | **`0013_subscription_sync_guard.sql`** | D-071 : colonne `subscription.stripe_synced_at` (generee, fichier renomme depuis `0003_ambiguous_naoko.sql`) ; `apply_stripe_subscription` remplacee : cle d'entree `stripe_read_at` et garde monotone (resultat `stale`), metadonnee d'organisation comparee en `uuid` (audit-002 CRITIQUE-1), passage en Free decide par le statut relu seulement ; marque `stripe_read_at` prise sur l'horloge de la base par la fonction Inngest (D-077), sans borne haute | 002 |
 | **`0014_invitation.sql`** | §5 : table `invitation` (generee, fichier renomme depuis `0004_worthless_stephen_strange.sql`, etiquette alignee, D-088) ; RLS activee et forcee ; politiques `invitation_owner_read`/`_insert`/`_delete` (`TO signet_app`, `current_org()` et role owner, D-086 P-3) ; `GRANT SELECT, INSERT, DELETE` a `signet_app` ; `signet.create_invitation(p_organization_id, p_email, p_token_hash)` `SECURITY INVOKER`, `TimeZone = 'UTC'` (D-091), `EXECUTE` a `signet_app` seul | 003 |
+| **`0015_accept_invitation.sql`** | §1, §2.1, §5 : aucune table ni colonne (fichier vide cree par `drizzle-kit generate --custom`, renomme depuis `0005_accept_invitation.sql`, etiquette alignee, P-1) ; `GRANT SELECT` et `GRANT UPDATE (accepted_at, accepted_by_user_id)` sur `invitation` et `GRANT SELECT (id, email)` sur `app_user` a `signet_definer` ; politiques `invitation_definer_token_lookup`, `invitation_definer_context_read`, `invitation_definer_accept`, `app_user_definer_self_read` (`TO signet_definer`) ; `signet.lookup_invitation(bytea)` et `signet.accept_invitation(bytea)` `SECURITY DEFINER`, proprietaire `signet_definer`, `TimeZone = 'UTC'`, `EXECUTE` a `signet_app` seul (D-102, D-103) | 006 |
 
 Aucune des trois migrations 0009 a 0011 ne touche une table, une colonne ou un index : `pnpm db:generate`
 ne produit aucune difference, `packages/db/src/schema/*` est inchange. 0012 ajoute
-`packages/db/src/schema/billing.ts`, 0014 `packages/db/src/schema/invitations.ts`.
+`packages/db/src/schema/billing.ts`, 0014 `packages/db/src/schema/invitations.ts` ; 0015 ne touche aucune table (schema TypeScript inchange).
 
 **Numerotation** : `drizzle-kit` numerote les fichiers qu'il genere d'apres son propre journal
 (`meta/_journal.json`), qui ne compte que les migrations generees (0002, 0003, puis 0012, 0013,
-0014). Le
-fichier genere est renomme au numero suivant du dossier, et l'etiquette du journal alignee.
+0014, 0015). Le
+fichier genere est renomme au numero suivant du dossier, et l'etiquette du journal alignee. Les
+fichiers `meta/NNNN_snapshot.json` gardent la numerotation de `drizzle-kit` (0015 a pour instantane
+`0005_snapshot.json`).
 
 ---
 

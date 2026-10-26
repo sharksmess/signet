@@ -41,19 +41,37 @@ export const createInvitation: ApiContract<
 };
 
 /**
- * US-03 — Acceptation d'une invitation. Route publique : l'invite n'a pas
- * necessairement de compte au moment du clic. Le secret est transmis dans le
- * CORPS de la requete, jamais dans le chemin de l'URL (ADR-0003, point de
- * vigilance) : un chemin contenant le secret finit dans les journaux d'acces
- * de tout reverse proxy ou outil d'observabilite standard. La page qui
- * affiche le formulaire d'acceptation peut recevoir le token en query string
- * (lien d'e-mail, inevitable) ; c'est l'appel API qui ne doit jamais le
- * reporter dans son propre chemin.
+ * US-03 — Acceptation d'une invitation. Amende par la tranche 006 (D-102 Q-1,
+ * Q-2 ; ADR-0018) : session better-auth OBLIGATOIRE ; l'invite sans compte
+ * s'inscrit d'abord par `POST /api/auth/sign-up/email` (tranche 001), puis
+ * accepte. L'adresse du compte connecte doit etre l'adresse invitee
+ * (insensible a la casse), verifiee par la base dans
+ * `signet.accept_invitation()`. Le champ `password` est retire : la route ne
+ * cree aucun compte et n'ouvre aucune session (un `password` fourni est
+ * ignore).
+ *
+ * Le secret est transmis dans le CORPS de la requete, jamais dans le chemin
+ * ni la query string de l'URL (ADR-0003, point de vigilance) : un chemin
+ * contenant le secret finit dans les journaux d'acces de tout reverse proxy
+ * ou outil d'observabilite standard. Le lien d'e-mail le porte dans le
+ * fragment `#token=` (tranche 003, P-1), que le navigateur n'envoie pas au
+ * serveur ; un `?token=` sur la route d'API est ignore (422 sans corps).
+ *
+ * Ordre d'evaluation : session -> validation -> decodage strict du jeton
+ * (base64url sans remplissage, 43 caracteres, 32 octets) -> empreinte
+ * `sha256(octets)` (D-090) -> `accept_invitation()` ; si aucune ligne,
+ * `lookup_invitation()` dans la meme transaction pour distinguer
+ * 404 / 410 / 409 / 403. La lecture de distinction a lieu APRES l'echec de
+ * la consommation, jamais avant.
  */
 const acceptInvitationInput = z.object({
-  token: z.string().min(1),
-  /** Absent si l'invite n'a pas encore de compte ; better-auth gere alors la creation de compte avant liaison. */
-  password: z.string().min(8).optional(),
+  /**
+   * Texte du jeton. Aucune longueur minimale : une chaine vide ou faite
+   * d'espaces est un jeton malforme (404 INVITATION_NOT_FOUND, comme tout
+   * jeton inconnu), pas une erreur de validation (lecture validee par
+   * l'humain, tranche 006). Au-dela de 256 caracteres : 422.
+   */
+  token: z.string().max(256),
 });
 
 const acceptInvitationOutput = z.object({
@@ -67,14 +85,18 @@ export const acceptInvitation: ApiContract<
 > = {
   route: "/api/invitations/accept",
   method: "POST",
-  minRole: "public",
+  minRole: "authenticated",
   input: acceptInvitationInput,
   output: acceptInvitationOutput,
   errors: [
-    { status: 404, code: "INVITATION_NOT_FOUND", trigger: "token inconnu : signet.accept_invitation() ne retourne aucune ligne car aucune empreinte ne correspond (jamais emis, ou format invalide)" },
-    { status: 410, code: "INVITATION_EXPIRED", trigger: "empreinte trouvee mais expires_at depasse (US-03.2) — accept_invitation() ne retourne aucune ligne, l'appelant distingue expire de inconnu par une lecture separee via signet.lookup_invitation() avant tentative d'acceptation" },
-    { status: 409, code: "INVITATION_ALREADY_USED", trigger: "accepted_at deja renseigne (US-03.3) — meme non-retour de accept_invitation(), distingue par lookup_invitation()" },
+    { status: 401, code: "UNAUTHENTICATED", trigger: "D-102 Q-1 (tranche 006) : aucune session valide, ou compte disparu entre la session et l'acceptation (SG002 / 23503 de accept_invitation(), ou invitation en attente adressee a l'adresse de la session mais non consommee) ; l'invitation reste en attente." },
+    { status: 422, code: "VALIDATION_FAILED", trigger: "corps non JSON, token absent ou non textuel, ou token de plus de 256 caracteres ; un token en query string est ignore." },
+    { status: 404, code: "INVITATION_NOT_FOUND", trigger: "token inconnu OU malforme (pas du base64url sans remplissage de 43 caracteres, ou decode en autre chose que 32 octets, chaine vide comprise) : corps identique dans les deux cas ; aucune requete en base pour un token malforme ; pour un token bien forme, accept_invitation() puis lookup_invitation() ne retournent aucune ligne." },
+    { status: 410, code: "INVITATION_EXPIRED", trigger: "empreinte trouvee, non acceptee, expires_at <= now() (US-03.2, D-091 : calcul en UTC) — accept_invitation() ne retourne aucune ligne, lookup_invitation(), appelee APRES, rend l'etat expired." },
+    { status: 409, code: "INVITATION_ALREADY_USED", trigger: "empreinte trouvee, accepted_at deja renseigne (US-03.3), y compris pour le perdant d'une acceptation concurrente et pour un autre compte qui presente le jeton deja consomme — lookup_invitation() rend l'etat accepted." },
+    { status: 403, code: "INVITATION_EMAIL_MISMATCH", trigger: "D-102 Q-2 (tranche 006) : invitation en attente et valide, adressee a une autre adresse que celle du compte connecte (comparaison insensible a la casse, portee par la base) ; message fixe qui ne contient ni l'adresse invitee ni celle du compte ; rien n'est consomme, le bon compte peut accepter ensuite." },
+    { status: 409, code: "ALREADY_MEMBER", trigger: "P-5 (tranche 006) : le compte connecte est deja membre de l'organisation de l'invitation, owner compris (SG008 de accept_invitation()) ; l'invitation n'est pas consommee, aucune ligne member ajoutee." },
   ],
   idempotency:
-    "rejouable uniquement avant la premiere consommation reussie : le token est a usage unique par construction (ERD §5, UPDATE ... WHERE accepted_at IS NULL ... RETURNING, sans lecture prealable). Un deuxieme appel avec le meme token, meme identique au premier, retourne 409 plutot que de reproduire le meme resultat — ce n'est PAS une idempotence au sens strict, c'est une garantie usage-unique.",
+    "rejouable uniquement avant la premiere consommation reussie : le token est a usage unique par construction (ERD §5, un seul UPDATE ... WHERE accepted_at IS NULL AND expires_at > now() AND email = adresse du compte ... RETURNING ; la lecture prealable de la ligne par empreinte ne sert qu'a poser le contexte et ne decide rien). Un deuxieme appel avec le meme token, meme identique au premier, retourne 409 INVITATION_ALREADY_USED plutot que de reproduire le meme resultat — ce n'est PAS une idempotence au sens strict, c'est une garantie usage-unique. Un refus (401, 403, 404, 409 ALREADY_MEMBER, 410) ne consomme rien.",
 };
