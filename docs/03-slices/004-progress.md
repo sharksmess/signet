@@ -3,23 +3,25 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : implementation terminee ; 1 test en echec, defaut du test lui-meme (voir Blocages), decision humaine attendue
+- Statut : auditee (security-auditor, contract-guardian, code-reviewer : PASS, `docs/04-runbooks/audits/review-004.md`) ; correctifs de relecture appliques (A CORRIGER 1, A CORRIGER 2, SUGGESTION 1)
 - Branche : slice/004-creation-collection
-- Dernier commit : 714ace9 test(slice-004): corriger l'assertion du CHECK name = btrim(name)
-- Prochaine etape : arbitrage humain sur l'assertion `name = btrim name` de `catalog.test.ts` ; puis relecteurs (`security-auditor`, `contract-guardian`, `code-reviewer`), registre (decisions de ce journal), journal de projet 20, fiche de preuves (AC9), `close-slice.sh`
-- Resultats : `pnpm exec vitest run tests/collections` 56 passes / 1 en echec (57) ; `pnpm test` 486 passes, 1 en echec, 1 ignore (488), 41 fichiers, 124,65 s ; `pnpm run check` vert (typecheck + eslint)
-- D-113 : deja applique dans le commit d'ouverture 255fd28 (`tests/stack-upgrade/lint-scope.test.ts`, delai propre de 60 s sur les quatre `it`) ; rien a faire dans l'implementation. La mention « appliquer D-113 » de la version precedente de ce journal etait erronee.
+- Dernier commit : 616d428 test(slice-004): figer les messages d'erreur et durcir le test RLS
+- Prochaine etape : cloture par l'orchestrateur (registre, journal de projet 20, fiche de preuves avec AC9, suite complete, `close-slice.sh`)
+- Resultats actuels : `pnpm exec vitest run tests/collections` 72 passes / 72 (5 fichiers) ; `pnpm run check` vert (typecheck + eslint). Suite complete apres D-115 (rapport de l'orchestrateur) : 487 passes, 1 ignore ; relancee par l'orchestrateur a la cloture.
+- D-113 : deja applique dans le commit d'ouverture 255fd28 (`tests/stack-upgrade/lint-scope.test.ts`, delai propre de 60 s sur les quatre `it`) ; rien a faire dans l'implementation. La mention « appliquer D-113 » d'une version precedente de ce journal etait erronee.
 
 ## Couches
-- [x] Migration — 4558151 (`0016_collection.sql`, schema `collections.ts`, ERD §6.1, matrice d'isolation, « Migrations appliquees », numerotation). 13/14 tests de `catalog.test.ts` verts ; l'echec restant est un defaut du test (voir Blocages).
+- [x] Migration — 4558151 (`0016_collection.sql`, schema `collections.ts`, ERD §6.1, matrice d'isolation, « Migrations appliquees », numerotation)
 - [x] Acces donnees + logique metier — 7c00543 (`lib/collections/{contracts,collections}.ts`, `collectionNameTaken` dans `errors.ts`)
 - [x] API — a5d7278 (`POST /api/organizations/:organizationId/collections`)
 - [x] Lint des tests — 1d2b39f (deux `client.query` types, aucune assertion touchee)
+- [x] Correction du test CHECK — 714ace9 (D-115, `test-writer`)
+- [x] Correctifs de relecture — 616d428 (`tests/collections/decisions.test.ts` : messages fixes, D-114 point 4 ; `catalog.test.ts` : politique stricte)
 - [ ] UI (aucune : tranche 012)
-- [ ] Suite complete verte + `pnpm run check` — check vert ; suite : 1 echec, le defaut de test ci-dessous
+- [x] `tests/collections` vert + `pnpm run check` vert ; suite complete : relance par l'orchestrateur a la cloture
 
 ## Blocages
-- **Test `catalog.test.ts` « PRIMARY KEY (id), UNIQUE (id, organization_id)... deux CHECK sur name » : assertion impossible a satisfaire.** Cause : `normalized()` ecrase les espaces (`squash`) puis supprime les parentheses ; la definition rendue par Postgres, `CHECK ((name = btrim(name)))`, devient `CHECK name = btrimname`, alors que le test attend `name = btrim name`. Aucune definition Postgres de `name = btrim(name)` (contrat ERD §6.1) ne produit un espace entre `btrim` et `name`. Essai : migration conforme au contrat, sortie observee `expected 'CHECK name = btrimname' to contain 'name = btrim name'`. Options : (a) corriger la chaine attendue du test en `name = btrimname` (modifie une assertion : decision humaine ou de l'auteur des tests) ; (b) laisser l'echec signale. Retenu : (b), la consigne interdit de modifier les assertions. Le reste du test (PK, UNIQUE, FK, CHECK de longueur) passe.
+- **Resolu par D-115 (714ace9)** — test `catalog.test.ts` « ... deux CHECK sur name » : l'assertion `name = btrim name` etait inatteignable (`normalized()` ecrase les espaces puis retire les parentheses : `CHECK ((name = btrim(name)))` devient `CHECK name = btrimname`). Remplacee par une regex ancree par `test-writer` (voir Decisions).
 - `pnpm db:migrate` (base de developpement) echoue : `DATABASE_URL_MIGRATE n'est pas definie`. Variable non chargee dans le shell de l'agent ; action humaine. La base de test est migree par le globalSetup (`pnpm test`), ou 0016 s'applique.
 
 ## Decisions
@@ -36,3 +38,6 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 - Deux `client.query` des tests deja ecrits (`catalog.test.ts` l. 271, `isolation.test.ts` l. 164) recoivent un parametre de type `<{ id: string }>` : `pnpm run check` les refusait (`no-unsafe-return`). Aucune assertion modifiee. Ecarte : desactiver la regle (interdit), laisser `check` rouge.
 - `pnpm db:migrate` n'a pas ete lance sur la base de developpement (`DATABASE_URL_MIGRATE` absente du shell de l'agent) ; 0016 est appliquee a la base de test par le globalSetup.
 - Correction du test AC8 (`tests/collections/catalog.test.ts`, CHECK `name = btrim(name)`, D-115) : l'assertion passait par `normalized()`, qui retire les parentheses, et cherchait `name = btrim name`, chaine inatteignable (defaut du test, pas du code). Remplacee par une regex ancree sur la definition Postgres, `^CHECK [(]+name = btrim[(]name[)]+$`, qui tolere les parentheses doublees mais echoue si la contrainte disparait ou devient autre chose (ex. `name = lower(name)`).
+- **Preuve de D-114 point 4 (review-004 A CORRIGER 1, 616d428)** : `tests/collections/decisions.test.ts` compare le `message` de chaque erreur, par egalite, a la liste exacte des textes fixes : « Corps JSON attendu. » (corps non JSON, tableau, nombre, `null`) ; « Identifiant d'organisation invalide. » (`pas-un-uuid`, UUID a caractere non hexadecimal, et chemin invalide + nom invalide : le chemin prime) ; « Nom de collection invalide : 1 a 100 caracteres, espaces de bord exclus. » (nom absent, vide, fait d'espaces, 101 caracteres, nombre, `null`, tableau) ; « Une collection de cette organisation porte deja ce nom. » (409). Chaque 422 est aussi verifie sans fragment de Zod (`Too big`, `Too small`, `too_big`, `too_small`, `expected`, `received`, `Invalid`, `invalid_type`, `invalid_format`, `"path"`, `"code": "`). Fichier nouveau plutot qu'un ajout a `creation.test.ts` : les assertions des tests deja ecrits restent intactes, et le fichier porte le nom de ce qu'il protege.
+- **Mutation (2026-10-26)** : dans la route, `validationFailed(pathIsInvalid ? INVALID_ORGANIZATION_ID : INVALID_NAME)` remplace temporairement par `validationFailed(parsed.error.message)`. Resultat de `pnpm exec vitest run tests/collections/decisions.test.ts` : **10 en echec, 5 passes (15)**. Echouent les 3 cas de chemin invalide et les 7 cas de nom invalide ; passent les 4 cas de corps (branche non mutee) et le 409. Route restauree par `git checkout`, `git diff -- apps/` vide ; rien de la mutation n'est committe.
+- **Test de politique strict (review-004 SUGGESTION 1, 616d428)** : `catalog.test.ts` verifie `polcmd = '*'` (FOR ALL), et compare `USING` et `WITH CHECK`, normalises (espaces, parentheses, `signet.`), par **egalite** a `organization_id = current_org`. Une politique `... OR true` ou une conjonction quelconque echoue. Les autres assertions sont inchangees.
