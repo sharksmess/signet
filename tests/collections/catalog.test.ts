@@ -48,10 +48,11 @@ describe("AC8 — RLS et politique", () => {
     expect(rows[0]).toEqual({ relrowsecurity: true, relforcerowsecurity: true });
   });
 
-  it("AC8 : exactement une politique, TO signet_app seulement, USING et WITH CHECK portent organization_id = current_org(), aucun context_org(, aucune TO PUBLIC ni signet_definer", async () => {
+  it("AC8 : exactement une politique FOR ALL, TO signet_app seulement, USING et WITH CHECK egaux a organization_id = current_org(), aucun context_org(, aucune TO PUBLIC ni signet_definer", async () => {
     const { rows } = await asBypassRls((client) =>
-      client.query<{ polname: string; roles: string[]; qual: string | null; withcheck: string | null }>(
+      client.query<{ polname: string; polcmd: string; roles: string[]; qual: string | null; withcheck: string | null }>(
         `SELECT pol.polname::text AS polname,
+                pol.polcmd::text AS polcmd,
                 ARRAY(SELECT CASE WHEN o = 0 THEN 'public' ELSE (SELECT rolname::text FROM pg_roles WHERE oid = o) END
                         FROM unnest(pol.polroles) AS o)::text[] AS roles,
                 pg_get_expr(pol.polqual, pol.polrelid) AS qual,
@@ -64,8 +65,11 @@ describe("AC8 — RLS et politique", () => {
     expect(rows, "exactement une politique sur collection").toHaveLength(1);
     const [policy] = rows;
     expect(policy?.roles, "TO signet_app seulement").toEqual(["signet_app"]);
-    expect(normalized(policy?.qual), "USING").toContain("organization_id = current_org");
-    expect(normalized(policy?.withcheck), "WITH CHECK").toContain("organization_id = current_org");
+    expect(policy?.polcmd, "politique FOR ALL (polcmd = '*')").toBe("*");
+    // Egalite stricte (review-004 SUGGESTION 1) : `... OR true` ou une
+    // conjonction quelconque echoue.
+    expect(normalized(policy?.qual), "USING").toBe("organization_id = current_org");
+    expect(normalized(policy?.withcheck), "WITH CHECK").toBe("organization_id = current_org");
     expect(`${policy?.qual ?? ""} ${policy?.withcheck ?? ""}`, "aucun appel a context_org(").not.toContain("context_org(");
   });
 });
