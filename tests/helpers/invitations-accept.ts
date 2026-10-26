@@ -14,7 +14,7 @@
 import { randomBytes } from "node:crypto";
 import type { PoolClient } from "pg";
 import { authHeaders, baseUrl, signUp, type AuthenticatedSession } from "./auth";
-import { expectProcessed, readResponse, type HttpResult } from "./billing";
+import { applyServerEnvToProcess, expectProcessed, readResponse, type HttpResult } from "./billing";
 import { asBypassRls, getAppPool, getBypassRlsPool } from "./db";
 import { createOrganizationFixture, type OrganizationFixture } from "./fixtures";
 import { invitationEnv, inviteeEmail, runSender, tokenFromText, type InvitationFakes } from "./invitations";
@@ -341,4 +341,62 @@ export async function lockInvitationTable(): Promise<TableLock> {
 /** Attend au plus `ms` ; `"pending"` si la promesse n'est pas resolue. */
 export async function settledWithin<T>(promise: Promise<T>, ms: number): Promise<T | "pending"> {
   return Promise.race([promise, new Promise<"pending">((resolve) => setTimeout(() => resolve("pending"), ms))]);
+}
+
+/**
+ * Attend (au plus `ms`) qu'une connexion executant `accept_invitation`
+ * soit bloquee sur un verrou. Lue sur une connexion d'administration distincte a
+ * chaque tour (hors transaction : `pg_stat_activity` est fige dans une transaction).
+ */
+export async function waitForAcceptBlockedOnLock(ms: number): Promise<boolean> {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    const waiting = await asBypassRls(async (client) => {
+      const { rows } = await client.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM pg_stat_activity
+          WHERE wait_event_type = 'Lock' AND pid <> pg_backend_pid() AND query LIKE '%signet.accept_invitation(%'`,
+      );
+      return Number(rows[0]?.n ?? "0");
+    });
+    if (waiting > 0) return true;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// Reouverture D-111 : forme canonique du jeton (D-106), logique dans le processus de test (D-108)
+// ---------------------------------------------------------------------------
+
+const BASE64URL_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+/**
+ * Les trois variantes non canoniques d'un jeton de 43 caracteres : meme texte,
+ * sauf le dernier caractere dont seuls les deux bits de poids faible (ignores au
+ * decodage de 32 octets) changent. Toutes decodent en les memes 32 octets.
+ */
+export function nonCanonicalVariants(token: string): string[] {
+  if (token.length !== 43) throw new Error(`nonCanonicalVariants : 43 caracteres attendus, ${token.length} recus.`);
+  const last = BASE64URL_ALPHABET.indexOf(token.charAt(42));
+  if (last < 0 || (last & 0b11) !== 0) {
+    throw new Error("nonCanonicalVariants : le jeton fourni n'est pas canonique (dernier caractere aux deux bits de poids faible non nuls).");
+  }
+  return [1, 2, 3].map((low) => `${token.slice(0, 42)}${BASE64URL_ALPHABET.charAt(last | low)}`);
+}
+
+/**
+ * `apps/web/src/lib/invitations/accept.ts` charge DANS le processus de test, avec
+ * l'environnement du serveur de test (`DATABASE_URL_APP` : role `signet_app` sur la
+ * base de test). Permet d'atteindre les branches que la route ne peut pas
+ * atteindre (compte disparu APRES `getSession`, D-108).
+ */
+export async function loadAcceptModule(): Promise<typeof import("../../apps/web/src/lib/invitations/accept")> {
+  applyServerEnvToProcess();
+  return import("../../apps/web/src/lib/invitations/accept");
+}
+
+/** Ferme le pool de `apps/web/src/lib/db.ts` ouvert dans le processus de test par `loadAcceptModule`. */
+export async function closeServerAppPool(): Promise<void> {
+  const db = await import("../../apps/web/src/lib/db");
+  await db.getAppPool().end();
 }
