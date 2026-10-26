@@ -1,10 +1,10 @@
 # ADR-0018 — Identite de l'invite a l'acceptation : session obligatoire, adresse verifiee par la base
 
-- **Statut** : accepte (gate d'ouverture de la tranche 006, D-102 : Q-1 option A, Q-2, P-2, P-3, P-4, P-5, P-7 ; D-103 ; decisions locales D-105 a D-108)
+- **Statut** : accepte (gate d'ouverture de la tranche 006, D-102 : Q-1 option A, Q-2, P-2, P-3, P-4, P-5, P-7 ; D-103 ; decisions locales D-105 a D-108, validees par l'humain, D-110 ; `minRole` « authenticated », D-109)
 - **Date** : 2026-10-26
 - **Phase** : 3 — tranche 006
 - **Complete** : [ADR-0003](0003-token-invitation-hache.md) (enonce de consommation : predicat d'adresse, utilisateur de session) ; [ADR-0017](0017-envoi-invitation-jeton-scelle.md) (lien a fragment, empreinte des octets) ; [ADR-0011](0011-rls-appartenance-utilisateur-session.md) (tableau « source du contexte » : deux fonctions)
-- **Decisions du registre** : D-102, D-103, D-105, D-106, D-107, D-108
+- **Decisions du registre** : D-102, D-103, D-105, D-106, D-107, D-108, D-109, D-110
 
 ## Contexte
 
