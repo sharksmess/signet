@@ -12,6 +12,13 @@ const root = path.resolve(__dirname, "../..");
 const webFile = path.join(root, "apps/web/src/lib/organizations.ts");
 const dbFile = path.join(root, "packages/db/src/migrate.ts");
 
+/**
+ * Delai propre (D-113) : chaque test charge la configuration ESLint, qui a
+ * depasse le delai global de 20 s sous charge (FRICTION 2026-10-20, 2026-10-26).
+ * Le delai global de vitest.config.ts reste inchange.
+ */
+const LINT_CONFIG_TIMEOUT_MS = 60_000;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -47,17 +54,17 @@ describe("AC2 : portee des regles de lint", () => {
   it("AC2 : apps/web recoit des regles @next/next/* actives", async () => {
     const rules = await activeRules(webFile);
     expect(activeWithPrefix(rules, "@next/next/").length).toBeGreaterThan(0);
-  });
+  }, LINT_CONFIG_TIMEOUT_MS);
 
   it("AC2 : apps/web recoit des regles react-hooks/* actives", async () => {
     const rules = await activeRules(webFile);
     expect(activeWithPrefix(rules, "react-hooks/").length).toBeGreaterThan(0);
-  });
+  }, LINT_CONFIG_TIMEOUT_MS);
 
   it("AC2 : packages/db ne recoit aucune regle @next/next/*", async () => {
     const rules = await activeRules(dbFile);
     expect(activeWithPrefix(rules, "@next/next/")).toEqual([]);
-  });
+  }, LINT_CONFIG_TIMEOUT_MS);
 
   it("AC2 : no-explicit-any et ban-ts-comment restent en erreur dans apps/web et packages/db", async () => {
     for (const file of [webFile, dbFile]) {
@@ -65,5 +72,5 @@ describe("AC2 : portee des regles de lint", () => {
       expect(rules["@typescript-eslint/no-explicit-any"], `no-explicit-any ${file}`).toBe(2);
       expect(rules["@typescript-eslint/ban-ts-comment"], `ban-ts-comment ${file}`).toBe(2);
     }
-  });
+  }, LINT_CONFIG_TIMEOUT_MS);
 });

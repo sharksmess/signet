@@ -1,2 +1,3 @@
 - [No pnpm test in parallel reviews](feedback_parallel_reviews_no_pnpm_test.md) — shared test DB/port; use orchestrator's result, `pnpm run check` is safe
+- [Fixed-message tests](feedback_fixed_message_tests.md) — "value not echoed" tests don't prove "no Zod message"; require exact texts
 - [Review file and verdict](feedback_review_file_verdict.md) — write audits/review-NNN.md via Write tool, last line REVIEW: PASS/FAIL
