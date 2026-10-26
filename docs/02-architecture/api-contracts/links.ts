@@ -13,11 +13,39 @@ import { ApiContract, Uuid } from "./_contract";
  * DOIT traduire les deux en FREE_TIER_QUOTA_EXCEEDED, jamais en 500
  * (ADR-0002, consequence acceptee).
  */
+/**
+ * D-120 (tranche 005) : au-dela de la forme du `CHECK` de l'ERD, une URL
+ * acceptee a un nom d'hote, aucune information d'identification
+ * (`utilisateur:secret@`, ou `https://site@piege` qui affiche un hote et en
+ * ouvre un autre) et aucun caractere de controle. L'autorite est lue sur le
+ * texte soumis (jusqu'au premier `/`, `?`, `#` ou `\`) : l'analyseur WHATWG
+ * corrige `http:///chemin` en `http://chemin/`, le texte enregistre ne l'est pas.
+ */
+function isSafeHttpUrl(value: string): boolean {
+  if (/[\u0000-\u001f\u007f]/.test(value)) return false;
+  const authority = /^https?:\/\/([^/?#\\]*)/.exec(value)?.[1] ?? "";
+  if (authority === "" || authority.includes("@")) return false;
+  if (!URL.canParse(value)) return false;
+  const parsed = new URL(value);
+  return (
+    (parsed.protocol === "http:" || parsed.protocol === "https:") &&
+    parsed.hostname !== "" &&
+    parsed.username === "" &&
+    parsed.password === ""
+  );
+}
+
 const addLinkInput = z.object({
   organizationId: Uuid,
   collectionId: Uuid,
-  /** Forme alignee sur la contrainte `link.url` de l'ERD : http(s) uniquement, 8-2048 caracteres. */
-  url: z.string().trim().min(8).max(2048).regex(/^https?:\/\/\S+$/, "url doit commencer par http:// ou https://"),
+  /** Forme alignee sur la contrainte `link.url` de l'ERD (http(s) uniquement, 8-2048 caracteres), resserree par D-120. */
+  url: z
+    .string()
+    .trim()
+    .min(8)
+    .max(2048)
+    .regex(/^https?:\/\/\S+$/, "url doit commencer par http:// ou https://")
+    .refine(isSafeHttpUrl, "url doit avoir un nom d'hote, sans identifiants ni caracteres de controle"),
   title: z.string().trim().min(1).max(200),
 });
 
@@ -40,7 +68,7 @@ export const addLink: ApiContract<typeof addLinkInput, typeof addLinkOutput> = {
     { status: 401, code: "UNAUTHENTICATED", trigger: "aucune session valide" },
     { status: 404, code: "ORGANIZATION_NOT_FOUND", trigger: "organizationId inexistant, ou appelant non membre" },
     { status: 404, code: "COLLECTION_NOT_FOUND", trigger: "collectionId inexistant, ou appartenant a une autre organisation" },
-    { status: 422, code: "VALIDATION_FAILED", trigger: "url malformee (US-06.2), ou title vide / > 200 caracteres" },
+    { status: 422, code: "VALIDATION_FAILED", trigger: "url malformee (US-06.2 : autre schema que http/https, sans nom d'hote, avec identifiants ou caracteres de controle, D-120), ou title vide / > 200 caracteres" },
     { status: 409, code: "FREE_TIER_QUOTA_EXCEEDED", trigger: "organisation sur le palier Free et deja a 50 liens tous collections confondues (US-06.4) : le 51e est refuse, aucun lien cree" },
   ],
   idempotency:
