@@ -99,3 +99,71 @@ Les messages respectent Conventional Commits et font moins de 72 caracteres. Il 
 - **Manquant** : les arbitrages humains sur les ecarts de test ne sont pas au registre, le journal est encore en « a confirmer », et la nouvelle occurrence du delai depasse n'est pas dans FRICTION.
 
 REVIEW: PASS
+
+---
+
+# Relecture de code, tranche 006 : réouverture D-111 (2026-10-26)
+
+Ce que j'ai relu : le diff `ae87200..HEAD`, c'est-à-dire les commits 60a9752, 34a0203 et f5174c2. Je l'ai confronté au code de production qu'il teste (`apps/web/src/lib/invitations/accept.ts`, `token.ts`, `lib/errors.ts`, `lib/db.ts`, la route `api/invitations/accept/route.ts`, la migration `0015_accept_invitation.sql`), au registre (D-106 à D-111), au journal `006-progress.md` et au journal de projet 19. Je n'ai pas relancé `pnpm test` : je reprends les résultats transmis par l'orchestrateur.
+
+## Vérifications faites, sans constat
+
+- **Code de production et tests existants intacts.** `git diff ae87200..HEAD -- apps packages` ne renvoie aucune ligne. Le diff ne touche que `decisions.test.ts`, qui est nouveau, des ajouts en fin de `tests/helpers/invitations-accept.ts` (seul l'import de `applyServerEnvToProcess` change dans le code déjà présent), et la documentation.
+- **D-107, textes écrits en clair.** Le test compare les messages à des chaînes écrites en dur (`decisions.test.ts:75-95`), jamais importées de `lib/errors.ts`. Je les ai comparées caractère par caractère à la ligne D-107 du registre et à `errors.ts:47-140` : elles sont identiques. L'assertion `toStrictEqual({ code, message })` refuse aussi tout champ en plus dans le corps.
+- **Mutations consignées au journal.** J'ai raisonné sur chacune contre le code réel :
+  - **D-106** : si l'on retire la condition `secret.toString("base64url") !== token` (`token.ts`), le test unitaire et le test API échouent. Ce dernier part d'un jeton réellement émis par la route d'invitation (`issueInvitation`) et constate un 200 au lieu du 404 attendu. Une autre mutation plausible, qui « normaliserait » le jeton au lieu de le refuser, ferait aussi échouer le test API. `nonCanonicalVariants` vérifie au préalable que le jeton est canonique, donc le test ne peut pas devenir vide sans le signaler.
+  - **D-108, choix 401 ou 403** : forcer 403 fait échouer la ligne « même adresse ». Forcer 401 fait échouer la ligne « autre adresse » (`:260-263`). Retirer `.toLowerCase()` fait échouer le cas en casse différente (`:256-259`).
+  - **D-108, `IDENTITY_LOST`** : retirer `SG002` seul ou `23503` seul fait échouer chacun son test.
+  - Je n'ai trouvé aucune autre mutation plausible qui laisse ces tests verts, à une exception près pour D-107 (constat A CORRIGER 1).
+- **D-108, chemin 23503.** Je l'ai vérifié dans la migration 0015. La sous-requête d'adresse de l'`UPDATE` ne pose pas de verrou : sous MVCC, elle voit encore la ligne `app_user` dont la suppression n'est pas validée. C'est le contrôle de clé étrangère sur `invitation.accepted_by_user_id` qui pose un verrou `FOR KEY SHARE`. Il attend donc le verrou de ligne du `DELETE`, puis échoue en `23503` une fois la suppression validée. Le scénario est déterministe et ne repose pas sur un délai.
+- **Connexions et transactions.** `finally` fait `ROLLBACK` puis `release` de la connexion qui supprime le compte. Le pool de `lib/db.ts` est fermé en `afterAll` (`closeServerAppPool`, même instance de module que celle chargée par `accept.ts`). La promesse rejetée est observée (`pending.catch`). `fileParallelism: false` (`vitest.config.ts`) exclut qu'un autre fichier interfère pendant le test.
+- **Registre et backlog.** D-111 respecte le format, décideur « humain », avec l'option écartée. Les trois lignes A CORRIGER 1 à 3 sont retirées de `000-backlog.md`, et SUGGESTION 1 à 5 y restent.
+- **Code interdit, historique.** Aucun `any`, `// TODO`, `ts-ignore`, `.only` ni `.skip` dans le diff. Les valeurs de test sont visiblement inventées (adresses `uniqueEmail`, jetons aléatoires, libellés « Org D-106… »). Les trois commits suivent les Conventional Commits, un par couche (chore, test, docs), et le commit de test explique le pourquoi.
+
+## Constats
+
+### A CORRIGER 1 : le 422 n'est pas testé pour un JSON valide qui n'est pas un objet
+- **Emplacement** : `tests/invitation-acceptance/decisions.test.ts:214-220`. La branche concernée est `route.ts`, `if (typeof body !== "object" || body === null || Array.isArray(body))`.
+- **Constat** : les cinq entrées testées passent par deux chemins seulement :
+  - la lecture JSON qui échoue (`"ceci n'est pas du JSON"`, qui donne `undefined`) ;
+  - le schéma (`{}`, `{token: 12345}`, `{token: null}`, 257 caractères).
+  
+  Aucun corps JSON valide qui n'est pas un objet n'est envoyé (`[]`, `"texte"`, `null`, `42`).
+- **Conséquence** : D-107 exige un message 422 unique. Une mutation qui renverrait un autre texte quand le corps est du JSON valide mais pas un objet passerait le test. Par exemple : `validationFailed(body === undefined ? INVALID_BODY : "Objet JSON attendu.")`. L'exigence humaine (« chaque test échoue si l'on retire la décision ») n'est donc pas tenue pour cette branche.
+- **Direction** : ajouter à `bodies` les charges brutes `"[]"`, `"null"` et `"\"texte\""` (`postAccept` envoie déjà une chaîne telle quelle). Le coût est de trois lignes.
+
+### A CORRIGER 2 : le journal de projet 19 dit encore le contraire de l'état réel
+- **Emplacement** : `docs/00-context/journal/19-tranche-006-acceptation-invitation.md:36`, et aussi `:14` et `:23`.
+- **Constat** : l'entrée affirme encore que D-106, D-107 et D-108 « n'ont pas encore de test qui échouerait si on les retirait (… au backlog) ». Elle ne cite ni D-111, ni la réouverture, ni le commit 34a0203.
+- **Conséquence** : c'est le premier document que lisent l'humain et un auditeur externe (D-037), et l'humain fusionne sur preuves. Il lirait une réserve qui n'existe plus et ne saurait pas que la tranche a été rouverte.
+- **Direction** : avant `close-slice.sh` et le push, mettre à jour l'entrée 19 : décision D-111, commit 34a0203, fichier `decisions.test.ts`, mutations consignées au journal de tranche, et suppression de la réserve devenue fausse.
+
+### A CORRIGER 3 : D-110 n'est pas marquée comme partiellement remplacée
+- **Emplacement** : `docs/DECISIONS.md`, ligne D-110.
+- **Constat** : D-111 dit « Remplace, pour ces trois points, la suite donnée par D-110 », mais D-110 ne porte aucune mention en retour. La règle (`.claude/rules/documentation.md`, « Une décision remplacée reste dans le registre, marquée « remplacée par D-NNN » ») et l'usage du registre (D-074, D-076) prévoient ce marquage.
+- **Conséquence** : un lecteur qui tombe sur D-110 croit que A CORRIGER 1 à 3 sont toujours au backlog.
+- **Direction** : ajouter à D-110 « A CORRIGER 1 à 3 : remplacée par D-111 ».
+
+### SUGGESTION 1 : rattacher l'attente de verrou à la connexion qui supprime le compte
+- **Emplacement** : `tests/helpers/invitations-accept.ts`, dans `waitForAcceptBlockedOnLock` (filtre `query LIKE '%signet.accept_invitation(%'`).
+- **Constat** : le filtre accepte n'importe quelle session qui exécute `accept_invitation` et attend un verrou, pas seulement celle que bloque la connexion qui supprime le compte. Aujourd'hui, le risque est neutralisé par `fileParallelism: false` et par l'exécution séquentielle dans le fichier.
+- **Conséquence** : si un test antérieur laissait une session bloquée, il y aurait un faux positif. Le `COMMIT` partirait trop tôt, `acceptInvitation` lirait un compte déjà supprimé et passerait par le choix 401/403 (401 aussi). Le test resterait vert sans avoir exercé `23503`, et la preuve de D-108 se perdrait en silence. Autre point : si la précondition échoue, le `ROLLBACK` du `finally` laisse `acceptInvitation` consommer l'invitation après la fin du test. C'est sans effet sur le verdict, mais cela ajoute du bruit.
+- **Direction** : filtrer sur `pg_blocking_pids(pid) @> ARRAY[<pid de la connexion qui supprime>]`, en lisant ce pid par `SELECT pg_backend_pid()` sur cette connexion et en le passant à l'aide. Retirer aussi `SET LOCAL lock_timeout`, qui ne protège rien puisque cette connexion n'attend jamais.
+
+### SUGGESTION 2 : texte du 401 (« Aucune session valide. ») hors de D-107
+- **Emplacement** : `docs/DECISIONS.md` D-107 ; `decisions.test.ts:76`.
+- **Constat** : ce texte vient de la tranche 002 et il est commun à toutes les routes (`errors.ts:44-48`). Les contrats d'API documentent le déclencheur du 401 (`invitations.ts:92`), pas son texte. Le journal de tranche (`006-progress.md`, « Réouverture D-111 ») explique pourquoi il est vérifié tel quel.
+- **Ce n'est pas un manque bloquant.** Ce texte n'a pas été choisi pendant la tranche, donc il ne relève pas d'une décision locale de 006. En revanche, la tranche lui donne un deuxième sens, « compte disparu » (D-108), et le test le fige désormais. Le figer sans entrée au registre laisse une trace incomplète pour un auditeur.
+- **Direction** : ajouter une phrase à D-111 ou une nouvelle entrée, par exemple : « le 401 de la route reprend le texte commun de 002, y compris pour le compte disparu (D-108) ; figé par `decisions.test.ts` ».
+
+### SUGGESTION 3 : preuves par mutation non rejouables
+- **Emplacement** : `006-progress.md`, tableau des mutations.
+- **Constat** : les mutations sont décrites précisément, avec les messages d'échec relevés, mais un auditeur ne peut pas les rejouer mécaniquement.
+- **Direction** : pour le backlog de l'usine, prévoir un outil de mutation ciblé, ou un script qui applique chaque mutation consignée et attend un échec. Rien à faire dans la tranche.
+
+## Bilan
+- **Solide** : D-106, D-108 (choix 401/403, `SG002`, `23503`) et les textes de D-107 sont protégés par des tests qui échouent si l'on retire chaque décision. Le scénario `23503` est déterministe et je l'ai vérifié contre la migration. Aucun code de production n'a été touché.
+- **Fragile** : la détection du blocage dans le test `23503` n'est pas rattachée à la connexion qui supprime le compte. Un faux positif ferait perdre la preuve de `23503` sans faire échouer le test.
+- **Manquant** : le 422 pour un JSON valide qui n'est pas un objet, la mise à jour du journal de projet 19 (aujourd'hui faux), et le marquage de D-110 par D-111.
+
+REVIEW: PASS
