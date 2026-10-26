@@ -5,8 +5,8 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 ## Etat
 - Statut : **rouverte (D-111)** ; tests de D-106, D-107, D-108 ajoutes et prouves par mutation ; suite complete verte (37 fichiers, 430 passes, 1 ignore), `pnpm typecheck` et `pnpm run check` verts
 - Branche : slice/006-acceptation-invitation
-- Dernier commit de code : 34a0203 `test(slice-006): preuves automatiques de D-106, D-107 et D-108`
-- Prochaine etape : `code-reviewer` seul, en contexte neuf ; si PASS, `close-slice.sh` puis `git push` sur la PR #33 (D-111)
+- Dernier commit de code : d52b6e4 `test(slice-006): 422 unique pour un JSON valide non objet (D-107)`
+- Prochaine etape : `close-slice.sh` puis `git push` sur la PR #33 (D-111)
 - **Blocage de perimetre leve** : l'humain a ajoute `docs/02-architecture/api-contracts/_contract.ts` au perimetre (`scope-add`) ; `minRole` elargi a `"authenticated"` et `acceptInvitation` mis a jour (D-109), par claude-code dans la session principale, a la demande explicite de l'humain (deux lignes, l'implementeur ayant rendu la main).
 - Note : `pnpm test -- <fichier>` lance toute la suite ; cibler un fichier par `pnpm test <fichier>`
 
@@ -96,3 +96,5 @@ Preuves par mutation (code de production modifie temporairement, test lance, pui
 | D-108 (`IDENTITY_LOST`) | `accept.ts` : bloc `IDENTITY_LOST.has(code)` -> 401 supprime | « D-108 / SG002 : identifiant de session vide… » ; « D-108 / 23503 : compte supprime pendant l'acceptation… » | les deux : `Error: acceptation d'invitation : erreur inattendue (accept_invitation)` ; journal du processus : `(code SG002)` puis `(code 23503)` |
 
 Resultats apres restauration : `decisions.test.ts` 12/12 ; `pnpm test` 37 fichiers, 430 passes, 1 ignore (431) ; `pnpm typecheck` et `pnpm run check` (typecheck + eslint) verts.
+
+- **Relecture de la reouverture, A CORRIGER 1 (`review-006.md`)** : le test 422 de D-107 recoit quatre corps JSON valides non objets (`[]`, `null`, `"texte"`, `42`), qui couvrent la branche `typeof body !== "object" || body === null || Array.isArray(body)` de `route.ts` ; ils rendent le meme corps 422 que les autres entrees. Mutation : `validationFailed(body === undefined ? INVALID_BODY : "Objet JSON attendu.")` -> le test echoue (`D-107 422 : JSON valide non objet : tableau : corps exact de D-107 (corps brut : {"code":"VALIDATION_FAILED","message":"Objet JSON attendu."})`), 1 echec sur 12 ; route restauree, `git diff -- apps packages` vide. Apres restauration : `decisions.test.ts` 12/12 ; `pnpm test` 37 fichiers, 430 passes, 1 ignore (431) ; `pnpm typecheck` et `pnpm run check` verts. Commit d52b6e4. Aucune decision hors contrat.
