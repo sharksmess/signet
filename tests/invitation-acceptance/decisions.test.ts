@@ -213,6 +213,10 @@ describe("D-107 — textes fixes des erreurs de la route", () => {
     const invitee = await signUp();
     const bodies: Array<[string, Record<string, unknown> | string]> = [
       ["corps non JSON", "ceci n'est pas du JSON"],
+      ["JSON valide non objet : tableau", "[]"],
+      ["JSON valide non objet : null", "null"],
+      ["JSON valide non objet : chaine", "\"texte\""],
+      ["JSON valide non objet : nombre", "42"],
       ["token absent", {}],
       ["token numerique (non textuel)", { token: 12345 }],
       ["token nul", { token: null }],
