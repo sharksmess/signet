@@ -14,8 +14,12 @@ import { z } from "zod";
 export interface ApiContract<Input extends z.ZodTypeAny, Output extends z.ZodTypeAny> {
   route: string;
   method: "GET" | "POST" | "PATCH" | "DELETE";
-  /** Role minimal requis, verifie APRES l'appartenance a l'organisation (voir ADR-0004). "public" = aucune authentification. */
-  minRole: "public" | "member" | "owner";
+  /**
+   * Role minimal requis, verifie APRES l'appartenance a l'organisation (voir ADR-0004). "public" = aucune
+   * authentification. "authenticated" = session exigee, sans appartenance prealable a une organisation
+   * (D-109, tranche 006).
+   */
+  minRole: "public" | "authenticated" | "member" | "owner";
   input: Input;
   output: Output;
   errors: Array<{

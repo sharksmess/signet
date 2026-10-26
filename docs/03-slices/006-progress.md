@@ -3,11 +3,11 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : implementation terminee, sauf `minRole` du contrat (blocage de perimetre ci-dessous) ; suite complete verte, `pnpm run check` vert ; AC1 a AC14 coches
+- Statut : implementation terminee ; suite complete verte, `pnpm run check` vert ; AC1 a AC14 coches
 - Branche : slice/006-acceptation-invitation
-- Dernier commit : 6fef16b test(slice-006): condition du temoin AC3 sans promesse en booleen (puis ce journal et les cases du contrat)
-- Prochaine etape : humain — `scope-add` de `_contract.ts` pour `minRole` ; puis trois relecteurs (`security-auditor`, `contract-guardian`, `code-reviewer`), journal de projet 19, `close-slice.sh`, `ship-slice.sh`
-- **Blocage de perimetre** : `minRole: "authenticated"` (D-102) exige d'elargir le type `minRole` de `docs/02-architecture/api-contracts/_contract.ts`, absent de `.gates/scope-006.txt`. Contrat `invitations.ts` amende sauf ce champ (reste `"public"`). Action humaine : `.\gates.ps1 scope-add` du fichier, puis une ligne a changer dans chacun des deux fichiers.
+- Dernier commit : voir `git log` (contrat `minRole` apres 23828ff)
+- Prochaine etape : trois relecteurs (`security-auditor`, `contract-guardian`, `code-reviewer`), journal de projet 19, `close-slice.sh`, `ship-slice.sh`
+- **Blocage de perimetre leve** : l'humain a ajoute `docs/02-architecture/api-contracts/_contract.ts` au perimetre (`scope-add`) ; `minRole` elargi a `"authenticated"` et `acceptInvitation` mis a jour (D-109), par claude-code dans la session principale, a la demande explicite de l'humain (deux lignes, l'implementeur ayant rendu la main).
 - Note : `pnpm test -- <fichier>` lance toute la suite ; cibler un fichier par `pnpm test <fichier>`
 
 ## Tests ecrits (correspondance critere -> fichier)

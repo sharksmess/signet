@@ -85,7 +85,7 @@ export const acceptInvitation: ApiContract<
 > = {
   route: "/api/invitations/accept",
   method: "POST",
-  minRole: "public",
+  minRole: "authenticated",
   input: acceptInvitationInput,
   output: acceptInvitationOutput,
   errors: [
