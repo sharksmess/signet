@@ -20,3 +20,4 @@ apps/web/src/lib/errors.ts
 tests/invitation-acceptance/**
 tests/helpers/invitations*.ts
 tests/invitations/database.test.ts
+docs/02-architecture/api-contracts/_contract.ts
