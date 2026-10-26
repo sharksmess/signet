@@ -116,6 +116,8 @@ Tranche **012 — Ecrans** (nouvelle, prochain numero libre selon D-025) : page 
   - review-006 (reouverture) SUGGESTION 1 (D-112) : dans `tests/helpers/invitations-accept.ts`, `waitForAcceptBlockedOnLock` accepte toute session qui execute `accept_invitation` et attend un verrou ; filtrer sur `pg_blocking_pids(pid) @> ARRAY[<pid de la connexion qui supprime le compte>]` (lu par `pg_backend_pid()`), retirer le `SET LOCAL lock_timeout` inutile ; sinon un faux positif ferait perdre la preuve de `23503` (D-108) sans faire echouer le test ;
   - review-006 (reouverture) SUGGESTION 3 (D-112), pour l'usine : preuves par mutation rejouables (outil de mutation cible, ou script qui applique chaque mutation consignee et attend un echec) ;
   - audit-006 INFO-1 : adresse non verifiee (limite d'ADR-0018) a reexaminer avec le fournisseur d'e-mails reel, avec les prealables d'audit-003 ; audit-006 INFO-2 : voir P-6 ci-dessus.
+- **Issus de la tranche 004 (D-114)** :
+  - `db-architect` : l'ERD §6.1 ne prevoit pas d'index sur `collection.created_by_user_id` (`ON DELETE RESTRICT`), alors que §6.2 justifie `link_author_idx` par la meme contrainte ; sans effet tant qu'aucune suppression de compte n'existe (ERD §10), a trancher avant toute suppression de compte.
 - Le detail complet de chaque tranche (perimetre fichiers, contrat de donnees, contrat d'API, criteres d'acceptation AC1-AC5, anti-regression) est ecrit au moment de son ouverture, au format `templates/SLICE.md`, dans `docs/03-slices/<id>-<nom>.md`.
 
 ## Questions d'architecture ouvertes
