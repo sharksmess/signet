@@ -96,6 +96,7 @@ describe("AC12 — fonctions SECURITY DEFINER du schema signet (D-033, ADR-0011)
         "create_organization",
         "create_organization_counters",
         "current_org",
+        "link_usage_on_insert",
         "lookup_invitation",
         "organizations_for_user",
         "propagate_subscription_quota",

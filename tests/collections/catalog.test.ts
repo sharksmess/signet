@@ -194,6 +194,7 @@ describe("AC8 — fonctions SECURITY DEFINER inchangees", () => {
         "create_organization",
         "create_organization_counters",
         "current_org",
+        "link_usage_on_insert",
         "lookup_invitation",
         "organizations_for_user",
         "propagate_subscription_quota",
