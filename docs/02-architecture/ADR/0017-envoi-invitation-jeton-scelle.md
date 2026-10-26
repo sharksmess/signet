@@ -5,6 +5,7 @@
 - **Phase** : 3 — tranche 003
 - **Complete** : [ADR-0003](0003-token-invitation-hache.md) (stockage de l'empreinte, inchange) ; s'appuie sur ADR-0006 (Inngest) et ADR-0016 (circuit d'une fonction Inngest)
 - **Decisions du registre** : D-086, D-087, D-088, D-089, D-090, D-091
+- **Suite** : [ADR-0018](0018-identite-invite-acceptation.md) (tranche 006) — acceptation du lien : session obligatoire, adresse du compte verifiee par la base, decodage strict du jeton du fragment `#token=` puis empreinte des octets (D-090)
 
 ## Contexte
 

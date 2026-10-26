@@ -214,6 +214,13 @@ Complete par la tranche 003 (ADR-0017) :
 |---|---|---|
 | `create_invitation(p_organization_id, p_email, p_token_hash)` (0014, `SECURITY INVOKER`) | `signet_app` seul | aucune : la fonction ne pose rien et s'execute sous la RLS de l'appelant ; `current_org()` (contexte de la session, verifie) et la jointure owner des politiques `invitation_owner_*` font la barriere. `invited_by_user_id = current_user_id()`. Contexte etranger, member ou contexte absent : `DELETE` sans effet, `INSERT` refuse (`42501`) |
 
+Complete par la tranche 006 (ADR-0018, D-102, D-103) :
+
+| Fonction | Executable par | Source du contexte |
+|---|---|---|
+| `lookup_invitation(p_token_hash)` (0015, `SECURITY DEFINER`, `STABLE`) | `signet_app` seul | garde d'identite `SG002` en premiere instruction ; efface `app.organization_id` ; lit la ligne `invitation` designee par l'empreinte recue (reglage transitoire `app.invitation_token_hash`, politique `invitation_definer_token_lookup`, remis a vide aussitot) ; pose `app.organization_id` depuis `invitation.organization_id` pour lire `organization.name` (`organization_definer_context`), puis l'efface avant le retour (D-105). Ne rend que `organization_name`, `email`, `state` |
+| `accept_invitation(p_token_hash)` (0015, `SECURITY DEFINER`, `VOLATILE`) | `signet_app` seul | garde d'identite `SG002` en premiere instruction ; efface `app.organization_id` ; organisation de la ligne `invitation` designee par l'empreinte (meme lecture transitoire) ; l'`UPDATE` conditionnel (`invitation_definer_accept`) re-filtre sur l'empreinte, l'etat, l'expiration et l'adresse du compte de session (`app_user_definer_self_read`) ; l'`INSERT` du `member` passe par `member_definer_context` ; utilisateur = `current_user_id()`, jamais un parametre (P-2) ; contexte efface avant le retour (D-105). Contexte etranger force : `member` cree dans l'organisation de l'invitation seulement (AC5 b) |
+
 ### e) Fonctions dependant de l'utilisateur de session (AC4)
 
 **`signet.organizations_for_user(p_user_id)`.** La garde actuelle `p_user_id IS NULL OR p_user_id

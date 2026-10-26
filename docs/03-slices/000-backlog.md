@@ -102,7 +102,12 @@ Tranche **012 — Ecrans** (nouvelle, prochain numero libre selon D-025) : page 
   - renvoi manuel d'une invitation (nouvel evenement scelle, jamais relecture d'un secret) et revocation (colonne `revoked_at`, revue de `invitation_pending_idx`, ADR-0003 « Signal de reexamen ») ; liste des invitations en attente par l'API (aucune route de lecture en 003). Tant que le renvoi manque, un envoi abandonne bloque l'adresse jusqu'a l'expiration (7 jours) ;
   - purge periodique des invitations perimees (cron Inngest sur `invitation_expires_idx`) ; la seule purge actuelle est celle de `create_invitation`, pour le couple reinvite ;
   - rotation de `INVITATION_TOKEN_KEY` : une nouvelle cle rend inouvrables les evenements en attente (envoi abandonne, journalise) ; procedure a double cle (identifiant de cle dans le `sealedToken`) ;
-  - **pour 006** : `accept_invitation` doit figer `TimeZone = 'UTC'` comme `create_invitation` (D-091), sinon un `UPDATE` d'une invitation qui chevauche le passage a l'heure d'ete est refuse (`23514`) sous un fuseau a changement d'heure (ERD §5).
+  - ~~pour 006 : `accept_invitation` doit figer `TimeZone = 'UTC'`~~ : fait dans la tranche 006 (migration 0015, AC4).
+- **Issus de la tranche 006 (D-102, ADR-0018)**, hors objectif A sauf mention :
+  - **P-6** : limiteur de debit propre a `POST /api/invitations/accept` (aucun aujourd'hui : jeton de 256 bits, session exigee, inscription et connexion deja limitees par ADR-0010) ; **obligatoire si P-4 est rouvert** (lecture d'invitation sans session) ; stockage partage, pas le limiteur memoire de better-auth (route Next hors better-auth) ;
+  - **P-4, a rouvrir par la tranche 012** si l'ecran doit afficher l'invitation (nom de l'organisation) avant connexion : `lookup_invitation` exige aujourd'hui un utilisateur de session (`SG002`) ; la rouvrir impose P-6 ;
+  - verification d'adresse par better-auth (`email_verified`) puis exigence de `email_verified` dans `accept_invitation` : leve la limite des adresses non verifiees d'ADR-0018 ; changement d'adresse d'un compte (ADR-0018, « Signal de reexamen ») ;
+  - organisation active en session (`session.active_organization_id`) apres acceptation : tranche 012.
 - Le detail complet de chaque tranche (perimetre fichiers, contrat de donnees, contrat d'API, criteres d'acceptation AC1-AC5, anti-regression) est ecrit au moment de son ouverture, au format `templates/SLICE.md`, dans `docs/03-slices/<id>-<nom>.md`.
 
 ## Questions d'architecture ouvertes
