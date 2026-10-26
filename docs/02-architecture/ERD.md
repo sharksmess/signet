@@ -656,7 +656,13 @@ consommee (P-5). `SET TimeZone = 'UTC'` (D-091). Le contexte pose est efface ava
   liste des collections d'une organisation triee par nom : aucun index supplementaire n'est
   necessaire.
 
-**RLS** : `USING`/`WITH CHECK (organization_id = signet.current_org())`.
+**RLS** (0016, tranche 004) : activee **et** forcee ; une seule politique,
+`collection_isolation`, `FOR ALL TO signet_app`, `USING`/`WITH CHECK (organization_id =
+signet.current_org())` ; aucune politique `signet_definer` ni `TO PUBLIC`. **Privileges** de
+`signet_app` : `SELECT, INSERT` seulement (ni `UPDATE` : aucun renommage dans le MVP ; ni `DELETE` :
+ajoute par 007 avec la suppression). Proprietaire `signet_owner`. Noms des contraintes :
+`collection_id_organization_id_key` (`UNIQUE (id, organization_id)`), `collection_name_length_chk`,
+`collection_name_trimmed_chk`. Aucun index sur `created_by_user_id` (D-114 point 5).
 US-09.2 (404 et non 403 sur une ressource d'une autre organisation) tombe naturellement : la ligne
 est invisible, la requete retourne zero ligne, la couche applicative traduit en 404 sans avoir a
 distinguer « inexistant » de « interdit ».
@@ -1017,7 +1023,7 @@ jointure ecrite dans la politique (la sonde `member` est dans la fonction).
 | `organization` | `id` (lui-meme) | `id = current_org()` | 0 | `context_org()` ; axe `current_user_id()` en lecture |
 | `member` | direct | `organization_id = current_org()` | 0 | `context_org()` ; `user_id = current_user_id()` en lecture |
 | `invitation` | direct | `current_org()` **et** role owner, en `SELECT`, `INSERT`, `DELETE` (0014, D-086 P-3) ; aucun `UPDATE` | 1 (`member`) | lecture par empreinte (`app.invitation_token_hash`) et sur `context_org()` ; `UPDATE` des seules colonnes `accepted_at`, `accepted_by_user_id`, ligne non acceptee de `context_org()`, acceptee par `current_user_id()` (0015, D-103) |
-| `collection` | direct | `organization_id = current_org()` | 0 | — |
+| `collection` | direct | `organization_id = current_org()`, en `SELECT` et `INSERT` (0016, tranche 004) ; ni `UPDATE` ni `DELETE` | 0 | aucune |
 | `link` | **direct** (denormalise, verrouille par FK composite) | `organization_id = current_org()` | 0 | triggers de compteur : `context_org()` sur `organization_link_usage` |
 | `organization_link_usage` | `organization_id` (PK) | `organization_id = current_org()`, lecture seule | 0 | `context_org()` en ecriture |
 | `subscription` | `organization_id` (PK) | `current_org()` **et** role owner | 1 (`member`) | `context_org()` en `INSERT`, `SELECT`, `UPDATE` ; lecture par identifiant Stripe (`app.stripe_subscription_id`, 0012) |
@@ -1066,17 +1072,18 @@ enregistre un nom, jamais une somme de controle : une modification ne serait jam
 | **`0013_subscription_sync_guard.sql`** | D-071 : colonne `subscription.stripe_synced_at` (generee, fichier renomme depuis `0003_ambiguous_naoko.sql`) ; `apply_stripe_subscription` remplacee : cle d'entree `stripe_read_at` et garde monotone (resultat `stale`), metadonnee d'organisation comparee en `uuid` (audit-002 CRITIQUE-1), passage en Free decide par le statut relu seulement ; marque `stripe_read_at` prise sur l'horloge de la base par la fonction Inngest (D-077), sans borne haute | 002 |
 | **`0014_invitation.sql`** | §5 : table `invitation` (generee, fichier renomme depuis `0004_worthless_stephen_strange.sql`, etiquette alignee, D-088) ; RLS activee et forcee ; politiques `invitation_owner_read`/`_insert`/`_delete` (`TO signet_app`, `current_org()` et role owner, D-086 P-3) ; `GRANT SELECT, INSERT, DELETE` a `signet_app` ; `signet.create_invitation(p_organization_id, p_email, p_token_hash)` `SECURITY INVOKER`, `TimeZone = 'UTC'` (D-091), `EXECUTE` a `signet_app` seul | 003 |
 | **`0015_accept_invitation.sql`** | §1, §2.1, §5 : aucune table ni colonne (fichier vide cree par `drizzle-kit generate --custom`, renomme depuis `0005_accept_invitation.sql`, etiquette alignee, P-1) ; `GRANT SELECT` et `GRANT UPDATE (accepted_at, accepted_by_user_id)` sur `invitation` et `GRANT SELECT (id, email)` sur `app_user` a `signet_definer` ; politiques `invitation_definer_token_lookup`, `invitation_definer_context_read`, `invitation_definer_accept`, `app_user_definer_self_read` (`TO signet_definer`) ; `signet.lookup_invitation(bytea)` et `signet.accept_invitation(bytea)` `SECURITY DEFINER`, proprietaire `signet_definer`, `TimeZone = 'UTC'`, `EXECUTE` a `signet_app` seul (D-102, D-103) | 006 |
+| **`0016_collection.sql`** | §6.1 : table `collection` (generee, fichier renomme depuis `0006_optimal_rage.sql`, etiquette alignee) ; `UNIQUE (id, organization_id)`, `CHECK` de longueur et de bords sur `name`, index unique fonctionnel `collection_org_name_ci_idx` ; RLS activee et forcee ; politique `collection_isolation` (`TO signet_app`, `current_org()`) ; `GRANT SELECT, INSERT` a `signet_app` ; aucune fonction | 004 |
 
 Aucune des trois migrations 0009 a 0011 ne touche une table, une colonne ou un index : `pnpm db:generate`
 ne produit aucune difference, `packages/db/src/schema/*` est inchange. 0012 ajoute
-`packages/db/src/schema/billing.ts`, 0014 `packages/db/src/schema/invitations.ts` ; 0015 ne touche aucune table (schema TypeScript inchange).
+`packages/db/src/schema/billing.ts`, 0014 `packages/db/src/schema/invitations.ts` ; 0015 ne touche aucune table (schema TypeScript inchange) ; 0016 ajoute `packages/db/src/schema/collections.ts`.
 
 **Numerotation** : `drizzle-kit` numerote les fichiers qu'il genere d'apres son propre journal
 (`meta/_journal.json`), qui ne compte que les migrations generees (0002, 0003, puis 0012, 0013,
-0014, 0015). Le
+0014, 0015, 0016). Le
 fichier genere est renomme au numero suivant du dossier, et l'etiquette du journal alignee. Les
 fichiers `meta/NNNN_snapshot.json` gardent la numerotation de `drizzle-kit` (0015 a pour instantane
-`0005_snapshot.json`).
+`0005_snapshot.json`, 0016 `0006_snapshot.json`).
 
 ---
 
