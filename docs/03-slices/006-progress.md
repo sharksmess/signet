@@ -3,10 +3,26 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : ouverte
+- Statut : tests ecrits (avant implementation)
 - Branche : slice/006-acceptation-invitation
-- Dernier commit : 1bb5acd chore: installer l'usine 1.6.4 (puis commit d'ouverture `chore(slice-006): ouvrir la tranche`)
-- Prochaine etape : `test-writer` ecrit les tests depuis AC1 a AC14 dans `tests/invitation-acceptance/`, plus la restriction du test AC15 de 003 (D-102 Q-3)
+- Dernier commit : 3a13253 test(slice-006): criteres d'acceptation de la tranche 006
+- Prochaine etape : `/implement` — migration `0015_*`, acces donnees, logique metier, route `POST /api/invitations/accept`, contrat amende ; faire passer `pnpm test -- tests/invitation-acceptance`
+
+## Tests ecrits (correspondance critere -> fichier)
+Tous sous `tests/invitation-acceptance/` ; aides dans `tests/helpers/invitations-accept.ts`.
+
+| Critere | Fichier |
+|---|---|
+| AC1, AC2, AC3, AC4 (API), AC5 (a), AC6 (rejeu), AC7, AC8, AC9, AC10 | `acceptance-api.test.ts` |
+| AC4 (changement d'heure, bornes 168 h), AC5 (b, c, d), AC6 (deux transactions), AC7 (base), AC8 (SG008), AC9 (base), AC12 (SG002, empreintes hors bornes) | `acceptance-functions.test.ts` |
+| AC4 (proconfig), AC12 (catalogue), AC13 (a, b, c, d) | `catalog.test.ts` |
+| AC6 (deux POST simultanes) | `concurrency.test.ts` |
+| AC11, AC14 | `token-leak.test.ts` |
+| Q-3 (D-102) | `tests/invitations/database.test.ts` (modifie, voir Decisions) |
+
+AC14 « aucune dependance ajoutee » : verification ponctuelle de la fiche de preuves (usine 1.6.4, D-099), aucun test permanent. Le test AC14 ecrit ne porte que sur la variable d'environnement : la route ne cite pas la cle de scellement et ne lit pas `process.env`.
+
+Etat de depart verifie (avant implementation) : les 11 tests de catalogue, les tests de fonctions (`42883`, fonction absente), et les tests d'API (route absente : `404` HTML de Next, code applicatif `undefined`) echouent tous pour l'absence de l'implementation ; `tests/invitations/*` (003) reste vert, test restreint compris ; `tsc` passe.
 
 ## Couches
 - [ ] Migration (`0015_*` : `lookup_invitation`, `accept_invitation`, politiques `signet_definer`, privileges)
@@ -17,7 +33,16 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 - [ ] Suite complete verte + `pnpm run check`
 
 ## Blocages
-<!-- cause, essais, options. Vide = aucun. -->
+Aucun bloquant. Questions d'interpretation (a confirmer par l'implementeur ou l'orchestrateur, tests ecrits selon la lecture indiquee) :
+- **AC3, jeton vide** : AC3 demande `404` pour une « chaine vide apres `trim` », alors que le contrat cite `z.string().min(1)` et AC10/Perimetre reservent `422` a « token absent, non textuel, ou > 256 caracteres ». Lecture retenue : `""` et `"   "` donnent `404 INVITATION_NOT_FOUND` (pas `422`). Si l'intention est `422` pour la chaine vide, modifier AC3 et le test.
+- **AC9 (base)** : le critere dit « ne consomme rien et ne cree aucun `member` » sans fixer la forme (zero ligne, ou erreur). Le test accepte zero ligne, ou `SG002` / `23503`, et verifie l'absence d'effet dans tous les cas.
+- **AC10 « liste exacte des corps d'erreur »** : les textes des messages ne sont pas fixes par le contrat. Le test exige, pour chaque couple (statut, code), un corps `{ code, message }` seulement, **identique** pour deux invitations differentes, sans adresse, nom d'organisation, identifiant ni code SQL. Si l'orchestrateur veut figer les textes, les ecrire dans le contrat et le test.
 
 ## Decisions
 - Gate d'ouverture : D-102 (Q-1 A, Q-2, Q-3, P-1 a P-7) et D-103 (condition de Q-3 reformulee : seule ecriture nouvelle = `UPDATE` borne a l'acceptation, AC13).
+- **Q-3, seule modification d'un test existant (regle D-065 n°2)** : `tests/invitations/database.test.ts`, test « AC15 : invitation a la RLS activee ET forcee… ». Les assertions sont inchangees mais s'appliquent aux politiques dont `roles` contient `signet_app` (variable `appRows`), plus une assertion de presence d'au moins une politique `signet_app` ; l'assertion « aucune politique TO PUBLIC » reste sur toute la table, ainsi que la presence d'au moins une politique. Justification : 003 avait ecrit ce test comme etat de fin de 003 (« UPDATE : tranche 006 ») ; sans cette restriction, les trois politiques `signet_definer` de 0015 (D-103) le feraient echouer. Renforcement ou neutre, aucun affaiblissement : les politiques `signet_definer` sont couvertes par AC13 (`catalog.test.ts`). Le **titre** du test (« aucune politique signet_definer, aucun UPDATE ») n'a pas ete modifie (consigne : rien d'autre dans le fichier) ; il est devenu inexact sur ces deux mots et pourra etre corrige par l'humain ou par une tranche ulterieure.
+- **AC13 (d) faisable, ecrit** : la connexion d'administration de test est superutilisateur, donc `SET LOCAL ROLE signet_definer` sans aucune appartenance de role (ADR-0007 respecte, transaction toujours annulee, `lc_messages = 'C'` pour des messages stables). Le test affirme aussi par un temoin positif que l'`UPDATE` legitime reussit (sinon les refus par privilege passeraient pour la mauvaise raison). Si la connexion d'administration cessait d'etre superutilisateur, le test echoue avec un message qui l'explique ; il faudrait alors le remplacer par (a) a (c) et l'ecrire ici.
+- **AC3 « aucun appel a `accept_invitation` » : verrou plutot que compteur** : `pg_stat_user_functions` exige `track_functions`, reglage de cluster hors de la suite. Equivalent retenu : un verrou exclusif tenu sur `invitation` (connexion d'administration) pendant que des jetons malformes sont postes ; la route doit repondre `404` sans attendre la table, alors qu'un jeton bien forme (temoin) reste bloque jusqu'a la liberation du verrou. Les fichiers de test s'executent un a un (`fileParallelism: false`).
+- **AC4, « une seconde dans le futur »** : ecrit avec **30 secondes** de marge, une latence HTTP superieure a une seconde rendrait le test instable. Le passage a l'heure d'hiver d'Europe/Paris depend de la date : pour rester independant de l'horloge du jour, les tests de changement d'heure utilisent `Europe/Paris` **et** des fuseaux POSIX construits a partir de la date du jour pour que `now() + interval '7 days'` y fasse 167 h sur la fenetre testee (precondition verifiee dans la session, sinon le test echoue en le disant) ; les dates sont forcees en base sous `TimeZone = 'UTC'`.
+- **AC11, journaux du serveur** : le journal du serveur de test n'est pas lisible depuis la suite (le globalSetup n'en garde que la fin pour ses messages d'echec). Verifies : reponses HTTP, journaux du processus de test (console et sorties espionnees), colonnes des lignes `invitation` et `member`. A signaler au relecteur `security-auditor` : la fuite dans le journal du serveur se verifie par relecture du code de la route (jamais de `console.*` portant le jeton).
+- **AC10, GET sur la route** : la route n'est definie que pour `POST` ; un `GET` doit rendre `404` ou `405` sans aucune donnee d'invitation.
