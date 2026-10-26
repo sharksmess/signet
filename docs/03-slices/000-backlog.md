@@ -119,6 +119,13 @@ Tranche **012 — Ecrans** (nouvelle, prochain numero libre selon D-025) : page 
 - **Issus de la tranche 004 (D-114)** :
   - `db-architect` : l'ERD §6.1 ne prevoit pas d'index sur `collection.created_by_user_id` (`ON DELETE RESTRICT`), alors que §6.2 justifie `link_author_idx` par la meme contrainte ; sans effet tant qu'aucune suppression de compte n'existe (ERD §10), a trancher avant toute suppression de compte.
   - FRICTION 2026-10-26 : `tests/billing/webhook.test.ts` AC7 peut recevoir un evenement d'invitation tardif d'un test de 003 (faux Inngest partage) ; isoler les corps par test ou attendre la fin des envois tardifs du test AC13 de 003.
+  - **Pour 007 (review-004 SUGGESTION 2, D-116)** : la politique `collection_isolation` est `FOR ALL` sans condition de role ; le `GRANT DELETE` de 007 la fera couvrir `DELETE`, et la restriction owner (US-10.2) ne sera qu'applicative. `db-architect` tranche avant 007 : politique `DELETE` dediee avec role owner (patron `invitation_owner_*`) ou barriere applicative seule assumee.
+  - review-004 SUGGESTION 3 : `lower()` suit le `LC_CTYPE` de la base ; en locale `C`, « Équipe » et « équipe » sont deux noms distincts. Ecrire la locale requise dans l'ERD (`db-architect`) et ajouter un cas accentue a AC3.
+  - review-004 SUGGESTION 4 : D-113 (60 s) peut ne pas suffire (FRICTION 2026-10-26, premier passage) ; capturer le message complet a la prochaine occurrence avant toute autre decision.
+  - review-004 SUGGESTION 5 : le corps d'un commit qui touche un test deja ecrit cite la decision qui l'autorise (D-115, regle de lint).
+  - **audit-004 MINEUR-1** : aucune limite de debit sur `POST /api/organizations/:id/collections` ; limiteur a stockage partage par utilisateur et organisation, avec audit-001 MINEUR-5 et audit-002 MINEUR-1. **Plafond de collections par organisation (ou par palier) : decision produit humaine**, non prise.
+  - audit-004 INFO-1 : `pnpm audit` complet rouge par la copie de developpement de `next` 16.3.8 (`@inngest/test > inngest`) et `zod` < 4.6.6 (`eslint-config-next`) ; `--prod` vert. Branche `chore/` avec `overrides` (precedent D-050).
+  - audit-004 INFO-2 : nom de collection libre en Unicode (bidi, zero-largeur) ; tranche 012 : affichage echappe, jamais dans un attribut `href`.
 - Le detail complet de chaque tranche (perimetre fichiers, contrat de donnees, contrat d'API, criteres d'acceptation AC1-AC5, anti-regression) est ecrit au moment de son ouverture, au format `templates/SLICE.md`, dans `docs/03-slices/<id>-<nom>.md`.
 
 ## Questions d'architecture ouvertes
