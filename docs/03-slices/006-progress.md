@@ -3,10 +3,11 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : implementation en cours (migration faite)
+- Statut : implementation en cours (migration, logique, route faites ; `tests/invitation-acceptance` 55/55)
 - Branche : slice/006-acceptation-invitation
-- Dernier commit : 17d38a8 test(invitations): titre du test AC15 aligne sur ses assertions (migration : e91446c)
-- Prochaine etape : logique metier (`apps/web/src/lib/invitations/accept.ts` : decodage strict, empreinte, appel sous point de sauvegarde, distinction par `lookup_invitation`), puis route `POST /api/invitations/accept`, puis documentation (contrat, ADR-0018, ADR-0003/0011/0017, ERD, backlog, registre)
+- Dernier commit : 36ac917 feat(api): route POST /api/invitations/accept
+- Prochaine etape : documentation (ADR-0018, ADR-0003/0011/0017, ERD §0, §1, §2.1, §5, matrice, migrations, backlog, registre D-104+), puis suite complete, `pnpm typecheck`, `pnpm run check`, cases AC cochees
+- **Blocage de perimetre** : `minRole: "authenticated"` (D-102) exige d'elargir le type `minRole` de `docs/02-architecture/api-contracts/_contract.ts`, absent de `.gates/scope-006.txt`. Contrat `invitations.ts` amende sauf ce champ (reste `"public"`). Action humaine : `.\gates.ps1 scope-add` du fichier, puis une ligne a changer dans chacun des deux fichiers.
 - Note : `pnpm test -- <fichier>` lance toute la suite ; cibler un fichier par `pnpm test <fichier>`
 
 ## Tests ecrits (correspondance critere -> fichier)
@@ -28,9 +29,9 @@ Etat de depart verifie (avant implementation) : les 11 tests de catalogue, les t
 ## Couches
 - [x] Migration (`0015_accept_invitation.sql` : `lookup_invitation`, `accept_invitation`, politiques `signet_definer`, privileges) — e91446c ; `catalog.test.ts` 11/11, `acceptance-functions.test.ts` + `tests/invitations/database.test.ts` 33/33. `pnpm db:migrate` sur la base de developpement refuse (`DATABASE_URL_MIGRATE n'est pas definie`, deja connu, backlog D-067) : action humaine ; base de test migree par le globalSetup.
 - [x] Titre du test AC15 de 003 corrige (D-104, decision humaine) — 17d38a8
-- [ ] Acces donnees
-- [ ] Logique metier (decodage strict, empreinte, traduction des codes)
-- [ ] API (`POST /api/invitations/accept`)
+- [x] Acces donnees — sans couche separee : les deux appels SQL vivent dans `lib/invitations/accept.ts` (patron de `lib/invitations/invitations.ts`, 003)
+- [x] Logique metier (decodage strict, empreinte, traduction des codes) — 98258de (`token.ts` `linkTokenToHash`, `accept.ts`, `errors.ts`, contrat `invitations.ts` amende hors `minRole`)
+- [x] API (`POST /api/invitations/accept`) — 36ac917 ; `tests/invitation-acceptance` 5 fichiers, 55/55
 - [ ] UI — sans objet (tranche 012)
 - [ ] Suite complete verte + `pnpm run check`
 
