@@ -3,10 +3,10 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : implementation en cours (migration, logique, route faites ; `tests/invitation-acceptance` 55/55)
+- Statut : implementation terminee, sauf `minRole` du contrat (blocage de perimetre ci-dessous) ; suite complete verte, `pnpm run check` vert ; AC1 a AC14 coches
 - Branche : slice/006-acceptation-invitation
-- Dernier commit : 36ac917 feat(api): route POST /api/invitations/accept
-- Prochaine etape : documentation (ADR-0018, ADR-0003/0011/0017, ERD §0, §1, §2.1, §5, matrice, migrations, backlog, registre D-104+), puis suite complete, `pnpm typecheck`, `pnpm run check`, cases AC cochees
+- Dernier commit : 6fef16b test(slice-006): condition du temoin AC3 sans promesse en booleen (puis ce journal et les cases du contrat)
+- Prochaine etape : humain — `scope-add` de `_contract.ts` pour `minRole` ; puis trois relecteurs (`security-auditor`, `contract-guardian`, `code-reviewer`), journal de projet 19, `close-slice.sh`, `ship-slice.sh`
 - **Blocage de perimetre** : `minRole: "authenticated"` (D-102) exige d'elargir le type `minRole` de `docs/02-architecture/api-contracts/_contract.ts`, absent de `.gates/scope-006.txt`. Contrat `invitations.ts` amende sauf ce champ (reste `"public"`). Action humaine : `.\gates.ps1 scope-add` du fichier, puis une ligne a changer dans chacun des deux fichiers.
 - Note : `pnpm test -- <fichier>` lance toute la suite ; cibler un fichier par `pnpm test <fichier>`
 
@@ -32,8 +32,10 @@ Etat de depart verifie (avant implementation) : les 11 tests de catalogue, les t
 - [x] Acces donnees — sans couche separee : les deux appels SQL vivent dans `lib/invitations/accept.ts` (patron de `lib/invitations/invitations.ts`, 003)
 - [x] Logique metier (decodage strict, empreinte, traduction des codes) — 98258de (`token.ts` `linkTokenToHash`, `accept.ts`, `errors.ts`, contrat `invitations.ts` amende hors `minRole`)
 - [x] API (`POST /api/invitations/accept`) — 36ac917 ; `tests/invitation-acceptance` 5 fichiers, 55/55
-- [ ] UI — sans objet (tranche 012)
-- [ ] Suite complete verte + `pnpm run check`
+- [x] Documentation — 7f7b47f (ADR-0018 ; ADR-0003, 0011, 0017 ; ERD §0, §1, §2.1, §5, matrice, migrations, numerotation ; backlog ; registre D-104 a D-108)
+- [x] UI — sans objet (tranche 012)
+- [x] Suite complete verte + `pnpm run check` — `pnpm test` : 36 fichiers, 418 tests passes, 1 ignore (419) ; `pnpm typecheck` et `pnpm lint` verts apres 6fef16b (lint : `if (!control)` sur une promesse dans `acceptance-api.test.ts`, remplace par `control === undefined`, assertion inchangee). AC14 : aucun manifeste de dependances modifie (`git diff origin/main` vide sur `package.json`, `apps/web/package.json`, `packages/db/package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`).
+- Note : une premiere execution complete (avant la route) a vu `tests/stack-upgrade/lint-scope.test.ts` depasser 20 s sous charge ; vert a l'execution complete suivante, a surveiller.
 
 ## Blocages
 Aucun bloquant. Questions d'interpretation (a confirmer par l'implementeur ou l'orchestrateur, tests ecrits selon la lecture indiquee) :
