@@ -160,7 +160,7 @@ describe("AC3 — jeton inconnu ou malforme : 404 identique, rien n'est revele",
     } finally {
       await lock.release();
     }
-    if (!control) throw new Error("temoin non lance");
+    if (control === undefined) throw new Error("temoin non lance");
     expectError(await control, 404, "INVITATION_NOT_FOUND", "AC3 temoin apres liberation du verrou");
   });
 });
