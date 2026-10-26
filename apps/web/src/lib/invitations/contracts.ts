@@ -10,7 +10,7 @@
  */
 import { z } from "zod";
 
-export { createInvitation } from "../../../../../docs/02-architecture/api-contracts/invitations";
+export { acceptInvitation, createInvitation } from "../../../../../docs/02-architecture/api-contracts/invitations";
 
 export const normalizedEmail = z
   .string()
