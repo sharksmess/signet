@@ -118,6 +118,7 @@ Tranche **012 — Ecrans** (nouvelle, prochain numero libre selon D-025) : page 
   - audit-006 INFO-1 : adresse non verifiee (limite d'ADR-0018) a reexaminer avec le fournisseur d'e-mails reel, avec les prealables d'audit-003 ; audit-006 INFO-2 : voir P-6 ci-dessus.
 - **Issus de la tranche 004 (D-114)** :
   - `db-architect` : l'ERD §6.1 ne prevoit pas d'index sur `collection.created_by_user_id` (`ON DELETE RESTRICT`), alors que §6.2 justifie `link_author_idx` par la meme contrainte ; sans effet tant qu'aucune suppression de compte n'existe (ERD §10), a trancher avant toute suppression de compte.
+  - FRICTION 2026-10-26 : `tests/billing/webhook.test.ts` AC7 peut recevoir un evenement d'invitation tardif d'un test de 003 (faux Inngest partage) ; isoler les corps par test ou attendre la fin des envois tardifs du test AC13 de 003.
 - Le detail complet de chaque tranche (perimetre fichiers, contrat de donnees, contrat d'API, criteres d'acceptation AC1-AC5, anti-regression) est ecrit au moment de son ouverture, au format `templates/SLICE.md`, dans `docs/03-slices/<id>-<nom>.md`.
 
 ## Questions d'architecture ouvertes
