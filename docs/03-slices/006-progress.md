@@ -3,10 +3,11 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : tests ecrits (avant implementation)
+- Statut : implementation en cours (migration faite)
 - Branche : slice/006-acceptation-invitation
-- Dernier commit : 3a13253 test(slice-006): criteres d'acceptation de la tranche 006
-- Prochaine etape : `/implement` — migration `0015_*`, acces donnees, logique metier, route `POST /api/invitations/accept`, contrat amende ; faire passer `pnpm test -- tests/invitation-acceptance`
+- Dernier commit : 17d38a8 test(invitations): titre du test AC15 aligne sur ses assertions (migration : e91446c)
+- Prochaine etape : logique metier (`apps/web/src/lib/invitations/accept.ts` : decodage strict, empreinte, appel sous point de sauvegarde, distinction par `lookup_invitation`), puis route `POST /api/invitations/accept`, puis documentation (contrat, ADR-0018, ADR-0003/0011/0017, ERD, backlog, registre)
+- Note : `pnpm test -- <fichier>` lance toute la suite ; cibler un fichier par `pnpm test <fichier>`
 
 ## Tests ecrits (correspondance critere -> fichier)
 Tous sous `tests/invitation-acceptance/` ; aides dans `tests/helpers/invitations-accept.ts`.
@@ -25,7 +26,8 @@ AC14 « aucune dependance ajoutee » : verification ponctuelle de la fiche de pr
 Etat de depart verifie (avant implementation) : les 11 tests de catalogue, les tests de fonctions (`42883`, fonction absente), et les tests d'API (route absente : `404` HTML de Next, code applicatif `undefined`) echouent tous pour l'absence de l'implementation ; `tests/invitations/*` (003) reste vert, test restreint compris ; `tsc` passe.
 
 ## Couches
-- [ ] Migration (`0015_*` : `lookup_invitation`, `accept_invitation`, politiques `signet_definer`, privileges)
+- [x] Migration (`0015_accept_invitation.sql` : `lookup_invitation`, `accept_invitation`, politiques `signet_definer`, privileges) — e91446c ; `catalog.test.ts` 11/11, `acceptance-functions.test.ts` + `tests/invitations/database.test.ts` 33/33. `pnpm db:migrate` sur la base de developpement refuse (`DATABASE_URL_MIGRATE n'est pas definie`, deja connu, backlog D-067) : action humaine ; base de test migree par le globalSetup.
+- [x] Titre du test AC15 de 003 corrige (D-104, decision humaine) — 17d38a8
 - [ ] Acces donnees
 - [ ] Logique metier (decodage strict, empreinte, traduction des codes)
 - [ ] API (`POST /api/invitations/accept`)
