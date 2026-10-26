@@ -6,7 +6,8 @@
  * ou `subscriptions.ts` (tranche 002 ; `SERVICE_UNAVAILABLE` : webhook,
  * AC14, file d'attente indisponible, D-070), ou `invitations.ts` (tranche 003 :
  * `INVITATION_ALREADY_PENDING`, `ALREADY_MEMBER`, et `SERVICE_UNAVAILABLE` quand
- * la file refuse l'evenement d'invitation, D-086 Q-2, Q-3).
+ * la file refuse l'evenement d'invitation, D-086 Q-2, Q-3), ou `collections.ts`
+ * (tranche 004 : `COLLECTION_NAME_TAKEN`).
  */
 
 export type ApiErrorCode =
@@ -23,7 +24,8 @@ export type ApiErrorCode =
   | "INVITATION_NOT_FOUND"
   | "INVITATION_EXPIRED"
   | "INVITATION_ALREADY_USED"
-  | "INVITATION_EMAIL_MISMATCH";
+  | "INVITATION_EMAIL_MISMATCH"
+  | "COLLECTION_NAME_TAKEN";
 
 export interface ApiError {
   status: 400 | 401 | 403 | 404 | 409 | 410 | 422 | 502 | 503;
@@ -138,6 +140,17 @@ export const alreadyMemberOnAcceptance = (): ApiError => ({
   status: 409,
   code: "ALREADY_MEMBER",
   message: "Le compte connecte est deja membre de cette organisation.",
+});
+
+/**
+ * Tranche 004, AC3 (US-05.3) : une collection de l'organisation porte deja ce
+ * nom, casse et espaces de bord ignores. Message fixe : ni le nom soumis, ni la
+ * contrainte, ni le code SQL (D-114 point 4).
+ */
+export const collectionNameTaken = (): ApiError => ({
+  status: 409,
+  code: "COLLECTION_NAME_TAKEN",
+  message: "Une collection de cette organisation porte deja ce nom.",
 });
 
 /** AC14 (002) et AC13 (003) : 5xx, aucun detail interne. */
