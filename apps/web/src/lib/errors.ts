@@ -7,7 +7,8 @@
  * AC14, file d'attente indisponible, D-070), ou `invitations.ts` (tranche 003 :
  * `INVITATION_ALREADY_PENDING`, `ALREADY_MEMBER`, et `SERVICE_UNAVAILABLE` quand
  * la file refuse l'evenement d'invitation, D-086 Q-2, Q-3), ou `collections.ts`
- * (tranche 004 : `COLLECTION_NAME_TAKEN`).
+ * (tranche 004 : `COLLECTION_NAME_TAKEN`), ou `links.ts` (tranche 005 :
+ * `COLLECTION_NOT_FOUND`, `FREE_TIER_QUOTA_EXCEEDED`).
  */
 
 export type ApiErrorCode =
@@ -25,7 +26,9 @@ export type ApiErrorCode =
   | "INVITATION_EXPIRED"
   | "INVITATION_ALREADY_USED"
   | "INVITATION_EMAIL_MISMATCH"
-  | "COLLECTION_NAME_TAKEN";
+  | "COLLECTION_NAME_TAKEN"
+  | "COLLECTION_NOT_FOUND"
+  | "FREE_TIER_QUOTA_EXCEEDED";
 
 export interface ApiError {
   status: 400 | 401 | 403 | 404 | 409 | 410 | 422 | 502 | 503;
@@ -151,6 +154,28 @@ export const collectionNameTaken = (): ApiError => ({
   status: 409,
   code: "COLLECTION_NAME_TAKEN",
   message: "Une collection de cette organisation porte deja ce nom.",
+});
+
+/**
+ * Tranche 005, AC5 (b) : collection inexistante OU d'une autre organisation,
+ * corps strictement identique (US-09.2). Ni identifiant, ni code SQL.
+ */
+export const collectionNotFound = (): ApiError => ({
+  status: 404,
+  code: "COLLECTION_NOT_FOUND",
+  message: "Collection introuvable.",
+});
+
+/**
+ * Tranche 005, US-06.4 (ADR-0002) : refus du quota Free, porte par la base
+ * (`SG001`, ou `40001` en isolation stricte). Message fixe de D-119 lecture 2,
+ * sans le nombre 50 (valeur unique dans `signet.quota_for_tier`).
+ */
+export const freeTierQuotaExceeded = (): ApiError => ({
+  status: 409,
+  code: "FREE_TIER_QUOTA_EXCEEDED",
+  message:
+    "Le quota de liens du palier Free est atteint : aucun lien n'a ete ajoute. Passer au palier Pro pour en ajouter d'autres.",
 });
 
 /** AC14 (002) et AC13 (003) : 5xx, aucun detail interne. */
