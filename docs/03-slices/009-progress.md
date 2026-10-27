@@ -3,10 +3,10 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : routes GET committees ; `tests/consultation` 38/38 vert, `pnpm run check` vert
+- Statut : implementation terminee. `tests/consultation` 38/38 ; `pnpm run check` vert ; suite complete 58 fichiers, 718 passes, 1 ignore, 0 echec (153 s, 2026-10-27 17:10). Le test ignore est preexistant et sans lien : `tests/invitations/environment.test.ts:208`, `it.runIf` sur une branche `slice/003-`.
 - Branche : slice/009-consultation
-- Dernier commit : 08de798 feat(slice-009): routes GET des collections et des liens
-- Prochaine etape : suite complete `pnpm test` (AC11 : `tests/collections/**`, `tests/links/**` sans modification)
+- Dernier commit : 35c8365 docs(slice-009): journal et criteres apres les routes GET (code : 08de798)
+- Prochaine etape : orchestrateur — AC12 (verification ponctuelle), trois relecteurs, registre, `close-slice.sh`
 
 ## Couches
 - [ ] Migration — sans objet (D-131 point 5 : aucune migration)
@@ -14,7 +14,7 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 - [x] Logique metier — eb72c7d (meme module, patron de 004/005 : appartenance, collection, SELECT)
 - [x] API — 08de798 (`GET` ajoute aux deux `route.ts`, `POST` inchanges)
 - [ ] UI — sans objet (tranche 012)
-- [ ] Suite complete verte + `pnpm run check`
+- [x] Suite complete verte + `pnpm run check` (AC11 : `tests/collections/**` et `tests/links/**` verts sans modification)
 
 ## Blocages
 
