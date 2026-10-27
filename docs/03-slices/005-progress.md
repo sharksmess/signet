@@ -3,18 +3,19 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : implementation en cours (migration, schema, logique metier faits)
+- Statut : implementation terminee, criteres AC1 a AC14 coches ; en attente des trois relecteurs
 - Branche : slice/005-ajout-lien
-- Dernier commit : a5e3b1a feat(links): ajout d'un lien et traduction des erreurs SQL
-- Prochaine etape : route `POST .../collections/[collectionId]/links/route.ts`, puis `tests/links/**`, suite complete, `pnpm run check`
+- Dernier commit : c24dbdd feat(links): route POST d'ajout d'un lien a une collection (puis ce journal)
+- Prochaine etape : orchestrateur — `security-auditor`, `contract-guardian`, `code-reviewer` ; registre (decisions ci-dessous, en particulier le garde U+0000 du titre), journal de projet 21, fiche de preuves (AC14), `close-slice.sh`. Action humaine : `pnpm db:migrate` sur la base de developpement.
 
 ## Couches
 - [x] Migration — 6bc87c6 (`0017_link.sql`, ERD) ; `tests/links/catalog.test.ts`, `lock.test.ts`, les deux catalogues de D-121 et `tests/_factory` : 62/62. Etat initial avant implementation : 139 rouges / 2 verts (relation `link` absente, route `404`), conforme.
 - [x] Acces donnees — 6bc87c6 (meme commit : `packages/db/src/schema/links.ts` est la source de `pnpm db:generate`)
 - [x] Logique metier — a5e3b1a (`lib/links/{contracts,errors,links}.ts`, codes dans `lib/errors.ts`) ; `tests/links/sql-errors.test.ts` 15/15, `pnpm typecheck` et lint verts
-- [ ] API
-- [ ] UI (aucune : ecrans en 012)
-- [ ] Suite complete verte + `pnpm run check`
+- [x] API — c24dbdd (`app/api/organizations/[organizationId]/collections/[collectionId]/links/route.ts`) ; `tests/links/**` 156/156 (9 fichiers)
+- [x] UI (aucune : ecrans en 012)
+- [x] Suite complete verte + `pnpm run check` — `pnpm test` : 51 fichiers, 658 passes, 1 ignore (deja present avant la tranche, cf. 004 « 1 ignore »), 0 echec ; `pnpm run check` vert (typecheck + eslint)
+- AC14, verification ponctuelle (2026-10-27) : `git diff main -- package.json pnpm-lock.yaml '**/package.json'` vide ; aucun fichier de code ajoute ou modifie ne lit l'environnement (fichiers modifies : route, `lib/errors.ts`, `lib/links/*`, schema et migration) ; `apps/web/src/lib/db.ts` inchange. Anti-regression : `git diff main --stat -- tests/collections tests/invitation-acceptance` = 1 ligne ajoutee par fichier (D-121).
 
 ## Blocages
 <!-- cause, essais, options. Vide = aucun. -->
@@ -32,3 +33,6 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 - Implementeur, logique metier : point de sauvegarde autour de l'`INSERT` (patron D-092/D-116) : un `SG001`/`40001` annule l'insertion seule, `withTenant` valide ensuite une transaction saine (lecture d'appartenance seulement) et la route rend le `409`. Ecarte : laisser `withTenant` annuler sur une exception typee (il faudrait modifier `db.ts`, hors perimetre, ou lever une exception pour une erreur metier, contraire a CLAUDE.md).
 - Implementeur, logique metier : parametres de l'`INSERT ... SELECT` castes explicitement (`$1::uuid`, `$3::text`...) : `$1` apparait a la fois dans la liste de selection et dans le `WHERE`, le type ne doit pas dependre de l'inference.
 - Implementeur, logique metier : message du `404 COLLECTION_NOT_FOUND` « Collection introuvable. » (le contrat ne le fixe pas ; meme forme que « Organisation introuvable. »).
+- **Implementeur, API — a faire valider (contract-guardian, humain)** : un titre contenant U+0000 est refuse en `422` par un garde de la route, **apres** le contrat (`addLink.input.title` l'accepte). Raison : AC4 exige `422` et jamais `500` ; Postgres ne peut pas stocker U+0000 dans un `text` (`22021`), sans garde l'entree finit en `500`. Seul U+0000 est refuse (les autres caracteres de controle du titre sont stockables, rien ne les exige refuses). Ecartes : modifier `addLink.input.title` dans `links.ts` (changement de contrat publie, decision humaine, D-120 ne portait que sur l'URL) ; traduire `22021` en `422` apres l'appartenance (un non-membre recevrait `404` au lieu de `422`, contraire a l'ordre « validation avant appartenance », AC11). Si l'humain prefere inscrire la regle dans le contrat, le garde de la route devient redondant et se retire.
+- Implementeur, API : textes fixes des `422` (non figes par les tests, D-124) : corps non JSON ou non objet, organisation, collection, URL (nomme la regle : http ou https en minuscules, nom d'hote, sans identifiants, espaces ni caracteres de controle, 8 a 2048), titre (1 a 200, bords exclus, sans caractere nul). Premier champ fautif dans l'ordre chemin (organisation, collection), `url`, `title`.
+- Implementeur, API : une erreur inattendue (`P0001`, etc.) est relevee par `lib/links/links.ts` apres journalisation du seul code ; la route ne l'attrape pas et Next rend le `500` generique (patron de 004), verifie par AC9 (d) : corps sans code SQL, message de base ni identifiant.
