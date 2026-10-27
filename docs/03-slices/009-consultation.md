@@ -73,7 +73,7 @@ Conventions : utilisateurs et organisations crees par les vraies routes (inscrip
 - [x] AC9 — **Valeurs telles qu'enregistrees (D-131 point 4, D-119)** : un lien dont l'URL contient U+202E et U+200B dans son chemin et dont le titre contient U+202E et U+200B est rendu **a l'identique** (egalite stricte de chaines avec la valeur enregistree), ni reecrit, ni nettoye, ni echappe.
 - [x] AC10 — **Lecture seule prouvee** : apres une serie de lectures (succes et chaque cas d'erreur d'AC4 a AC6), le nombre de lignes de `collection` et de `link` et la ligne `organization_link_usage` de l'organisation sont inchanges. Aucun privilege, aucune politique, aucune fonction `SECURITY DEFINER` nouveaux : les tests de catalogue de 004 et 005 et les listes fermees de D-121 restent verts **sans modification**.
 - [x] AC11 — **Non-regression des `POST`** : suites `tests/collections/**` et `tests/links/**` vertes sans modifier leurs assertions ni leurs fichiers (memes statuts, memes messages, memes ecritures).
-- [ ] AC12 — **Dependances, migrations et environnement** : aucune dependance ajoutee, aucune migration, aucune variable d'environnement nouvelle (verification **ponctuelle**, ecrite dans la fiche de preuves ; aucun test permanent qui compare a `main`).
+- [x] AC12 — **Dependances, migrations et environnement** : aucune dependance ajoutee, aucune migration, aucune variable d'environnement nouvelle (verification **ponctuelle**, ecrite dans la fiche de preuves ; aucun test permanent qui compare a `main`).
 
 ## Anti-regression
 - Suites 001, 002, 003, 004, 005, 006, 010, 011 et `tests/_factory/*` vertes **sans modifier leurs assertions** ni leurs fichiers.
