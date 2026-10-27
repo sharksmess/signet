@@ -653,9 +653,11 @@ consommee (P-5). `SET TimeZone = 'UTC'` (D-091). Le contexte pose est efface ava
   **insensible a la casse** (`Veille` et `veille` sont le meme nom). Index fonctionnel plutot que
   `UNIQUE (organization_id, name)` : c'est `lower(name)` qui doit etre unique, pas `name`
   lui-meme. Le `btrim` dans l'index est redondant avec le `CHECK (name = btrim(name))` ci-dessus
-  mais rend l'index correct par construction, independamment de cette contrainte. Sert aussi la
-  liste des collections d'une organisation triee par nom : aucun index supplementaire n'est
-  necessaire.
+  mais rend l'index correct par construction, independamment de cette contrainte. La liste des
+  collections d'une organisation (US-07.1, tranche 009) est triee de la plus recente a la plus
+  ancienne (`created_at DESC, id DESC`, D-131 point 1 ; ordre alphabetique ecarte, il dependrait
+  de la collation) : aucun index dedie, le nombre de collections par organisation etant faible ;
+  index `(organization_id, created_at)` au backlog si besoin (D-131 point 5).
 
 **RLS** (0016, tranche 004) : activee **et** forcee ; une seule politique,
 `collection_isolation`, `FOR ALL TO signet_app`, `USING`/`WITH CHECK (organization_id =

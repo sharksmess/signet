@@ -20,9 +20,9 @@ Ordre de dependance technique d'abord, risque decroissant en departage a profond
 
 Les identifiants ne sont jamais renumerotes (D-025) : une tranche inseree prend le prochain numero libre, et l'ordre d'execution est ecrit ici.
 
-001 (close) -> 010 (close) -> 011 (close) -> 002 (close) -> **003** -> 006 -> 004 (en mode autonome) -> 005 -> 012 (ecrans)
+001 (close) -> 010 (close) -> 011 (close) -> 002 (close) -> **003** -> 006 -> 004 (en mode autonome) -> 005 -> 009 (en mode autonome) -> 012 (ecrans)
 
-Objectif A (D-083, D-084) : la sequence ci-dessus termine l'usine. 007, 008 et 009 sont hors objectif (backlog), avec la mise en ligne et les vrais paiements.
+Objectif A (D-083, D-084, D-130) : la sequence ci-dessus termine l'usine. 009 y entre par D-130 (les ecrans de 012 doivent afficher collections et liens) ; 007 et 008 restent hors objectif (backlog), avec la mise en ligne et les vrais paiements.
 
 Tranche **012 — Ecrans** (nouvelle, prochain numero libre selon D-025) : page de connexion et d'inscription, page de l'organisation (palier, membres, collections), page d'une collection et de ses liens. Depend de 001 a 006. Cadrage a ecrire a son ouverture.
 
@@ -140,6 +140,9 @@ Tranche **012 — Ecrans** (nouvelle, prochain numero libre selon D-025) : page 
   - review-005 (seconde relecture) SUGGESTION 3 : `tests/links/validation.test.ts:102-109` double `error-order.test.ts:41-48` (egalite seule) ; retirer ou renvoyer en commentaire.
   - review-005 (seconde relecture) SUGGESTION 5 : coupure de ligne dans le commentaire D-120/D-126 de `docs/02-architecture/api-contracts/links.ts:22-25`, a refaire a la prochaine modification du contrat.
   - review-005 SUGGESTION 5 : le filtre `c.organization_id = $1` de `lib/links/links.ts` n'est demontrable que par la lecture (la RLS de `collection` masque deja la collection etrangere) ; aucune action, a ne pas croire prouve par AC5 (b).
+- **Issus de la tranche 009 (D-131)** :
+  - **avant la mise en ligne** (D-131 point 3) : pagination et plafond de reponse de `GET .../collections` et `GET .../collections/:id/links` ; une organisation Pro n'a aucune borne de liens. Changement de contrat (`listCollections`, `listLinks`), a decider par l'humain ;
+  - index `collection (organization_id, created_at)` si le nombre de collections par organisation le justifie (D-131 point 5, `db-architect`).
 - Le detail complet de chaque tranche (perimetre fichiers, contrat de donnees, contrat d'API, criteres d'acceptation AC1-AC5, anti-regression) est ecrit au moment de son ouverture, au format `templates/SLICE.md`, dans `docs/03-slices/<id>-<nom>.md`.
 
 ## Questions d'architecture ouvertes
