@@ -99,3 +99,80 @@ export async function createCollection(params: {
     });
   });
 }
+
+/** Element de `listCollections.output` : exactement ces champs (tranche 009, AC1). */
+export interface CollectionListItem {
+  id: string;
+  name: string;
+  /** ISO 8601 UTC. */
+  createdAt: string;
+}
+
+interface CollectionListRow {
+  id: string;
+  name: string;
+  created_at: Date;
+}
+
+/**
+ * Liste des collections d'une organisation (US-07.1, US-07.2 ; tranche 009).
+ *
+ * Lecture seule, dans UNE transaction sous `signet_app` (`withTenant`, RLS en
+ * seconde barriere) :
+ * 1. appartenance, filtre explicite sur `organization_id` ET `user_id` :
+ *    non-membre ou organisation inexistante -> 404 identique ;
+ * 2. `SELECT` avec `organization_id` explicite, de la plus recente a la plus
+ *    ancienne, `id DESC` a horodatage egal (D-131 point 1). Aucune pagination
+ *    (D-131 point 3).
+ *
+ * Valeurs rendues telles qu'enregistrees (D-131 point 4), reponse construite
+ * champ par champ. Toute erreur de la base est inattendue : `withTenant`
+ * annule la transaction, l'erreur est journalisee par son seul code (jamais un
+ * identifiant ni un nom) puis relevee sans detail (500 generique).
+ */
+export async function listCollections(params: {
+  userId: string;
+  /** Forme canonique (minuscules). */
+  organizationId: string;
+}): Promise<Result<CollectionListItem[]>> {
+  try {
+    return await readCollections(params);
+  } catch (error) {
+    const code = pgErrorOf(error).code;
+    console.error(`[collections] lecture : erreur inattendue de la base (code ${typeof code === "string" ? code : "absent"})`);
+    throw new Error("lecture des collections : erreur inattendue");
+  }
+}
+
+async function readCollections(params: {
+  userId: string;
+  organizationId: string;
+}): Promise<Result<CollectionListItem[]>> {
+  const { userId, organizationId } = params;
+
+  return withTenant({ userId, organizationId }, async (client) => {
+    const membership = await client.query(
+      `SELECT 1
+         FROM member m
+        WHERE m.organization_id = $1 AND m.user_id = $2`,
+      [organizationId, userId],
+    );
+    if ((membership.rowCount ?? 0) === 0) return fail(organizationNotFound());
+
+    const result = await client.query<CollectionListRow>(
+      `SELECT c.id, c.name, c.created_at
+         FROM collection c
+        WHERE c.organization_id = $1
+        ORDER BY c.created_at DESC, c.id DESC`,
+      [organizationId],
+    );
+
+    return ok(
+      result.rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        createdAt: row.created_at.toISOString(),
+      })),
+    );
+  });
+}
