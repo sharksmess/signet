@@ -3,16 +3,16 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : couche de lecture committee (typecheck vert) ; routes GET a ecrire
+- Statut : routes GET committees ; `tests/consultation` 38/38 vert, `pnpm run check` vert
 - Branche : slice/009-consultation
-- Dernier commit : eb72c7d feat(slice-009): lecture des collections et des liens d'une organisation
-- Prochaine etape : ajouter `GET` aux deux `route.ts`, puis `pnpm vitest run tests/consultation`
+- Dernier commit : 08de798 feat(slice-009): routes GET des collections et des liens
+- Prochaine etape : suite complete `pnpm test` (AC11 : `tests/collections/**`, `tests/links/**` sans modification)
 
 ## Couches
 - [ ] Migration — sans objet (D-131 point 5 : aucune migration)
 - [x] Acces donnees — eb72c7d (`listCollections` dans `lib/collections/collections.ts`, `listLinks` dans `lib/links/links.ts`, exports de contrat)
 - [x] Logique metier — eb72c7d (meme module, patron de 004/005 : appartenance, collection, SELECT)
-- [ ] API
+- [x] API — 08de798 (`GET` ajoute aux deux `route.ts`, `POST` inchanges)
 - [ ] UI — sans objet (tranche 012)
 - [ ] Suite complete verte + `pnpm run check`
 
@@ -28,3 +28,5 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 - Implementation (implementeur) — liens : deux instructions (existence de la collection `c.id AND c.organization_id`, puis `SELECT` sur `link` avec `organization_id` et `collection_id` explicites) plutot qu'une jointure `LEFT JOIN`. Raison : « collection absente » et « liste vide » se distinguent sans logique sur des lignes nulles ; cout d'un aller-retour supplementaire dans la meme transaction. Ecarte : jointure unique (acceptee par le contrat de tranche, mais plus fragile a relire).
 - Implementation (implementeur) — erreurs inattendues : `listCollections` et `listLinks` enveloppent `withTenant` et journalisent le seul code SQL (`[collections] lecture : ...`, `[links] lecture : ...`) avant de relever une erreur sans detail, comme `unexpected()` des POST. Raison : `withTenant` releve l'erreur `pg` brute, dont `detail` peut contenir des valeurs ; sans enveloppe, Next la journaliserait telle quelle. Ecarte : laisser remonter l'erreur brute.
 - Implementation (implementeur) — types de sortie dedies (`CollectionListItem`, `LinkListItem`) distincts de `CollectionView`/`LinkView` des POST : la liste ne porte ni `organizationId` ni `collectionId` (AC1, cles exactes) ; les vues des POST sont inchangees.
+- Implementation (implementeur) — routes : le `GET` reutilise dans chaque fichier `errorResponse`, `canonical` et, pour les liens, `FIELD_MESSAGES` (organisation prioritaire sur collection) ; le code des `POST` n'est pas modifie. Collections : repli neutre « Requete invalide. » ajoute pour un refus du schema hors `organizationId` (meme texte que le repli de 005). Ecarte : extraire un module partage (hors perimetre de fichiers, et les `POST` auraient change de forme).
+- Implementation (implementeur) — `200` par `NextResponse.json(result.value)` : la projection champ par champ est faite une seule fois, dans le module de lecture. Le gestionnaire lit les en-tetes (session), donc il est dynamique : aucune reponse mise en cache par Next (AC7 vert).
