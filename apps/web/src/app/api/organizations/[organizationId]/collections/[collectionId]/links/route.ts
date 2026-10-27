@@ -25,6 +25,13 @@ const INVALID_COLLECTION_ID = "Identifiant de collection invalide.";
 const INVALID_URL =
   "URL invalide : schema http ou https en minuscules, nom d'hote obligatoire, sans identifiants, espaces ni caracteres de controle, 8 a 2048 caracteres.";
 const INVALID_TITLE = "Titre invalide : 1 a 200 caracteres, espaces de bord exclus, sans caractere nul.";
+/**
+ * Repli (review-005 SUGGESTION 2) : un refus du schema sur un champ hors de
+ * la liste ci-dessous (champ ajoute un jour au contrat, regle d'objet entier)
+ * reste une erreur de l'appelant, donc un 422 au message neutre, jamais un
+ * message qui accuserait un autre champ ni un 500.
+ */
+const INVALID_REQUEST = "Requete invalide.";
 
 /** Ordre d'evaluation des champs fautifs : le message est celui du premier. */
 const FIELD_MESSAGES: ReadonlyArray<readonly [string, string]> = [
@@ -58,16 +65,9 @@ export async function POST(
   const parsed = addLinkContract.input.safeParse({ ...body, organizationId, collectionId });
   if (!parsed.success) {
     const faulty = new Set(parsed.error.issues.map((issue) => issue.path[0]));
-    const [, message] = FIELD_MESSAGES.find(([field]) => faulty.has(field)) ?? ["", INVALID_TITLE];
+    const [, message] = FIELD_MESSAGES.find(([field]) => faulty.has(field)) ?? ["", INVALID_REQUEST];
     return errorResponse(validationFailed(message));
   }
-  // AC4 : un titre contenant U+0000 est refuse en 422. Postgres ne peut pas
-  // stocker ce caractere dans un `text` (22021) : sans ce garde, l'entree
-  // produirait un 500.
-  if (parsed.data.title.includes("\u0000")) {
-    return errorResponse(validationFailed(INVALID_TITLE));
-  }
-
   const result = await addLink({
     userId: session.user.id,
     organizationId: canonical(parsed.data.organizationId),
