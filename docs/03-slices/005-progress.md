@@ -3,15 +3,15 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : implementation en cours (migration et schema faits)
+- Statut : implementation en cours (migration, schema, logique metier faits)
 - Branche : slice/005-ajout-lien
-- Dernier commit : 6bc87c6 feat(db): table link, RLS et trigger de quota link_usage_on_insert
-- Prochaine etape : logique metier `apps/web/src/lib/links/` (contrat, `errors.ts` avec `linkErrorFromSqlState`, ajout sous `withTenant`) et codes dans `lib/errors.ts`, puis route
+- Dernier commit : a5e3b1a feat(links): ajout d'un lien et traduction des erreurs SQL
+- Prochaine etape : route `POST .../collections/[collectionId]/links/route.ts`, puis `tests/links/**`, suite complete, `pnpm run check`
 
 ## Couches
 - [x] Migration — 6bc87c6 (`0017_link.sql`, ERD) ; `tests/links/catalog.test.ts`, `lock.test.ts`, les deux catalogues de D-121 et `tests/_factory` : 62/62. Etat initial avant implementation : 139 rouges / 2 verts (relation `link` absente, route `404`), conforme.
 - [x] Acces donnees — 6bc87c6 (meme commit : `packages/db/src/schema/links.ts` est la source de `pnpm db:generate`)
-- [ ] Logique metier
+- [x] Logique metier — a5e3b1a (`lib/links/{contracts,errors,links}.ts`, codes dans `lib/errors.ts`) ; `tests/links/sql-errors.test.ts` 15/15, `pnpm typecheck` et lint verts
 - [ ] API
 - [ ] UI (aucune : ecrans en 012)
 - [ ] Suite complete verte + `pnpm run check`
@@ -29,3 +29,6 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 - Implementeur, migration : nom du trigger `link_usage_on_insert`, comme la fonction (le contrat ne le nomme pas). Il s'execute apres les triggers internes de cle etrangere (`RI_ConstraintTrigger_*`, ordre alphabetique) : sans effet sur le resultat, toute erreur annule l'instruction entiere.
 - Implementeur, migration : messages de `RAISE` sans identifiant d'organisation (ni pour `SG001`, exige, ni pour `P0001`). Ecarte : reprendre l'identifiant dans `P0001` comme `propagate_subscription_quota` (il remonterait dans les journaux du serveur sans necessite ; la route ne journalise que le code).
 - Implementeur, migration : aucun garde `NULL` explicite sur `NEW.organization_id` avant `set_config` (regle n°3 de `drizzle-postgres.md`) : la colonne est `NOT NULL`, verifiee avant tout trigger `AFTER` ; un `NULL` ferait de toute facon toucher zero ligne, donc lever `P0001`. Garder `set_config` en premiere instruction, comme l'exige le contrat.
+- Implementeur, logique metier : point de sauvegarde autour de l'`INSERT` (patron D-092/D-116) : un `SG001`/`40001` annule l'insertion seule, `withTenant` valide ensuite une transaction saine (lecture d'appartenance seulement) et la route rend le `409`. Ecarte : laisser `withTenant` annuler sur une exception typee (il faudrait modifier `db.ts`, hors perimetre, ou lever une exception pour une erreur metier, contraire a CLAUDE.md).
+- Implementeur, logique metier : parametres de l'`INSERT ... SELECT` castes explicitement (`$1::uuid`, `$3::text`...) : `$1` apparait a la fois dans la liste de selection et dans le `WHERE`, le type ne doit pas dependre de l'inference.
+- Implementeur, logique metier : message du `404 COLLECTION_NOT_FOUND` « Collection introuvable. » (le contrat ne le fixe pas ; meme forme que « Organisation introuvable. »).
