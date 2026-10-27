@@ -126,3 +126,109 @@ Aucun.
 - **Manquant** : l'arbitrage humain sur la garde U+0000 placée hors contrat, les décisions locales au registre, le journal de projet 21 et la fiche de preuves 005.
 
 REVIEW: PASS
+
+---
+
+## Seconde relecture — 2026-10-27 (HEAD d6bcc51, après D-125 et D-126)
+
+# Relecture de code, tranche 005 (ajout d'un lien avec quota Free) : seconde relecture, HEAD d6bcc51
+
+## Méthode
+- **Diff relu.**
+  - Toute la tranche avec `git diff main...HEAD` (21 commits, 38 fichiers).
+  - En détail, les changements depuis la première relecture avec `git diff 780c1ed..HEAD` : 9 fichiers, dont la route, le contrat `links.ts`, `schema.test.ts`, `error-order.test.ts`, `validation.test.ts`, le contrat de tranche, le journal, le registre et le backlog.
+- **Sources lues.**
+  - Le premier rapport `docs/04-runbooks/audits/review-005.md`.
+  - Les décisions D-119 à D-126.
+  - Le contrat de tranche (AC3, AC4 et AC11 dans leur version modifiée), le journal `005-progress.md` (sections État, Couches et Décisions), le backlog (suites de 005), le périmètre `.gates/scope-005.txt` et `CLAUDE.md`.
+  - Les fichiers `.claude/rules/` : `documentation.md` et `git.md` en entier ; pour les autres, la liste seulement.
+- **Code relu en entier** : la route `.../links/route.ts`, `docs/02-architecture/api-contracts/links.ts` (`addLink`), `apps/web/src/lib/links/contracts.ts`, et la contrainte `link_title_length_chk` de `0017_link.sql`. `lib/links/links.ts`, `lib/links/errors.ts` et la migration n'ont pas changé depuis 780c1ed. Le constat favorable de la première relecture sur le quota, la concurrence, le compteur, le catalogue et l'isolation reste donc valable sans nouvelle lecture.
+- **Je n'ai pas lancé `pnpm test`**, parce que la base est partagée. Je m'appuie sur le résultat de l'orchestrateur à d6bcc51 :
+  - 53 fichiers, 680 tests réussis, 1 ignoré (déjà présent avant la tranche), 0 échec ;
+  - `pnpm run check` vert.
+
+  J'ai jugé chaque nouveau test en me demandant quelle modification du code il ferait échouer.
+
+## Ce que deviennent les constats de la première relecture
+
+| Constat de review-005 | État | Preuve |
+|---|---|---|
+| A CORRIGER 1 : U+0000 du titre refusé hors du contrat | **Corrigé** | `links.ts:52-58` : `.refine` sur `title`, déclencheur du 422 complété (`:80`). La garde de la route est retirée (`route.ts`, plus aucun `includes("\u0000")`). D-125 est au registre, l'ancienne décision du journal est marquée « Remplacée par D-125 ». |
+| A CORRIGER 2 : ordre des messages 422 sans preuve | **Corrigé**, avec un reste (SUGGESTION 1) | `tests/links/error-order.test.ts` : chaque égalité est accompagnée d'une inégalité. Ce qui est prouvé : url avant titre, collection avant url, chemin avant tout le reste. |
+| A CORRIGER 3 : plage C1 acceptée malgré le texte de D-120 | **Corrigé** | `links.ts:28` : `[\u0000-\u001f\u007f-\u009f]`, commentaire et déclencheur complétés. D-126 est au registre, et D-120 renvoie vers D-126. Cas ajoutés à AC3 et `validation.test.ts:72-75`. |
+| A CORRIGER 4 : documentation de clôture | Exclu de cette relecture (l'orchestrateur s'en charge) | Voir A CORRIGER 1 ci-dessous pour un manque distinct. |
+| SUGGESTION 1 : point de sauvegarde non prouvé | **Traité** | Le journal le décrit maintenant comme une « mesure de propreté, non prouvée par un test », et une ligne a été ajoutée au backlog. |
+| SUGGESTION 2 : repli trompeur | **Traité** | `route.ts:28-34, 68` : message neutre `INVALID_REQUEST`. Le choix d'un 422 plutôt que d'un `throw` est justifié dans le journal, avec l'option écartée. |
+| SUGGESTION 3, 4, 5 | Au backlog | `000-backlog.md`, section « Issus de la tranche 005 ». |
+
+## Les nouveaux tests échoueraient-ils si l'on cassait le code ?
+
+| Modification du code | Test qui échoue |
+|---|---|
+| `isSafeHttpUrl` revient à `[\u0000-\u001f\u007f]` (D-126 annulée) | `schema.test.ts` : U+0080, U+0085, U+009F, et la boucle sur la plage dans le chemin (`URL.canParse` encode ces caractères en pourcentage, donc ils passent). `validation.test.ts:73-75` : la réponse devient 201, ou 500 selon la locale, au lieu de 422. |
+| `.refine` U+0000 retiré du titre, garde remise dans la route (D-125 déplacée) | `schema.test.ts:331-338` (le schéma accepte le titre). Le test d'API ne le voit pas, mais c'est voulu : la règle se prouve sur le contrat. |
+| `.refine` retiré, sans garde | `validation.test.ts:172` (erreur `22021`, donc 500) et `schema.test.ts` |
+| Un seul message pour tous les 422 | Les inégalités de `error-order.test.ts:38, 47, 54, 63` |
+| Ordre url / title inversé dans `FIELD_MESSAGES` | `error-order.test.ts:46-47` |
+| `collectionId` placé après `url` | `error-order.test.ts:62-63` |
+| `organizationId` placé après `url` ou `title`, ou même texte pour l'organisation et la collection | **Aucun test** (SUGGESTION 1) |
+
+Recherche dans les lignes ajoutées depuis 780c1ed de `any`, `TODO`, `@ts-`, `eslint-disable`, `as unknown` : aucun résultat. Les nouveaux fichiers de test sont bien dans le périmètre (`tests/links/**`).
+
+## BLOQUANT
+Aucun.
+
+## A CORRIGER
+
+### 1. Les suites données aux trois relectures n'ont pas de ligne au registre
+- **Emplacement** : `docs/DECISIONS.md` (après D-126) ; commit 0a50d94.
+- **Constat** : D-125 et D-126 couvrent A CORRIGER 1 et 3. Plusieurs choix pris depuis n'ont en revanche aucune ligne au registre :
+  - confier A CORRIGER 2 au test-writer ;
+  - modifier les critères AC3, AC4 et AC11 après validation du contrat (AC11 reçoit quatre nouvelles exigences d'ordre) ;
+  - envoyer au backlog audit-005 INFO-1, 2, 4, 5 et 6 et review-005 SUGGESTION 1, 3, 4 et 5 ;
+  - traiter les SUGGESTION 1 et 2 dans la tranche.
+
+  Ces choix n'existent que dans un message de commit, le journal de tranche et le backlog. Le précédent direct est D-117, la ligne « suites des trois relectures » de la tranche 004, avec son « à valider par l'humain ». Ce n'est pas la même chose que A CORRIGER 4 de la première relecture, qui porte sur les décisions locales de l'implémenteur.
+- **Conséquence** : un auditeur qui lit le registre ne voit pas qui a décidé de reporter les constats d'audit-005, ni de changer AC11 après validation. D-119 a validé le contrat de tranche, mais pas sa version modifiée.
+- **Direction** : ajouter une ligne D-127 sur le modèle de D-117 (suites, critères modifiés, reports au backlog, options écartées, statut de validation humaine). L'orchestrateur peut l'écrire en même temps que A CORRIGER 4. Le coût est faible.
+
+## SUGGESTION
+
+### 1. L'ordre « organisation avant collection » et sa place avant l'URL ne sont prouvés par aucun test
+- **Emplacement** : `tests/links/error-order.test.ts:28` (`BAD_PATH` ne sert qu'à `collectionId`) ; `route.ts:37-42`.
+- **Constat** : `organizationId` est toujours valide dans `error-order.test.ts`. Deux modifications passeraient donc inaperçues, `creation.test.ts:236` ne vérifiant que le statut :
+  - déplacer `["organizationId", ...]` en fin de liste ;
+  - donner à l'organisation le même texte qu'à la collection.
+
+  La route et le journal annoncent pourtant l'ordre « chemin (organisation, collection) ». Le texte d'AC11 (« chemin invalide ») est respecté à la lettre avec la seule collection.
+- **Direction** : ajouter deux cas, « organisation malformée + url invalide → message(organisation seule) » et « organisation et collection malformées → message(organisation seule) ≠ message(collection seule) ». Sinon, écrire dans le journal que l'ordre entre les deux identifiants n'est pas garanti.
+
+### 2. Le nom d'un test témoin annonce un cas qu'il ne vérifie pas
+- **Emplacement** : `tests/links/schema.test.ts:325-327`.
+- **Constat** :
+  - Le test s'appelle « U+00A0 et U+00E9 ne sont pas des caractères de contrôle », mais il ne soumet que `café` (U+00E9).
+  - Si l'on soumettait U+00A0, il serait **refusé** par la regex `\S` (en JavaScript, `\s` contient U+00A0) : le nom du test laisse croire le contraire.
+  - Dans la boucle de `:315-323`, la partie « hôte » ne prouve probablement rien : l'analyseur WHATWG refuse déjà ces caractères dans un nom d'hôte. La partie « chemin » suffit à prouver D-126.
+- **Direction** : renommer le test pour ne citer que U+00E9, ou ajouter un cas U+00A0 avec le résultat attendu réel (refusé, par la règle des espaces). Indiquer en commentaire que la partie « hôte » est une défense en profondeur.
+
+### 3. Le test d'ordre url / titre existe maintenant en double
+- **Emplacement** : `tests/links/validation.test.ts:102-109`.
+- **Constat** : ce test (égalité seule) est entièrement couvert par `error-order.test.ts:41-48`, qui ajoute l'inégalité. Il est inoffensif, mais un lecteur peut croire que c'est lui qui prouve D-124.
+- **Direction** : le retirer, ou ajouter en commentaire un renvoi vers `error-order.test.ts`.
+
+### 4. La modification de la ligne D-120 est écrite dans la colonne « décideur »
+- **Emplacement** : `docs/DECISIONS.md`, ligne D-120.
+- **Constat** : le renvoi « (plage des caractères de contrôle précisée par D-126) » a été ajouté dans la colonne « décideur » d'une décision humaine. Le format du registre (`documentation.md`) prévoit une mention de remplacement ou de précision, pas une modification du champ « décideur ».
+- **Direction** : déplacer ce renvoi dans la colonne des liens, ou dans la description sous la forme « précisée par D-126 ».
+
+### 5. Coupure de ligne dans un commentaire du contrat
+- **Emplacement** : `docs/02-architecture/api-contracts/links.ts:22-25`.
+- **Constat** : « L'autorité est lue sur le » se termine en fin de ligne, puis la phrase reprend : c'est une trace de l'insertion du texte de D-126. Il n'y a aucun effet sur le comportement, mais le fichier est le contrat publié.
+- **Direction** : refaire la mise en ligne du paragraphe à la prochaine modification du contrat.
+
+## Bilan
+- **Solide** : les trois A CORRIGER de fond sont corrigés au bon endroit. Les règles U+0000 et C1 sont dans le contrat publié, il n'y a plus de garde parallèle dans la route, et le registre et les critères sont à jour. Les nouveaux tests échouent si l'on casse ce qu'ils prétendent prouver (inégalités, test du schéma du contrat). Le code de quota, de concurrence et d'isolation n'a pas changé depuis la première relecture et reste solide.
+- **Fragile** : l'ordre organisation / collection des messages 422 reste prouvé seulement par la lecture du code. Un test témoin porte un nom trompeur (U+00A0).
+- **Manquant** : une ligne au registre pour les suites des relectures (reports au backlog, critères modifiés après validation, sur le modèle de D-117). S'y ajoute la documentation de clôture déjà confiée à l'orchestrateur (A CORRIGER 4 de la première relecture).
+
+REVIEW: PASS
