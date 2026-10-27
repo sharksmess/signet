@@ -23,4 +23,4 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 - Tests (test-writer) : 38 tests dans `tests/consultation/` (nominal, order, errors, isolation, read-only) + `tests/helpers/consultation.ts`. 36 echouent en 405 (GET non exporte) ; 2 passent deja (AC6 d, SELECT sous signet_app : la RLS existe deja, non-regression).
 - Horodatage egal (AC2) : ids fixes par le test (prefixe aleatoire + suffixe 1 a 6) inseres dans l'ordre 3,6,1,5,2,4, pour que l'ordre d'insertion differe de l'ordre des ids de facon deterministe ; precondition verifiee (un seul created_at).
 - Messages de 422 : on prouve qu'ils sont fixes (sans la valeur soumise ni Zod) et lesquels sont distincts, sans figer les textes (precedent D-124).
-- AC9 : un test supplementaire sur le nom de collection (D-131 point 4 cite le nom ; le contrat de creation l'accepte).
+- AC9 : un test supplementaire sur le nom de collection (le contrat de creation l'accepte ; le contrat de tranche rend `name` tel qu'enregistre). D-131 point 4 ne cite que l'URL et le titre : extension inscrite en D-132 point 6 par l'orchestrateur, a valider par l'humain.
