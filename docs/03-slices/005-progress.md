@@ -5,8 +5,8 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 ## Etat
 - Statut : implementation terminee, criteres AC1 a AC14 coches ; en attente des trois relecteurs
 - Branche : slice/005-ajout-lien
-- Dernier commit : c24dbdd feat(links): route POST d'ajout d'un lien a une collection (puis ce journal)
-- Prochaine etape : orchestrateur — `security-auditor`, `contract-guardian`, `code-reviewer` ; registre (decisions ci-dessous, en particulier le garde U+0000 du titre), journal de projet 21, fiche de preuves (AC14), `close-slice.sh`. Action humaine : `pnpm db:migrate` sur la base de developpement.
+- Dernier commit : 3903f69 test(links): ordre des messages 422 (review-005 A CORRIGER 2)
+- Prochaine etape : implementeur pour D-125 (refus de U+0000 dans `addLink.input.title`, garde retiree de la route) et D-126 (plage C1 U+0080 a U+009F dans `isSafeHttpUrl`) ; tests rouges : `tests/links/schema.test.ts` (6) et `tests/links/validation.test.ts` (3 cas C1) ; `tests/links/error-order.test.ts` est deja vert
 
 ## Couches
 - [x] Migration — 6bc87c6 (`0017_link.sql`, ERD) ; `tests/links/catalog.test.ts`, `lock.test.ts`, les deux catalogues de D-121 et `tests/_factory` : 62/62. Etat initial avant implementation : 139 rouges / 2 verts (relation `link` absente, route `404`), conforme.
@@ -37,3 +37,4 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 - **Implementeur, API — a faire valider (contract-guardian, humain)** : un titre contenant U+0000 est refuse en `422` par un garde de la route, **apres** le contrat (`addLink.input.title` l'accepte). Raison : AC4 exige `422` et jamais `500` ; Postgres ne peut pas stocker U+0000 dans un `text` (`22021`), sans garde l'entree finit en `500`. Seul U+0000 est refuse (les autres caracteres de controle du titre sont stockables, rien ne les exige refuses). Ecartes : modifier `addLink.input.title` dans `links.ts` (changement de contrat publie, decision humaine, D-120 ne portait que sur l'URL) ; traduire `22021` en `422` apres l'appartenance (un non-membre recevrait `404` au lieu de `422`, contraire a l'ordre « validation avant appartenance », AC11). Si l'humain prefere inscrire la regle dans le contrat, le garde de la route devient redondant et se retire.
 - Implementeur, API : textes fixes des `422` (non figes par les tests, D-124) : corps non JSON ou non objet, organisation, collection, URL (nomme la regle : http ou https en minuscules, nom d'hote, sans identifiants, espaces ni caracteres de controle, 8 a 2048), titre (1 a 200, bords exclus, sans caractere nul). Premier champ fautif dans l'ordre chemin (organisation, collection), `url`, `title`.
 - Implementeur, API : une erreur inattendue (`P0001`, etc.) est relevee par `lib/links/links.ts` apres journalisation du seul code ; la route ne l'attrape pas et Next rend le `500` generique (patron de 004), verifie par AC9 (d) : corps sans code SQL, message de base ni identifiant.
+- Tests (D-125, D-126) : `schema.test.ts` (unitaire du contrat importe tel quel), 3 cas C1 + U+007F dans `validation.test.ts`, `error-order.test.ts` (ordre chemin, url, titre sans figer les textes, inegalites incluses).
