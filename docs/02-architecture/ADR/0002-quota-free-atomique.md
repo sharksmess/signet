@@ -132,6 +132,11 @@ refus change, precisement pour ne plus s'appliquer a la propagation du plafond.
   modifiable que par trigger, une procedure `signet.recompute_link_usage(org_id)` permet de le
   recalculer, et un test d'integration verifie `link_count = count(*)` apres chaque scenario.
   Le recalcul est une commande versionnee, pas un `UPDATE` improvise.
+  **Mise a jour du 2026-10-26 (D-122)** : la tranche 005 ne livre que la branche `INSERT` du
+  trigger ; `recompute_link_usage` et la branche `DELETE` sont reportees a la tranche 007, qui
+  ouvre la suppression (`GRANT DELETE`), seul autre chemin capable de desaligner le compteur.
+  D'ici la, l'invariant `link_count = count(*)` est garanti par l'absence de tout `UPDATE`,
+  `DELETE` ou `TRUNCATE` de `signet_app` sur `link` et prouve par les tests de 005.
 - **Une retrogradation Pro → Free d'une organisation comptant plus de 50 liens reussit toujours**
   (decision produit du 2026-09-22) : la propagation du nouveau plafond n'est plus contrainte par
   un `CHECK`, elle s'ecrit sans condition. Les liens existants restent lisibles ; le quota ne

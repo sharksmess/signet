@@ -182,6 +182,7 @@ Les fonctions ecrites ou remplacees a partir de 0009 qualifient en plus leurs ta
 | `organizations_for_user` (0003, remplacee en 0009) | garde d'identite `SG002` ; aucune organisation posee (axe utilisateur) | `organization_definer_self_read`, `member_definer_self_read` | sans objet (lecture) | `signet_app` | `SG002` |
 | `create_organization_counters` (trigger, 0005) | aucune : herite du contexte de `create_organization`, seul chemin d'`INSERT INTO organization` | `organization_link_usage_definer_write`, `subscription_definer_insert` | `INSERT` seulement | aucun (trigger) | sans objet |
 | `propagate_subscription_quota` (trigger, 0005) | `set_config(..., NEW.organization_id, true)` | `organization_link_usage_definer_write` | leve si `<> 1` | aucun (trigger) | pose le sien ; leve `P0001` si le compteur manque |
+| `link_usage_on_insert` (trigger `AFTER INSERT` sur `link`, 0017, tranche 005) | `set_config(..., NEW.organization_id, true)` (valeur de confiance : `WITH CHECK` de `link_isolation` deja passe) | `organization_link_usage_definer_write` | leve `P0001` si `<> 1` ; `SG001` si `link_quota IS NOT NULL AND link_count > link_quota` | aucun (trigger) | pose le sien ; contexte ambiant etranger ignore (borne a `NEW.organization_id`, AC13 b) |
 | `assert_owner_remains` (trigger, 0004) | `set_config(..., OLD.organization_id, true)` | `organization_definer_context`, `member_definer_context` | sans objet (lecture) | aucun (trigger) | pose le sien |
 | `apply_stripe_subscription` (0012) | efface `app.organization_id`, valide l'entree (`SG003`), puis `set_config` depuis la ligne deja rattachee a l'abonnement Stripe ou, a defaut, la metadonnee relue chez Stripe (ADR-0016) | `subscription_definer_stripe_lookup`, `subscription_definer_read`, `subscription_definer_update`, `billing_event_definer_insert` | leve si `<> 1` sur `subscription` | `signet_billing` | `SG003` (entree `NULL`), contexte ambiant ignore (AC6 c, d) |
 | `lookup_invitation` (0015) | garde d'identite `SG002` ; efface `app.organization_id` ; lecture par empreinte (reglage transitoire `app.invitation_token_hash`, remis a vide aussitot) ; `set_config` depuis `invitation.organization_id` pour lire le nom, efface avant le retour (D-105) | `invitation_definer_token_lookup`, `organization_definer_context` | sans objet (lecture ; organisation invisible = invariant rompu, leve) | `signet_app` | `SG002` ; empreinte `NULL`, de longueur `<> 32` ou inconnue : zero ligne |
@@ -716,7 +717,16 @@ enonce.
   `app_user` ; sans lui, toute tentative de suppression de compte declenche un scan complet.
   Postgres n'indexe pas automatiquement les cles etrangeres.
 
-**RLS** : `USING`/`WITH CHECK (organization_id = signet.current_org())`. Zero jointure.
+**RLS** (0017, tranche 005) : activee **et** forcee ; une seule politique, `link_isolation`,
+`FOR ALL TO signet_app`, `USING`/`WITH CHECK (organization_id = signet.current_org())`. Zero
+jointure. Aucune politique `signet_definer` ni `TO PUBLIC` (la fonction de trigger ecrit le
+compteur, jamais `link`). **Privileges** de `signet_app` : `SELECT, INSERT` seulement (ni `UPDATE` ;
+ni `DELETE`, ajoute par 007 avec la branche `DELETE` du trigger ; ni `TRUNCATE`, qui contournerait
+les triggers de ligne et desalignerait le compteur). Proprietaire `signet_owner`. Noms des
+contraintes : `link_collection_fk` (composite), `link_url_scheme_chk`, `link_url_length_chk`,
+`link_title_length_chk` ; cles simples generees `link_organization_id_organization_id_fk`
+(`CASCADE`) et `link_added_by_user_id_app_user_id_fk` (`RESTRICT`). Trigger
+`link_usage_on_insert` (`AFTER INSERT FOR EACH ROW`, §7).
 
 **Pas de suppression unitaire d'un lien** : le PRD l'exclut explicitement (hors-perimetre). Le
 `DELETE` sur `link` n'est donc expose par aucun chemin applicatif, mais le trigger de decompte
@@ -750,6 +760,15 @@ propagation du plafond depuis `subscription` (§8.1) restent inconditionnelles.
 
 **Triggers**
 
+**Etat (0017, tranche 005)** : seule la branche `INSERT` existe, fonction
+`signet.link_usage_on_insert()` (`SECURITY DEFINER`, proprietaire `signet_definer`, `search_path =
+pg_catalog, signet, public, pg_temp`, `public.organization_link_usage` qualifiee, `REVOKE ALL ...
+FROM PUBLIC`, aucun `EXECUTE` accorde), trigger `link_usage_on_insert` `AFTER INSERT FOR EACH ROW`.
+Premiere instruction : `set_config('app.organization_id', NEW.organization_id::text, true)` (§1,
+liste obligatoire). Message du `SG001` sans identifiant client. La branche `DELETE` ci-dessous et
+`recompute_link_usage` sont reportees a la tranche 007 (D-122), dans la meme migration que le
+`GRANT DELETE` sur `link` : d'ici la, aucun chemin applicatif ne supprime un lien.
+
 ```sql
 -- AFTER INSERT FOR EACH ROW ON link, SECURITY DEFINER
 UPDATE organization_link_usage
@@ -764,6 +783,7 @@ END IF;
 ```
 ```sql
 -- AFTER DELETE FOR EACH ROW ON link, SECURITY DEFINER — inconditionnel, pas de verification de quota
+-- (tranche 007, non encore cree)
 UPDATE organization_link_usage
    SET link_count = link_count - 1, updated_at = now()
  WHERE organization_id = OLD.organization_id;               -- tolerant a ROW_COUNT = 0
@@ -810,8 +830,8 @@ propriete : c'est toujours le meme verrou de ligne, pris au meme instant, qui se
 transactions — seul le moment ou l'echec est signale (apres un `IF` plutot qu'apres un `CHECK`)
 change, precisement pour ne plus s'appliquer a la propagation du plafond depuis `subscription`.
 
-**Reconciliation** — une procedure `signet.recompute_link_usage(org_id)` recalcule `link_count`
-depuis `link`. Elle n'est pas appelee en fonctionnement normal ; elle existe pour qu'un doute sur
+**Reconciliation** (tranche 007, D-122 ; non creee en 0017) — une procedure
+`signet.recompute_link_usage(org_id)` recalcule `link_count` depuis `link`. Elle n'est pas appelee en fonctionnement normal ; elle existe pour qu'un doute sur
 le compteur se resolve par une commande plutot que par un `UPDATE` improvise en production. Un
 test d'integration doit verifier apres chaque scenario que `link_count = count(*)`.
 
@@ -1024,7 +1044,7 @@ jointure ecrite dans la politique (la sonde `member` est dans la fonction).
 | `member` | direct | `organization_id = current_org()` | 0 | `context_org()` ; `user_id = current_user_id()` en lecture |
 | `invitation` | direct | `current_org()` **et** role owner, en `SELECT`, `INSERT`, `DELETE` (0014, D-086 P-3) ; aucun `UPDATE` | 1 (`member`) | lecture par empreinte (`app.invitation_token_hash`) et sur `context_org()` ; `UPDATE` des seules colonnes `accepted_at`, `accepted_by_user_id`, ligne non acceptee de `context_org()`, acceptee par `current_user_id()` (0015, D-103) |
 | `collection` | direct | `organization_id = current_org()`, en `SELECT` et `INSERT` (0016, tranche 004) ; ni `UPDATE` ni `DELETE` | 0 | aucune |
-| `link` | **direct** (denormalise, verrouille par FK composite) | `organization_id = current_org()` | 0 | triggers de compteur : `context_org()` sur `organization_link_usage` |
+| `link` | **direct** (denormalise, verrouille par FK composite) | `organization_id = current_org()` (`link_isolation`), en `SELECT` et `INSERT` (0017, tranche 005) ; ni `UPDATE` ni `DELETE` (007) | 0 | aucune sur `link` ; le trigger `link_usage_on_insert` ecrit `organization_link_usage` sous `context_org()` |
 | `organization_link_usage` | `organization_id` (PK) | `organization_id = current_org()`, lecture seule | 0 | `context_org()` en ecriture |
 | `subscription` | `organization_id` (PK) | `current_org()` **et** role owner | 1 (`member`) | `context_org()` en `INSERT`, `SELECT`, `UPDATE` ; lecture par identifiant Stripe (`app.stripe_subscription_id`, 0012) |
 | `billing_event` | direct, **sans FK** (§8.2) | `current_org()` **et** role owner, lecture seule | 1 (`member`) | `context_org()` en `INSERT` (0012) |
@@ -1050,7 +1070,7 @@ n'a pas de cle etrangere sur `organization_id`, precisement pour ne pas cascader
 Chaque etape comprend, dans la **meme migration**, la table et sa politique RLS. Une table livree
 sans politique est une table ouverte le temps que la migration suivante arrive.
 
-### Migrations appliquees (etat au 2026-10-26)
+### Migrations appliquees (etat au 2026-10-27)
 
 Les fichiers de `packages/db/migrations/` presents dans `main` sont immuables (`migrate.ts`
 enregistre un nom, jamais une somme de controle : une modification ne serait jamais rejouee).
@@ -1073,17 +1093,18 @@ enregistre un nom, jamais une somme de controle : une modification ne serait jam
 | **`0014_invitation.sql`** | §5 : table `invitation` (generee, fichier renomme depuis `0004_worthless_stephen_strange.sql`, etiquette alignee, D-088) ; RLS activee et forcee ; politiques `invitation_owner_read`/`_insert`/`_delete` (`TO signet_app`, `current_org()` et role owner, D-086 P-3) ; `GRANT SELECT, INSERT, DELETE` a `signet_app` ; `signet.create_invitation(p_organization_id, p_email, p_token_hash)` `SECURITY INVOKER`, `TimeZone = 'UTC'` (D-091), `EXECUTE` a `signet_app` seul | 003 |
 | **`0015_accept_invitation.sql`** | §1, §2.1, §5 : aucune table ni colonne (fichier vide cree par `drizzle-kit generate --custom`, renomme depuis `0005_accept_invitation.sql`, etiquette alignee, P-1) ; `GRANT SELECT` et `GRANT UPDATE (accepted_at, accepted_by_user_id)` sur `invitation` et `GRANT SELECT (id, email)` sur `app_user` a `signet_definer` ; politiques `invitation_definer_token_lookup`, `invitation_definer_context_read`, `invitation_definer_accept`, `app_user_definer_self_read` (`TO signet_definer`) ; `signet.lookup_invitation(bytea)` et `signet.accept_invitation(bytea)` `SECURITY DEFINER`, proprietaire `signet_definer`, `TimeZone = 'UTC'`, `EXECUTE` a `signet_app` seul (D-102, D-103) | 006 |
 | **`0016_collection.sql`** | §6.1 : table `collection` (generee, fichier renomme depuis `0006_optimal_rage.sql`, etiquette alignee) ; `UNIQUE (id, organization_id)`, `CHECK` de longueur et de bords sur `name`, index unique fonctionnel `collection_org_name_ci_idx` ; RLS activee et forcee ; politique `collection_isolation` (`TO signet_app`, `current_org()`) ; `GRANT SELECT, INSERT` a `signet_app` ; aucune fonction | 004 |
+| **`0017_link.sql`** | §6.2, §7 : table `link` (generee, fichier renomme depuis `0007_living_stryfe.sql`, etiquette alignee) ; `link_collection_fk` composite `CASCADE`, cles vers `organization` (`CASCADE`) et `app_user` (`RESTRICT`), `CHECK` `link_url_scheme_chk`, `link_url_length_chk`, `link_title_length_chk`, index `link_collection_recent_idx`, `link_org_idx`, `link_author_idx` ; RLS activee et forcee ; politique `link_isolation` (`TO signet_app`, `current_org()`) ; `GRANT SELECT, INSERT` a `signet_app` ; `signet.link_usage_on_insert()` `SECURITY DEFINER`, proprietaire `signet_definer`, aucun `EXECUTE` accorde, et trigger `AFTER INSERT FOR EACH ROW` (branche `INSERT` seule, D-122) | 005 |
 
 Aucune des trois migrations 0009 a 0011 ne touche une table, une colonne ou un index : `pnpm db:generate`
 ne produit aucune difference, `packages/db/src/schema/*` est inchange. 0012 ajoute
-`packages/db/src/schema/billing.ts`, 0014 `packages/db/src/schema/invitations.ts` ; 0015 ne touche aucune table (schema TypeScript inchange) ; 0016 ajoute `packages/db/src/schema/collections.ts`.
+`packages/db/src/schema/billing.ts`, 0014 `packages/db/src/schema/invitations.ts` ; 0015 ne touche aucune table (schema TypeScript inchange) ; 0016 ajoute `packages/db/src/schema/collections.ts` ; 0017 `packages/db/src/schema/links.ts` (index `DESC NULLS FIRST` declare explicitement : le `.desc()` seul de Drizzle emet `NULLS LAST`, contraire a l'ERD).
 
 **Numerotation** : `drizzle-kit` numerote les fichiers qu'il genere d'apres son propre journal
 (`meta/_journal.json`), qui ne compte que les migrations generees (0002, 0003, puis 0012, 0013,
-0014, 0015, 0016). Le
+0014, 0015, 0016, 0017). Le
 fichier genere est renomme au numero suivant du dossier, et l'etiquette du journal alignee. Les
 fichiers `meta/NNNN_snapshot.json` gardent la numerotation de `drizzle-kit` (0015 a pour instantane
-`0005_snapshot.json`, 0016 `0006_snapshot.json`).
+`0005_snapshot.json`, 0016 `0006_snapshot.json`, 0017 `0007_snapshot.json`).
 
 ---
 
