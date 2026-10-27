@@ -69,6 +69,10 @@ const REFUSED_URLS: UrlCase[] = [
   { label: "schema en majuscules (D-119 lecture 3)", payload: withUrl("HTTPS://exemple.invalid/"), leak: "exemple.invalid" },
   { label: "caractere de controle \\u0000", payload: withUrl("https://exemple.invalid/a\u0000b"), leak: "exemple.invalid" },
   { label: "caractere de controle \\u0001", payload: withUrl("https://exemple.invalid/a\u0001b"), leak: "exemple.invalid" },
+  { label: "caractere de controle \\u007f (D-126)", payload: withUrl("https://exemple.invalid/a\u007fb"), leak: "exemple.invalid" },
+  { label: "caractere de controle C1 \\u0080 (D-126)", payload: withUrl("https://exemple.invalid/a\u0080b"), leak: "exemple.invalid" },
+  { label: "caractere de controle C1 \\u0085 (D-126)", payload: withUrl("https://exemple.invalid/a\u0085b"), leak: "exemple.invalid" },
+  { label: "caractere de controle C1 \\u009f (D-126)", payload: withUrl("https://exemple.invalid/a\u009fb"), leak: "exemple.invalid" },
   { label: "identifiants dans l'URL (utilisateur:secret@)", payload: withUrl("https://utilisateur:secret@exemple.invalid/"), leak: "secret" },
   { label: "identifiants piege (site@piege)", payload: withUrl("https://exemple.invalid@piege.invalid/"), leak: "piege.invalid" },
 ];
