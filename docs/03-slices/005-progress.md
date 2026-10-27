@@ -19,6 +19,7 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 
 ## Blocages
 <!-- cause, essais, options. Vide = aucun. -->
+- 2026-10-27, arret avant cloture (consigne de l'humain : « s'il reste des points a corriger, arrete-toi avant la cloture ») : trois relectures PASS (`docs/04-runbooks/audits/{audit,contracts,review}-005.md`), mais review-005 a quatre A CORRIGER. Decisions humaines attendues : (1) garde U+0000 du titre, dans la route hors contrat (inscrire au contrat comme D-120, ou divergence assumee) ; (3) plage U+0080–U+009F acceptee par `isSafeHttpUrl` alors que D-120 dit « caracteres de controle refuses ». Puis (2) tests de l'ordre des messages 422 et (4) documentation de cloture (registre, journal de projet 21) par l'orchestrateur.
 - `pnpm db:migrate` sur la base de developpement : refuse (`DATABASE_URL_MIGRATE n'est pas definie`, variable absente du shell de l'agent, deja connu : backlog D-067, precedents 003, 004, 006). **Action humaine.** La base de test est migree par le globalSetup, ou 0017 s'applique.
 
 ## Decisions
