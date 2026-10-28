@@ -1,0 +1,36 @@
+# Consigne — passage autonome de la tranche 013 (consultations pour les ecrans)
+
+Redigee par l'orchestrateur (cowork) le 2026-10-28. A lire au lancement de `/run-queue`, **en plus** de la skill. Troisieme passage autonome de l'objectif A : les conditions d'arret de la skill s'appliquent **sans exception**.
+
+## Budget
+**Une tranche : 013.** 007 et 008 ont leurs dependances closes mais restent **hors file** (hors objectif A). 012 depend de 013 : **hors file** (menee avec l'humain). Arret apres `ship-slice.sh` (ou a la premiere condition d'arret). Jamais de fusion.
+
+## Ce que l'humain a deja decide (a inscrire au registre a l'ouverture)
+- **D-135 (humain, 2026-10-28)** : D-132 (lectures de forme de 009), D-133 (decisions locales de l'implementeur de 009) et D-134 (suites des relectures de 009) validees.
+- **D-136 (humain, 2026-10-28)** : nouvelle tranche **013 — Consultations pour les ecrans** (prochain numero libre, D-025), en mode autonome, executee **avant** 012 et ajoutee a l'objectif A. Raison : l'inventaire fait avant 012 montre qu'aucune page n'existe et que deux lectures manquent aux ecrans — la liste des organisations de l'utilisateur (aucun contrat ; la fonction `signet.organizations_for_user` existe depuis 0003/0009, sans appelant) et la liste des membres (contrat `listMembers` ecrit, non construit). Les separer de 012 garde une tranche d'ecrans sans travail serveur nouveau. Ecarte : tout faire dans 012 (tranche plus grosse, melange de terrain neuf et connu). 012 est menee avec l'humain.
+- **D-137 (humain, 2026-10-28)** : cadrage de la tranche 012, pour memoire (a reporter au backlog, section 012 ; rien a construire dans 013) : (1) preuves sans outil nouveau — tests qui lisent les pages rendues par le serveur (contenu, echappement, isolation) **et** visite guidee par l'humain dans son navigateur, liste a cocher consignee dans la fiche de preuves ; robot de navigateur au backlog ; (2) apparence sobre, aucune bibliotheque de design ni dependance de style ; (3) ecrans : connexion et inscription ; mes organisations et creation d'une organisation ; page d'une organisation (collections et creation, membres ; palier et invitation pour l'owner seul, US-08.2, US-02) ; page d'une collection (liens et ajout, message clair au refus de quota) ; page d'acceptation d'invitation (`/invitations/accept#token=`, cible du lien d'e-mail, session exigee, P-4 **non** rouvert) ; (4) hors 012 : changement de palier (vrais paiements hors objectif), retrait d'un membre (008), suppression d'une collection (007).
+- **D-138 (humain, sur recommandation de l'orchestrateur, 2026-10-28)** : lectures de la tranche 013, decidees d'avance :
+  1. **Nouveau contrat `listMyOrganizations`** ajoute a `docs/02-architecture/api-contracts/organizations.ts` (ajout, aucun contrat existant modifie) : `GET /api/organizations`, toute session valide (`minRole: "public"`, comme `createOrganization`), aucune entree ; sortie `z.array(z.object({ id: Uuid, name: z.string(), createdAt: z.string().datetime() }))` ; erreur `401 UNAUTHENTICATED` seule ; idempotente, lecture seule. S'appuie sur `signet.organizations_for_user` **existante**, l'utilisateur etant toujours celui de la session (jamais un parametre de la requete). Pas de role dans la sortie (la fonction ne le rend pas ; la page d'organisation le lit par `listMembers`).
+  2. **Ordre de `listMyOrganizations`** : `created_at DESC, id DESC` de l'organisation (comme D-131 point 1).
+  3. **`listMembers`** : le contrat existant, tel quel. Ordre (le contrat ne le fixe pas) : date d'arrivee dans l'organisation, **du plus ancien au plus recent**, puis `user_id` ; le fondateur apparait donc en premier. Les invitations non acceptees n'y figurent pas (aucune lecture d'invitation, backlog de 003).
+  4. **Pas de pagination**, valeurs rendues telles qu'enregistrees (noms, adresses), comme D-131 points 3 et 4 ; l'echappement a l'affichage est le travail de 012.
+  5. **Aucune migration, aucune fonction `SECURITY DEFINER` nouvelle, aucun privilege nouveau** : `organizations_for_user` (execute par `signet_app`) et la politique `app_user_visible_to_co_members` suffisent. Si l'un d'eux semble manquer, **arrete-toi**.
+- **Index du journal** : la ligne 22 passe a « PR #37 fusionnee (commit 5f87b32) », dans le commit d'ouverture.
+- **Backlog** : ligne 013 ajoutee au tableau (US-07.1 partiel et parcours d'ecran ; depend de 001, 006 ; raison : D-136) ; ordre d'execution `... -> 009 (en mode autonome) -> 013 (en mode autonome) -> 012 (ecrans)` ; phrase de l'objectif A citant D-136 ; section 012 completee par D-137.
+
+## Sources
+PRD US-01, US-07.1, US-09 ; contrats `createOrganization` et `listMembers` ; ERD §1 (`organizations_for_user`, ADR-0011), §2 (`app_user_visible_to_co_members`), §4 (`member`, colonne `created_at` = date d'arrivee) ; ADR-0001, ADR-0004, ADR-0011 ; patron de 001 (`createOrganization`, contexte utilisateur sans organisation) et de 009 (lectures, `withTenant`, D-132, D-133).
+
+## Regles de la tranche
+- **Perimetre** : API seule. `GET` ajoute au fichier de route existant de `/api/organizations` **sans changer son `POST`** ; nouvelle route `GET /api/organizations/:organizationId/members` ; modules de lecture ; contrat `organizations.ts` (ajout seulement) ; tests ; documentation. Si `apps/web/src/lib/db.ts` devait changer, **arrete-toi**.
+- Les regles metier viennent du PRD, des contrats et de D-138. **Si l'une manque ou se contredit, arrete-toi.**
+- Criteres obligatoires :
+  - **mes organisations** : sans session -> `401` ; aucune organisation -> `200 []` ; un utilisateur membre de deux organisations (l'une creee, l'autre rejointe par invitation acceptee) voit les deux, dans l'ordre de D-138 point 2, **et jamais** celle d'un autre utilisateur ; un parametre de requete (`?userId=` d'un autre) est ignore ; reponse sans champ de plus (ni `slug`, ni identifiant Stripe, ni colonne interne) ;
+  - **membres** : owner **et** member lisent ; sans session -> `401` ; identifiant malforme -> `422` ; organisation inconnue ou non membre -> `404 ORGANIZATION_NOT_FOUND`, reponses identiques ; ordre `401` < `422` < `404` prouve ; la liste contient l'appelant ; ordre de D-138 point 3 prouve, y compris a date d'arrivee egale ; aucune adresse d'un membre d'une autre organisation, meme pour un utilisateur membre des deux (le chemin fait autorite, D-132 point 5) ; une invitation en attente n'y apparait pas ; reponse conforme au contrat, sans champ de plus ; test en base sous contexte etranger force (zero ligne) ;
+  - **lecture seule prouvee** : aucune ecriture par ces routes ; aucun privilege, aucune politique, aucune fonction `SECURITY DEFINER` nouveaux (listes fermees de D-121 identiques) ; aucune migration.
+- Aucune dependance nouvelle. Tests : aucune comparaison permanente a `main` ; valeurs de test inventees visiblement fausses.
+- Le contrat de tranche n'attend pas de validation humaine en mode autonome : ecris tes autres decisions au registre comme « a valider par l'humain » (precedent D-027, D-114, D-132).
+- Scripts et tests **au premier plan**. Relecteurs en parallele, sans `pnpm test` de leur cote.
+
+## Journal
+`docs/04-runbooks/autonomous-run-<date du jour>.md`, tenu au fil de l'eau. Rapport final : en tete, ce qui exige une decision humaine. Journal de projet : entree 23.
