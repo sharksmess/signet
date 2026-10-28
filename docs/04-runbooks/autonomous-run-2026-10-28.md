@@ -16,4 +16,25 @@ Budget fixe par l'humain : **1 tranche, la 013** (consultations pour les ecrans)
 - `slice-implementer` : c3a85a2 (lectures `listMyOrganizations`, `listMembers`, exports de contrat), c3ae367 (routes `GET`), journaux 5c260a0, 171aa17. `tests/screen-reads` 30/30 ; `pnpm run check` vert ; suite complete 62 fichiers, 748 passes, 1 ignore (preexistant, branche `slice/003-`), 0 echec, 197 s. Decisions locales au journal de tranche (patron D-133 point 3, role reduit a `owner | member` par garde d'invariant, reponses d'erreur du `GET` construites comme le `POST`, route `/members` copiee de 009).
 - AC12 verifie par l'orchestrateur (`git diff --name-only main..HEAD`) : aucun manifeste, verrou, migration, fichier d'environnement ni `packages/` ; `db.ts`, `errors.ts`, `auth.ts` inchanges ; dans `organizations/route.ts`, seule la ligne d'import change pour le `POST`. Commit d57dcfa.
 - Relecteurs lances en parallele : `contract-guardian` **CONTRACTS: PASS** (aucune rupture ; `422` absent de `listMembers.errors`, ecart `minRole`, adresse non revalidee en sortie) ; `security-auditor` **AUDIT: PASS** (0 critique, 0 majeur ; MINEUR-1 lectures sans borne ni limite de debit ; INFO-1 `minRole`, INFO-2 adresses visibles de tous les membres, prealable pour 008, INFO-3 `Cache-Control`) ; `code-reviewer` **REVIEW: PASS** (A CORRIGER 1 : decisions de l'implementeur au registre ; A CORRIGER 2 : le helper d'AC3 suspendait les declencheurs sur une justification inexacte — ma ligne ci-dessus reprenait cette justification, elle est fausse : la cause reelle du `42501` etait l'absence d'`app.organization_id`, les politiques definer ne verifiant pas l'appartenance ; 6 SUGGESTION). Rapports archives tels quels dans `audits/{contracts,audit,review}-013.md`.
-- Suites : A CORRIGER 2 renvoye a `test-writer` (auteur du test, precedent D-115) : contexte `app.organization_id` pose avant chaque insertion, declencheurs actifs, suspension retiree, aucune assertion changee ; 30/30, check vert ; 858a37b, bdb1377. Orchestrateur : D-140 (decisions de l'implementeur), D-141 (suites des relectures), backlog, etat du journal de tranche (SUGGESTION 7), journal de projet 23 et son index. Pas de nouvelle relecture (helper de test seulement), precedent D-112, D-117.
+- Suites : A CORRIGER 2 renvoye a `test-writer` (auteur du test, precedent D-115) : contexte `app.organization_id` pose avant chaque insertion, declencheurs actifs, suspension retiree, aucune assertion changee ; 30/30, check vert ; 858a37b, bdb1377. Orchestrateur : D-140 (decisions de l'implementeur), D-141 (suites des relectures), backlog, etat du journal de tranche (SUGGESTION 7), journal de projet 23 et son index. Pas de nouvelle relecture (helper de test seulement), precedent D-112, D-117. Commit 37fe7ca.
+- Cloture : `close-slice.sh` **CLOTURE REUSSIE** (61bb76e), 748 passes / 1 ignore (preexistant), check, audit `--prod`, build CI, gitleaks : PASS ; fiche `evidence/013.md`.
+- Livraison : `ship-slice.sh` lance juste apres ce commit de journal (resultat dans le rapport de fin de session, comme pour 009).
+
+## Rapport final
+
+### A decider par l'humain
+1. **Fusion de la PR de la tranche 013** sur preuves (fiche `evidence/013.md`, trois verdicts PASS, CI).
+2. **`minRole` de `listMyOrganizations` et `createOrganization`** (D-139 point 6, audit-013 INFO-1) : `"public"` ecrit tel que D-138 le fixe, alors que `_contract.ts` le definit comme « aucune authentification » ; passer a `"authenticated"` ou documenter l'ecart.
+3. **Decisions prises en autonomie, a valider** : D-139 (lectures de forme), D-140 (decisions locales de l'implementeur), D-141 (suites des relectures).
+4. **Avant la mise en ligne** (backlog) : pagination, plafond et limite de debit des lectures, desormais aussi pour les organisations et les membres ; `Cache-Control: private, no-store`.
+
+### Tranches
+- 013 : close, PR ouverte. Aucune tranche arretee. 007, 008 hors file ; 012 menee avec l'humain.
+
+### Points d'attention
+- La justification du helper d'AC3 (suspension des declencheurs) etait fausse et je l'avais reprise telle quelle ; corrigee apres relecture, le helper ne suspend plus rien (858a37b).
+- Pour 008 : le retrait d'un membre doit supprimer sa ligne `member` (sinon il garde la vue sur les adresses).
+- Avant 012, de preference : extraire un module d'aide aux reponses d'erreur (trois copies, review-013 SUGGESTION 6).
+
+### Etat des branches
+- `slice/013-consultations-ecrans` poussee par `ship-slice.sh`, PR ouverte. `main` inchangee.
