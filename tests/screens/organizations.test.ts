@@ -105,8 +105,13 @@ describe("AC2 : inscription et message d'echec de creation", () => {
     const full = await getFullPage(`/organisations?creation=${encodeURIComponent(trap)}`, session);
 
     expectFullStatus(full, 200, "creation=valeur piegee");
-    expectAbsent(full, [marker, trap, "onerror=alert(1)", "&lt;img src=x", encodeURIComponent(trap), encodeURIComponent(marker)], "valeur piegee du parametre creation");
+    // D-146 point 4 : Next recopie la chaine de requete demandee, ENCODEE, dans les donnees embarquees
+    // (cles "c" et "q") ; la valeur encodee n'est donc pas interdite. Restent interdits : la valeur
+    // piegee BRUTE ou echappee en HTML (jamais rendue), et sa presence dans le texte visible.
+    expectAbsent(full, [trap, "<img src=x", "onerror=alert(1)", "&lt;img src=x", "&quot;&gt;"], "valeur piegee du parametre creation, brute");
+    expect(textOf(full.html.text), "texte visible sans la valeur piegee").not.toContain(marker);
     expect(textOf(full.html.text)).not.toContain(CREATION_FAILED_MESSAGE);
+    expect(full.rsc.text, "charge RSC : le message fixe n'est pas affiche").not.toContain("n'a pas pu l'etre");
   });
 
   it("AC2 (f) : un compte inscrit puis son organisation creee par les vraies routes la voit dans /organisations et comme owner sur sa page", async () => {
@@ -166,10 +171,13 @@ describe("AC3 : mes organisations", () => {
     expectFullStatus(tampered, 200, "AC3 : ?userId=<autre>");
     expect(organizationIdsOf(plain.html.text)).toEqual([mine.organizationId]);
     expect(organizationIdsOf(tampered.html.text)).toEqual([mine.organizationId]);
-    for (const page of [plain, tampered]) {
-      expectAbsent(page, [theirs.name, theirs.organizationId, theirs.owner.email, theirs.owner.userId], "AC3 : donnees de l'autre utilisateur");
-    }
-    expect(tampered.html.text, "reponse identique avec et sans parametre").toBe(plain.html.text);
+    expectAbsent(plain, [theirs.name, theirs.organizationId, theirs.owner.email, theirs.owner.userId], "AC3 : donnees de l'autre utilisateur");
+    // D-148 point 2 : l'identifiant demande figure dans l'echo de l'adresse ("q", "c") ; il est exclu de la recherche.
+    expectAbsent(tampered, [theirs.name, theirs.organizationId, theirs.owner.email], "AC3 : donnees de l'autre utilisateur (?userId=)");
+    expect(rowsOf(tampered.html.text, "organization-row").map(textOf), "meme liste affichee, meme ordre").toEqual(
+      rowsOf(plain.html.text, "organization-row").map(textOf),
+    );
+    expect(textOf(tampered.html.text), "meme texte visible avec et sans parametre").toBe(textOf(plain.html.text));
   });
 
   it("AC3 : etat vide explicite si l'utilisateur n'a aucune organisation, formulaire de creation present", async () => {
@@ -268,9 +276,13 @@ describe("AC5 : vue du member (invitation reelle)", () => {
     const { asOwner, asMember } = await ownerAndMemberPages();
 
     expect(hasTestId(asOwner.html.text, "subscription-block"), "precondition : l'owner voit le bloc").toBe(true);
+    expectNoOwnerElements(asMember);
+  });
+
+  function expectNoOwnerElements(page: Awaited<ReturnType<typeof getFullPage>>): void {
     for (const { label, text } of [
-      { label: "HTML", text: asMember.html.text },
-      { label: "charge RSC", text: asMember.rsc.text },
+      { label: "HTML", text: page.html.text },
+      { label: "charge RSC", text: page.rsc.text },
     ]) {
       expect(text, `${label} : marqueur du bloc Palier`).not.toContain("subscription-block");
       expect(text, `${label} : marqueur du formulaire d'invitation`).not.toContain("invite-form");
@@ -280,17 +292,21 @@ describe("AC5 : vue du member (invitation reelle)", () => {
       expect(text, `${label} : cancelAtPeriodEnd`).not.toContain("cancelAtPeriodEnd");
       expect(text, `${label} : currentPeriodEnd`).not.toContain("currentPeriodEnd");
     }
-  });
+  }
 
-  it("AC5 : ?role=owner (et tout autre parametre) ne change rien : reponse identique a celle sans parametre", async () => {
+  it("AC5 : ?role=owner (et tout autre parametre) ne donne aucun element reserve a l'owner, liste inchangee", async () => {
     const { org, asMember, memberSession } = await ownerAndMemberPages();
 
     for (const query of ["?role=owner", "?role=owner&tier=pro", "?owner=1", "?subscription=1"]) {
       const tampered = await getFullPage(`/organisations/${org.organizationId}${query}`, memberSession);
       expectFullStatus(tampered, 200, `AC5 : ${query}`);
-      expect(tampered.html.text, `HTML identique avec ${query}`).toBe(asMember.html.text);
-      expect(tampered.rsc.text, `charge RSC identique avec ${query}`).toBe(asMember.rsc.text);
+      // D-146 point 4 / D-115 : Next recopie la chaine de requete dans la charge ("q", "c") ; l'egalite brute
+      // n'est plus possible. Meme intention : aucun element reserve a l'owner n'apparait, le contenu visible est inchange.
+      expectNoOwnerElements(tampered);
+      expect(textOf(tampered.html.text), `texte visible identique avec ${query}`).toBe(textOf(asMember.html.text));
+      expect(rowsOf(tampered.html.text, "member-row").map(textOf), `membres inchanges avec ${query}`).toEqual(rowsOf(asMember.html.text, "member-row").map(textOf));
       expect(hasTestId(tampered.html.text, "invite-form")).toBe(false);
+      expect(hasTestId(tampered.html.text, "subscription-block")).toBe(false);
     }
   });
 });

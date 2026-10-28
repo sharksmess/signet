@@ -6,6 +6,7 @@
  * complete » = HTML + charge RSC. Les identifiants reels viennent d'une AUTRE
  * session (deux tenants reels).
  */
+import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { signUp } from "../helpers/auth";
 import { closeAllPools } from "../helpers/db";
@@ -17,7 +18,11 @@ import {
   expectPageStatus,
   getFullPage,
   getPage,
+  maskAddressDerivedKeys,
+  replaceIds,
+  secretsOutsideRequest,
   uniqueOrgName,
+  type PageResult,
 } from "../helpers/screens";
 import { INVALID_COOKIE } from "../helpers/screen-reads";
 
@@ -71,7 +76,7 @@ describe("AC1 : sans session", () => {
 
     expectPageStatus(full.html, 307, `GET ${path} sans session`);
     expectLoginRedirect(full.html.location, `GET ${path}`);
-    expectAbsent(full, secrets, `GET ${path} sans session`);
+    expectAbsent(full, secretsOutsideRequest(secrets, path), `GET ${path} sans session`);
   });
 
   it("AC1 : un identifiant d'une autre session ne change rien : meme renvoi pour une organisation et une collection inexistantes", async () => {
@@ -83,6 +88,30 @@ describe("AC1 : sans session", () => {
   });
 });
 
+describe("AC1 : le renvoi ne revele rien sur l'existence de la ressource (D-148 point 1)", () => {
+  it.each(["organisation", "collection"] as const)("AC1 : la reponse 307 est identique pour un identifiant existant (d'une autre session) et un identifiant inexistant : %s", async (kind) => {
+    const unknownOrg = randomUUID();
+    const unknownCollection = randomUUID();
+    const realPath = kind === "organisation" ? `/organisations/${org.organizationId}` : `/organisations/${org.organizationId}/collections/${collectionId}`;
+    const unknownPath = kind === "organisation" ? `/organisations/${unknownOrg}` : `/organisations/${unknownOrg}/collections/${unknownCollection}`;
+
+    const real = await getFullPage(realPath, null);
+    const unknown = await getFullPage(unknownPath, null);
+
+    expectPageStatus(real.html, 307, `GET ${realPath} sans session`);
+    expectPageStatus(unknown.html, 307, `GET ${unknownPath} sans session`);
+    const tokens: (readonly [string, string])[] = [
+      [org.organizationId, "ORG_ID_FIXE"],
+      [unknownOrg, "ORG_ID_FIXE"],
+      [collectionId, "COLLECTION_ID_FIXE"],
+      [unknownCollection, "COLLECTION_ID_FIXE"],
+    ];
+    const summary = (page: PageResult): unknown => ({ status: page.status, location: page.location, body: maskAddressDerivedKeys(replaceIds(page.text, tokens)) });
+    expect(summary(real.html), "HTML : statut, Location et corps").toEqual(summary(unknown.html));
+    expect(summary(real.rsc), "charge RSC : statut, Location et corps").toEqual(summary(unknown.rsc));
+  });
+});
+
 describe("AC1 : cookie invalide -> meme resultat que sans session", () => {
   it.each([0, 1, 2])("AC1 : la page privee %i avec un cookie invalide renvoie 307 vers /connexion, sans donnee", async (index) => {
     const path = privatePaths()[index] ?? "";
@@ -91,7 +120,7 @@ describe("AC1 : cookie invalide -> meme resultat que sans session", () => {
 
     expectPageStatus(full.html, 307, `GET ${path} cookie invalide`);
     expectLoginRedirect(full.html.location, `GET ${path} cookie invalide`);
-    expectAbsent(full, secrets, `GET ${path} cookie invalide`);
+    expectAbsent(full, secretsOutsideRequest(secrets, path), `GET ${path} cookie invalide`);
   });
 
   it("AC1 : « / » avec un cookie invalide renvoie 307 vers /connexion", async () => {

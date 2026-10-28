@@ -74,7 +74,7 @@ export interface RequestsApi {
 
 export interface MessagesApi {
   FIXED_MESSAGES: readonly string[];
-  chooseMessage(form: FormId, status: number, body: unknown): string;
+  chooseMessage: (form: FormId, status: number, body: unknown) => string;
 }
 
 /** Chemins tenus dans des constantes : un import litteral d un module absent ferait echouer tsc sur tout le depot. */
@@ -159,15 +159,15 @@ export type FakeReply = { status: number; body?: unknown } | { throws: true };
 /** `replies[i]` repond au i-eme appel ; un appel de plus que prevu echoue (aucune tentative supplementaire tolerée). */
 export function fakeFetch(replies: readonly FakeReply[]): { fetchFn: FetchLike; calls: RecordedCall[] } {
   const calls: RecordedCall[] = [];
-  const fetchFn: FetchLike = async (url, init) => {
+  const fetchFn: FetchLike = (url, init) => {
     calls.push({ url, method: init.method, headers: init.headers, body: init.body });
     const reply = replies[calls.length - 1];
-    if (reply === undefined) throw new Error(`fakeFetch : appel inattendu numero ${calls.length} (${init.method} ${url}) ; ${replies.length} reponse(s) prevue(s).`);
-    if ("throws" in reply) throw new TypeError("Failed to fetch");
-    return new Response(reply.body === undefined ? null : JSON.stringify(reply.body), {
+    if (reply === undefined) return Promise.reject(new Error(`fakeFetch : appel inattendu numero ${calls.length} (${init.method} ${url}) ; ${replies.length} reponse(s) prevue(s).`));
+    if ("throws" in reply) return Promise.reject(new TypeError("Failed to fetch"));
+    return Promise.resolve(new Response(reply.body === undefined ? null : JSON.stringify(reply.body), {
       status: reply.status,
       headers: { "Content-Type": "application/json" },
-    });
+    }));
   };
   return { fetchFn, calls };
 }

@@ -35,7 +35,6 @@ const GENERIC = "Une erreur est survenue. Reessayer.";
 const SESSION_EXPIRED = "Session expiree.";
 const THROTTLED = "Trop de tentatives. Reessayer dans quelques minutes.";
 const SIGN_IN_FAILED = "Adresse ou mot de passe incorrect.";
-const ACCOUNT_EXISTS = "Un compte existe deja pour cette adresse.";
 const SIGN_UP_REFUSED = "Adresse e-mail invalide, ou mot de passe trop court (8 caracteres minimum).";
 const ORGANIZATION_NAME_INVALID = "Nom d'organisation invalide : 1 a 120 caracteres, espaces de bord exclus.";
 const COLLECTION_NAME_INVALID = "Nom de collection invalide : 1 a 100 caracteres, espaces de bord exclus.";

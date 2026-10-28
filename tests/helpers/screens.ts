@@ -47,8 +47,16 @@ export interface PageResult {
 export async function getPage(path: string, cookie: string | null, options?: { rsc?: boolean }): Promise<PageResult> {
   const headers: Record<string, string> = {};
   if (cookie) headers.Cookie = cookie;
-  if (options?.rsc) headers.RSC = "1";
-  const response = await fetch(`${baseUrl()}${path}`, { method: "GET", headers, redirect: "manual" });
+  let target = path;
+  if (options?.rsc) {
+    headers.RSC = "1";
+    // Next 16.4 (`experimental.validateRSCRequestHeaders`, base-server) exige `_rsc` = hash des
+    // en-tetes de routeur (Next-Router-Prefetch, -Segment-Prefetch, -State-Tree, Next-Url). Ce helper
+    // n'en envoie aucun : computeCacheBustingSearchParam renvoie alors '' (hash attendu = chaine vide),
+    // donc `_rsc=` vide, ajoute apres la chaine de requete existante.
+    target = `${path}${path.includes("?") ? "&" : "?"}_rsc=`;
+  }
+  const response = await fetch(`${baseUrl()}${target}`, { method: "GET", headers, redirect: "manual" });
   return {
     status: response.status,
     location: response.headers.get("location"),
@@ -104,6 +112,16 @@ export function expectAbsent(page: FullPage, forbidden: readonly string[], label
   }
 }
 
+/**
+ * D-148 points 1 et 3 : Next reprend dans la reponse les identifiants que contient l'adresse demandee
+ * (corps du 307, arbre de la page introuvable). Seuls ceux-ci sont retires de la liste des valeurs interdites ;
+ * tout nom, adresse, titre et autre identifiant reste interdit.
+ */
+export function secretsOutsideRequest(secrets: readonly string[], path: string): string[] {
+  const requested = path.toLowerCase();
+  return secrets.filter((secret) => !requested.includes(secret.toLowerCase()));
+}
+
 /** Remplace (sans tenir compte de la casse) chaque identifiant demande par un jeton fixe. */
 export function replaceIds(text: string, replacements: readonly (readonly [string, string])[]): string {
   let result = text;
@@ -112,6 +130,16 @@ export function replaceIds(text: string, replacements: readonly (readonly [strin
     result = result.replace(new RegExp(escaped, "gi"), token);
   }
   return result;
+}
+
+/**
+ * Next derive de l'adresse demandee (chemin ET chaine de requete) les cles React des elements d'en-tete
+ * (metadonnees, viewport) de la charge RSC : 21 caracteres base64url suivis de « v » ou « m », entre
+ * guillemets. Elles different donc d'une adresse a l'autre sans porter de donnee : on les masque avant de
+ * comparer deux charges (meme famille que l'echo « q »/« c » de D-146 point 4 et D-148).
+ */
+export function maskAddressDerivedKeys(text: string): string {
+  return text.replace(/"[A-Za-z0-9_-]{21}[vm]"/g, '"CLE_ENTETE_FIXE"');
 }
 
 // ---------------------------------------------------------------------------
