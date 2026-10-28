@@ -5,13 +5,13 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 ## Etat
 - Statut : en cours d'implementation
 - Branche : slice/012-ecrans
-- Dernier commit : c3deb74 docs(contracts): minRole authenticated pour les organisations (D-143)
-- Prochaine etape : fonctions pures `apps/web/src/ui/` (visible-text, safe-link, requests, messages)
+- Dernier commit : 2f3ba49 feat(ui): fonctions pures d'affichage, requetes et messages fixes
+- Prochaine etape : pages `apps/web/src/app/` (gabarit, accueil, connexion, inscription, organisations, organisation, collection, acceptation, introuvable) et formulaires clients `apps/web/src/ui/`
 
 ## Couches
 - [ ] Migration — sans objet (aucune migration, consigne point 1)
 - [ ] Acces donnees — sans objet (fonctions existantes de `lib/`, inchangees)
-- [ ] Logique metier — fonctions pures d'affichage et de requetes (`apps/web/src/ui/`)
+- [x] Logique metier — fonctions pures d'affichage et de requetes (`apps/web/src/ui/`) : 2f3ba49 (visible-text, requests, messages, form-protection : 77 tests verts)
 - [x] API — sans objet (aucune route) ; etiquette `minRole` de D-143 dans `api-contracts/organizations.ts` : c3deb74
 - [ ] UI — pages `apps/web/src/app/` et composants `apps/web/src/ui/`
 - [ ] Suite complete verte + `pnpm run check`
@@ -34,6 +34,15 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 - Correction D-146 (AC13) : bloc « better-auth refuse une connexion d'Origin etrangere » retire de `form-protection.test.ts` (import `expectStatus` inutile retire), commentaire d'en-tete mis a jour (TEST=true herite de Vitest) ; les tests de cookies et de 401 sans cookie sont inchanges.
 - Correction D-146 (AC8) : `safe-display.test.ts` verifie le type de contenu de la charge RSC par egalite exacte du type de media (avant `;`, trim, minuscules) avec `text/x-component` ; le reste du fichier est conforme au texte corrige (HTML entier, charge RSC sans `__html` ni caractere invisible brut), aucun ecart.
 - Non testes : vrais clics/double clic/`router.refresh`/`history.replaceState` (aucun navigateur, D-137) ; propositions de suite d'erreur (`Se deconnecter` sur 403, lien `/organisations` sur 409 ALREADY_MEMBER, lien `/connexion` sur 401) ; texte propre du formulaire « Ajouter un lien » pour un 422 hors liste (non specifie : seul le fait d'etre dans `FIXED_MESSAGES` est teste) ; schema non http(s) cote page (la base refuse ces URL, seule la fonction pure est testee).
+
+### Implementation (implementeur)
+- D-143 (c3deb74) : `minRole: "authenticated"` pour `createOrganization` et `listMyOrganizations`, commentaires alignes sur « toute session valide » ; aucun autre changement du contrat.
+- `ui/safe-link.tsx` ne contient que la fonction pure, sans JSX : le test la charge par Vitest, dont la transformation JSX n'est pas configuree a la racine ; le rendu de la ligne de lien est dans un composant serveur separe. Ecarte : un composant JSX dans ce fichier (risque de dependre de la configuration JSX de Vitest, sans gain).
+- `ui/messages.ts` recopie les textes de `lib/errors.ts` et des constantes des routes (contrat : « recopies ») au lieu de les importer : le module est charge par des composants clients et reste sans dependance serveur ; le test compare a `lib/errors.ts`, ce qui detecte toute derive. Ecarte : import de `lib/errors.ts` (couplage d'un module client a `lib/`).
+- Inscription : « compte existant » = codes better-auth `USER_ALREADY_EXISTS` et `USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL` (`@better-auth/core`, `error/codes`), sur `400`/`422` ; autre `400`/`422` : texte d'adresse ou de mot de passe invalide ; tout autre statut : texte generique. Ecarte : tout 4xx comme refus de saisie (un `418` ou `403` inattendu serait mal explique).
+- Formulaires prives : le `422` de « Nouvelle collection » donne toujours le texte du nom invalide (l'identifiant d'organisation vient de la page, jamais saisi) ; `404 ORGANIZATION_NOT_FOUND` et `401` traites avant les codes propres au formulaire.
+- `FIXED_MESSAGES` contient aussi les deux textes fixes de page « Lien d'invitation incomplet » et « Votre compte est cree, mais l'organisation n'a pas pu l'etre. Creez-la ci-dessous. » : liste unique de tous les textes affichables, comme le demande la signature.
+- `signUpWithOrganization` : l'identifiant rendu par la creation n'est repris dans la destination que s'il a la forme d'un UUID (sinon : `creation_failed`) ; aucune valeur de reponse non verifiee dans une adresse. Erreur reseau = statut 0 (jamais d'exception vers le formulaire).
 
 ### Reponses de l'humain (D-146)
 - QUESTION 1 (AC13) : clause d'`Origin` retiree de 012, raison au contrat ; correction d'usine 1.6.5 puis adoption dans Signet (test retabli, commentaire de `tests/helpers/auth.ts` corrige), au backlog. Test retire par `test-writer`.
