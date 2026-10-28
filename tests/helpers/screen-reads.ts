@@ -168,11 +168,10 @@ export async function insertTiedOrganizations(userId: string): Promise<TiedOrgan
   const createdAt = await asBypassRls(async (client) => {
     await client.query("BEGIN");
     try {
-      // Les declencheurs de creation (compteur, abonnement) tournent sous signet_definer et exigent un contexte
-      // de membre verifie, impossible avant que la ligne existe : on les suspend pour CETTE transaction seulement
-      // (la lecture testee ne depend que de organization et member).
-      await client.query("SELECT set_config('session_replication_role', 'replica', true)");
+      // Les declencheurs de creation (compteur, abonnement) tournent sous signet_definer et leurs politiques lisent
+      // la valeur brute de app.organization_id : on la pose avant chaque INSERT (SET LOCAL, meme transaction).
       for (const [index, id] of insertionOrder.entries()) {
+        await client.query("SELECT set_config('app.organization_id', $1, true)", [id]);
         await client.query("INSERT INTO organization (id, name, slug) VALUES ($1, $2, $3)", [
           id,
           `Organisation simultanee ${index}`,
