@@ -1,0 +1,17 @@
+docs/03-slices/009-*
+docs/03-slices/000-backlog.md
+docs/02-architecture/ERD.md
+docs/DECISIONS.md
+docs/00-context/JOURNAL.md
+docs/00-context/journal/22-*
+docs/04-runbooks/FRICTION.md
+docs/04-runbooks/consigne-run-queue-009.md
+docs/04-runbooks/autonomous-run-2026-10-27.md
+docs/04-runbooks/evidence/009.md
+docs/04-runbooks/audits/*-009.md
+apps/web/src/app/api/organizations/\[organizationId\]/collections/route.ts
+apps/web/src/app/api/organizations/\[organizationId\]/collections/\[collectionId\]/links/route.ts
+apps/web/src/lib/collections/*
+apps/web/src/lib/links/*
+tests/consultation/**
+tests/helpers/consultation*.ts

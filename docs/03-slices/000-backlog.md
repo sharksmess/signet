@@ -20,9 +20,9 @@ Ordre de dependance technique d'abord, risque decroissant en departage a profond
 
 Les identifiants ne sont jamais renumerotes (D-025) : une tranche inseree prend le prochain numero libre, et l'ordre d'execution est ecrit ici.
 
-001 (close) -> 010 (close) -> 011 (close) -> 002 (close) -> **003** -> 006 -> 004 (en mode autonome) -> 005 -> 012 (ecrans)
+001 (close) -> 010 (close) -> 011 (close) -> 002 (close) -> **003** -> 006 -> 004 (en mode autonome) -> 005 -> 009 (en mode autonome) -> 012 (ecrans)
 
-Objectif A (D-083, D-084) : la sequence ci-dessus termine l'usine. 007, 008 et 009 sont hors objectif (backlog), avec la mise en ligne et les vrais paiements.
+Objectif A (D-083, D-084, D-130) : la sequence ci-dessus termine l'usine. 009 y entre par D-130 (les ecrans de 012 doivent afficher collections et liens) ; 007 et 008 restent hors objectif (backlog), avec la mise en ligne et les vrais paiements.
 
 Tranche **012 — Ecrans** (nouvelle, prochain numero libre selon D-025) : page de connexion et d'inscription, page de l'organisation (palier, membres, collections), page d'une collection et de ses liens. Depend de 001 a 006. Cadrage a ecrire a son ouverture.
 
@@ -140,6 +140,14 @@ Tranche **012 — Ecrans** (nouvelle, prochain numero libre selon D-025) : page 
   - review-005 (seconde relecture) SUGGESTION 3 : `tests/links/validation.test.ts:102-109` double `error-order.test.ts:41-48` (egalite seule) ; retirer ou renvoyer en commentaire.
   - review-005 (seconde relecture) SUGGESTION 5 : coupure de ligne dans le commentaire D-120/D-126 de `docs/02-architecture/api-contracts/links.ts:22-25`, a refaire a la prochaine modification du contrat.
   - review-005 SUGGESTION 5 : le filtre `c.organization_id = $1` de `lib/links/links.ts` n'est demontrable que par la lecture (la RLS de `collection` masque deja la collection etrangere) ; aucune action, a ne pas croire prouve par AC5 (b).
+- **Issus de la tranche 009 (D-131)** :
+  - **avant la mise en ligne** (D-131 point 3, audit-009 MINEUR-1) : pagination et plafond de reponse de `GET .../collections` et `GET .../collections/:id/links` ; une organisation Pro n'a aucune borne de liens, et **la liste des collections n'a aucune borne meme en Free** (aucun plafond de collections, audit-004 MINEUR-1). Pagination par curseur `(created_at, id)` (suit `link_collection_recent_idx`), taille de page plafonnee par le serveur ; limiteur a stockage partage par utilisateur et organisation sur les `GET` comme sur les `POST` (avec audit-001 MINEUR-5, audit-002 MINEUR-1, audit-004 MINEUR-1, audit-005 INFO-5). Changement de contrat (`listCollections`, `listLinks`), a decider par l'humain ;
+  - index `collection (organization_id, created_at)` si le nombre de collections par organisation le justifie (D-131 point 5, `db-architect`) ;
+  - **avant la mise en ligne** (audit-009 INFO-1) : `Cache-Control: private, no-store` sur toutes les reponses d'API authentifiees (reglage global, aucune route ne le pose aujourd'hui) ; avec `X-Content-Type-Options: nosniff` (audit-009 INFO-2) ;
+  - contracts-009 : a la prochaine modification des contrats, ajouter le `422 VALIDATION_FAILED` (identifiant malforme, D-132 point 2) aux `errors` de `listCollections` et `listLinks`, et contractualiser l'ordre de `listCollections` (D-131 point 1), comme celui de `listLinks` ;
+  - review-009 SUGGESTION 1 (etend review-005 SUGGESTION 5) : les filtres `organization_id` explicites de `readCollections` et `readLinks` ne sont prouves que par la lecture (la RLS masque leur retrait) ; ne pas croire la regle « filtre tenant explicite » prouvee par AC6 ;
+  - review-009 SUGGESTION 3 : casts explicites (`$1::uuid`) dans `addLink` mais pas dans `readLinks` (`lib/links/links.ts`) ; aligner a la prochaine modification ;
+  - review-009 SUGGESTION 4 : `snapshotOrganization` (`tests/helpers/consultation.ts`, AC10) ne compte que les lignes de `collection` ; comparer les lignes completes, comme AC8 pour `link`.
 - Le detail complet de chaque tranche (perimetre fichiers, contrat de donnees, contrat d'API, criteres d'acceptation AC1-AC5, anti-regression) est ecrit au moment de son ouverture, au format `templates/SLICE.md`, dans `docs/03-slices/<id>-<nom>.md`.
 
 ## Questions d'architecture ouvertes

@@ -122,3 +122,100 @@ export async function addLink(params: {
     });
   });
 }
+
+/** Element de `listLinks.output` : exactement ces champs (tranche 009, AC1). */
+export interface LinkListItem {
+  id: string;
+  url: string;
+  title: string;
+  addedBy: string;
+  /** ISO 8601 UTC, horloge de la base. */
+  createdAt: string;
+}
+
+interface LinkListRow {
+  id: string;
+  url: string;
+  title: string;
+  added_by_user_id: string;
+  created_at: Date;
+}
+
+/**
+ * Liste des liens d'une collection (US-07.1, US-07.2 ; tranche 009).
+ *
+ * Lecture seule, dans UNE transaction sous `signet_app` (`withTenant`, RLS en
+ * seconde barriere) :
+ * 1. appartenance, filtre explicite sur `organization_id` ET `user_id` :
+ *    non-membre ou organisation inexistante -> 404 `ORGANIZATION_NOT_FOUND` ;
+ * 2. existence de la collection dans l'organisation du chemin
+ *    (`c.id` ET `c.organization_id`) : zero ligne -> 404
+ *    `COLLECTION_NOT_FOUND`, meme corps pour inexistante et etrangere ;
+ * 3. `SELECT` avec `organization_id` et `collection_id` explicites, du plus
+ *    recent au plus ancien, `id DESC` a horodatage egal (D-131 point 2, index
+ *    `link_collection_recent_idx`). Aucune pagination (D-131 point 3).
+ *
+ * Deux instructions plutot qu'une jointure : « collection absente » et « liste
+ * vide » se distinguent sans ambiguite. Valeurs rendues telles qu'enregistrees
+ * (D-131 point 4), reponse construite champ par champ. Toute erreur de la base
+ * est inattendue : journalisee par son seul code (jamais un identifiant, une
+ * URL ni un titre), puis relevee sans detail (500 generique).
+ */
+export async function listLinks(params: {
+  userId: string;
+  /** Forme canonique (minuscules). */
+  organizationId: string;
+  /** Forme canonique (minuscules). */
+  collectionId: string;
+}): Promise<Result<LinkListItem[]>> {
+  try {
+    return await readLinks(params);
+  } catch (error) {
+    console.error(`[links] lecture : erreur inattendue de la base (code ${sqlStateOf(error) ?? "absent"})`);
+    throw new Error("lecture des liens : erreur inattendue");
+  }
+}
+
+async function readLinks(params: {
+  userId: string;
+  organizationId: string;
+  collectionId: string;
+}): Promise<Result<LinkListItem[]>> {
+  const { userId, organizationId, collectionId } = params;
+
+  return withTenant({ userId, organizationId }, async (client) => {
+    const membership = await client.query(
+      `SELECT 1
+         FROM member m
+        WHERE m.organization_id = $1 AND m.user_id = $2`,
+      [organizationId, userId],
+    );
+    if ((membership.rowCount ?? 0) === 0) return fail(organizationNotFound());
+
+    const collection = await client.query(
+      `SELECT 1
+         FROM collection c
+        WHERE c.id = $2 AND c.organization_id = $1`,
+      [organizationId, collectionId],
+    );
+    if ((collection.rowCount ?? 0) === 0) return fail(collectionNotFound());
+
+    const result = await client.query<LinkListRow>(
+      `SELECT l.id, l.url, l.title, l.added_by_user_id, l.created_at
+         FROM link l
+        WHERE l.organization_id = $1 AND l.collection_id = $2
+        ORDER BY l.created_at DESC, l.id DESC`,
+      [organizationId, collectionId],
+    );
+
+    return ok(
+      result.rows.map((row) => ({
+        id: row.id,
+        url: row.url,
+        title: row.title,
+        addedBy: row.added_by_user_id,
+        createdAt: row.created_at.toISOString(),
+      })),
+    );
+  });
+}

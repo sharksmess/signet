@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { unauthenticated, validationFailed, type ApiError } from "@/lib/errors";
-import { addLink as addLinkContract } from "@/lib/links/contracts";
-import { addLink } from "@/lib/links/links";
+import { addLink as addLinkContract, listLinks as listLinksContract } from "@/lib/links/contracts";
+import { addLink, listLinks } from "@/lib/links/links";
 
 /**
  * US-06 : ajout d'un lien a une collection par un membre, owner ou member
@@ -17,6 +17,13 @@ import { addLink } from "@/lib/links/links";
  * Messages de 422 fixes : ni la valeur soumise, ni le message de Zod
  * (precedent D-114 point 4). Premier champ fautif dans l'ordre : chemin
  * (organisation, collection), puis `url`, puis `title`.
+ *
+ * US-07.1, US-07.2 : liste des liens d'une collection par un membre, owner ou
+ * member (tranche 009, contrat `listLinks`). Ordre : session -> validation du
+ * chemin (contrat, meme ordre des messages) -> lecture (`lib/links/links.ts` :
+ * appartenance, collection de l'organisation du chemin, puis SELECT
+ * `created_at DESC, id DESC`). `200` avec la liste, `[]` si aucun lien. Chaine
+ * de requete ignoree (aucun parametre au contrat). Aucune ecriture.
  */
 
 const BODY_EXPECTED = "Corps JSON attendu.";
@@ -77,4 +84,28 @@ export async function POST(
   });
   if (!result.ok) return errorResponse(result.error);
   return NextResponse.json(result.value, { status: 201 });
+}
+
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ organizationId: string; collectionId: string }> },
+): Promise<NextResponse> {
+  const session = await auth.api.getSession({ headers: request.headers });
+  if (!session) return errorResponse(unauthenticated());
+
+  const { organizationId, collectionId } = await params;
+  const parsed = listLinksContract.input.safeParse({ organizationId, collectionId });
+  if (!parsed.success) {
+    const faulty = new Set(parsed.error.issues.map((issue) => issue.path[0]));
+    const [, message] = FIELD_MESSAGES.find(([field]) => faulty.has(field)) ?? ["", INVALID_REQUEST];
+    return errorResponse(validationFailed(message));
+  }
+
+  const result = await listLinks({
+    userId: session.user.id,
+    organizationId: canonical(parsed.data.organizationId),
+    collectionId: canonical(parsed.data.collectionId),
+  });
+  if (!result.ok) return errorResponse(result.error);
+  return NextResponse.json(result.value, { status: 200 });
 }
