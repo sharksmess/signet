@@ -3,10 +3,10 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : implementation terminee, AC1 a AC11 verts (AC12 : verification ponctuelle de l'orchestrateur)
+- Statut : auditee — AC1 a AC12 coches (AC12 verifie par l'orchestrateur, d57dcfa) ; AUDIT, CONTRACTS, REVIEW : PASS ; review-013 A CORRIGER 2 traite par `test-writer` (858a37b, `tests/screen-reads` 30/30), A CORRIGER 1 par D-140
 - Branche : slice/013-consultations-ecrans
-- Dernier commit : c3ae367 feat(slice-013): routes GET organisations et membres
-- Prochaine etape : orchestrateur — trois relecteurs, registre, `bash scripts/close-slice.sh` (fiche de preuves, AC12)
+- Dernier commit : bdb1377 docs(slice-013): corriger la decision du helper d'horodatage egal
+- Prochaine etape : orchestrateur — `bash scripts/close-slice.sh` (rejoue la suite complete), puis `bash scripts/ship-slice.sh`
 - Resultats (2026-10-28) : `tests/screen-reads` 4 fichiers, 30/30 en 90,95 s ; `pnpm run check` vert (typecheck + eslint) ; `pnpm test` 62 fichiers, 748 passes, 1 ignore (AC16 de 003, `runIf` de branche `slice/003-`, preexistant), 0 echec, 196,58 s
 
 ## Couches
