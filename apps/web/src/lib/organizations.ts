@@ -50,6 +50,63 @@ export async function createOrganization(
   });
 }
 
+/** Element de `listMyOrganizations.output` : exactement ces champs (tranche 013, AC3). */
+export interface MyOrganizationItem {
+  id: string;
+  name: string;
+  /** ISO 8601 UTC : date de creation de l'organisation, jamais la date d'arrivee. */
+  createdAt: string;
+}
+
+interface MyOrganizationRow {
+  id: string;
+  name: string;
+  created_at: Date;
+}
+
+/**
+ * Organisations dont l'utilisateur de session est membre (US-01 ; tranche 013,
+ * D-138 points 1 et 2).
+ *
+ * Lecture seule, dans UNE transaction sous `signet_app`, contexte utilisateur
+ * sans organisation (`withUserOnly`, patron de `createOrganization`). L'axe
+ * tenant est ici l'utilisateur : `signet.organizations_for_user` filtre
+ * `m.user_id = current_user_id()` et leve `SG002` si l'argument differe de
+ * `app.user_id` (ADR-0011 § e). `userId` vient toujours de la session, jamais
+ * de la requete.
+ *
+ * Ordre `created_at DESC, id DESC` de l'organisation ; aucune pagination
+ * (D-138 point 4). Reponse construite champ par champ. Toute erreur de la base
+ * est inattendue : journalisee par son seul code (jamais un identifiant ni un
+ * nom), puis relevee sans detail (500 generique, patron D-133 point 3).
+ */
+export async function listMyOrganizations(userId: string): Promise<Result<MyOrganizationItem[]>> {
+  try {
+    const rows = await withUserOnly(userId, async (client) => {
+      const result = await client.query<MyOrganizationRow>(
+        `SELECT o.id, o.name, o.created_at
+           FROM signet.organizations_for_user($1) o
+          ORDER BY o.created_at DESC, o.id DESC`,
+        [userId],
+      );
+      return result.rows;
+    });
+    return ok(
+      rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        createdAt: row.created_at.toISOString(),
+      })),
+    );
+  } catch (error) {
+    const code = typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
+    console.error(
+      `[organizations] lecture : erreur inattendue de la base (code ${typeof code === "string" ? code : "absent"})`,
+    );
+    throw new Error("lecture des organisations : erreur inattendue");
+  }
+}
+
 export interface RenamedOrganization {
   id: string;
   name: string;
