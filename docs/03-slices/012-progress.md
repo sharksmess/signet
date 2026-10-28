@@ -6,7 +6,7 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 - Statut : ouverte
 - Branche : slice/012-ecrans
 - Dernier commit : 6d49e4d test(slice-012): criteres d'acceptation de la tranche 012
-- Prochaine etape : implementer couche par couche (fonctions pures `apps/web/src/ui/`, puis pages) jusqu'a faire passer `tests/screens/**` ; lever d'abord les deux questions de la section Decisions (AC13 Origin, serialisation RSC)
+- Prochaine etape : implementer couche par couche (fonctions pures `apps/web/src/ui/`, puis pages) jusqu'a faire passer `tests/screens/**` ; questions de la section Decisions tranchees (D-146)
 
 ## Couches
 - [ ] Migration — sans objet (aucune migration, consigne point 1)
@@ -32,3 +32,8 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 - QUESTION 1 (AC13, derniere clause) : sur le serveur de test, `POST /api/auth/sign-in/email` avec `Origin` etrangere recoit **200**, avec ou sans cookie de session : better-auth ne refuse pas l'Origin etrangere ici. Le test (avec cookie) echoue donc independamment des ecrans ; sans travail serveur (interdit) il ne peut pas passer. A arbitrer par l'humain (retirer la clause, ou backlog serveur).
 - QUESTION 2 (risque) : les comparaisons d'identite avec parametre (`?role=owner`, AC5) et l'absence d'une valeur piegee de `?creation=` (AC2 e) portent aussi sur la charge RSC ; Next peut y serialiser la chaine de requete (cle de segment de page). Si l'implementation echoue sur ce seul point, arbitrage a faire, pas un defaut de page.
 - Non testes : vrais clics/double clic/`router.refresh`/`history.replaceState` (aucun navigateur, D-137) ; propositions de suite d'erreur (`Se deconnecter` sur 403, lien `/organisations` sur 409 ALREADY_MEMBER, lien `/connexion` sur 401) ; texte propre du formulaire « Ajouter un lien » pour un 422 hors liste (non specifie : seul le fait d'etre dans `FIXED_MESSAGES` est teste) ; schema non http(s) cote page (la base refuse ces URL, seule la fonction pure est testee).
+
+### Reponses de l'humain (D-146)
+- QUESTION 1 (AC13) : clause d'`Origin` retiree de 012, raison au contrat ; correction d'usine 1.6.5 puis adoption dans Signet (test retabli, commentaire de `tests/helpers/auth.ts` corrige), au backlog. Test retire par `test-writer`.
+- AC8 : interpretation validee, texte d'AC8 corrige ; `test-writer` aligne l'assertion du type de contenu RSC (egalite exacte avec `text/x-component`, au lieu de « ne contient pas `text/html` »).
+- QUESTION 2 (regle d'avance) : si Next recopie la chaine de requete dans la charge RSC et qu'AC2 (e) echoue sans defaut de page, `test-writer` reporte l'assertion sur les elements reserves a l'owner (palier, formulaire d'invitation), meme intention et meme severite (D-115), consigne ici ; arret seulement si une page affiche reellement un element reserve.
