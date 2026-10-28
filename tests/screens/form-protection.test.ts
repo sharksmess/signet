@@ -4,15 +4,20 @@
  * relever par les tests »).
  *
  * Ces tests decrivent des comportements DEJA presents (cookie better-auth,
- * 401 sans session, controle d'Origin de better-auth) : ils peuvent passer avant
- * l'implementation des pages, c'est voulu (caracterisation de la garde sur
- * laquelle repose D-144 Q-2, pas une verification de tranche). Les tests de
- * messages, eux, exigent ui/messages.ts.
+ * 401 sans session) : ils peuvent passer avant l'implementation des pages,
+ * c'est voulu (caracterisation de la garde sur laquelle repose D-144 Q-2, pas
+ * une verification de tranche). Les tests de messages, eux, exigent
+ * ui/messages.ts.
+ *
+ * Clause retiree par D-146 : « better-auth refuse une connexion d'Origin
+ * etrangere (403) ». Vitest pose TEST=true, herite par le serveur de test, et
+ * better-auth saute alors son controle d'origine ; le test ne pouvait pas
+ * passer ici. Retablissement au backlog (correction d'usine 1.6.5).
  */
 import { randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it } from "vitest";
 import { baseUrl, signUp, uniqueEmail } from "../helpers/auth";
-import { readResponse, expectError, expectStatus } from "../helpers/billing";
+import { readResponse, expectError } from "../helpers/billing";
 import { readCollections } from "../helpers/collections";
 import { closeAllPools } from "../helpers/db";
 import { createOrganizationFixture } from "../helpers/fixtures";
@@ -123,22 +128,6 @@ describe("AC13 : une ecriture sans cookie (forme d'une soumission inter-sites) r
 
     expectError(result, 401, "UNAUTHENTICATED", "POST lien sans cookie");
     expect(await countLinks(org.organizationId)).toBe(before);
-  });
-});
-
-describe("AC13 : better-auth refuse une connexion d'Origin etrangere", () => {
-  it("AC13 : sign-in/email d'Origin etrangere portant un cookie de session : 403, aucun cookie de session pose (better-auth ne controle l'Origin que des requetes qui portent un cookie)", async () => {
-    const account = await signUp({ password: PASSWORD });
-
-    const response = await fetch(`${baseUrl()}/api/auth/sign-in/email`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Origin: FOREIGN_ORIGIN, Cookie: account.cookie },
-      body: JSON.stringify({ email: account.email, password: PASSWORD }),
-    });
-
-    const result = await readResponse(response);
-    expectStatus(result, 403, "connexion d'Origin etrangere");
-    expect(sessionCookiesOf(response)).toHaveLength(0);
   });
 });
 

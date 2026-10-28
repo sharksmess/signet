@@ -12,7 +12,8 @@
  * Lecture de « non echappee » : dans le HTML, aucune suite piegee brute ; dans la
  * charge RSC (text/x-component, pas du HTML), les valeurs restent des chaines JSON
  * (donc a echapper cote navigateur par React) : on exige qu'elle ne porte aucune
- * cle `__html` (aucun HTML brut injecte) et qu'elle ne soit pas servie comme HTML.
+ * cle `__html` (aucun HTML brut injecte) et qu'elle soit servie exactement comme
+ * text/x-component (type de media egal, D-146 point 2).
  * Les caracteres invisibles, eux, ne doivent apparaitre sous AUCUNE forme brute,
  * dans le HTML comme dans la charge RSC.
  */
@@ -113,12 +114,13 @@ describe("AC8 : valeurs piegees", () => {
     }
   });
 
-  it.each(TRAP_NAMES)("AC8 : %s : la charge RSC n'injecte aucun HTML brut (pas de __html) et n'est pas servie comme HTML", (name) => {
+  it.each(TRAP_NAMES)("AC8 : %s : la charge RSC n'injecte aucun HTML brut (pas de __html) et est servie exactement comme text/x-component", (name) => {
     expectFullStatus(trapped.pages[name], 200, `AC8 : page ${name} (precondition : la page est servie)`);
     const rsc = trapped.pages[name].rsc;
 
     expect(rsc.text, "cle __html").not.toContain("__html");
-    expect(rsc.contentType ?? "", "type de contenu de la charge RSC").not.toContain("text/html");
+    const mediaType = (rsc.contentType ?? "").split(";")[0]?.trim().toLowerCase();
+    expect(mediaType, `type de contenu de la charge RSC (en-tete brut : ${rsc.contentType})`).toBe("text/x-component");
     expect(rsc.text.length, "la charge RSC n'est pas vide").toBeGreaterThan(0);
   });
 
