@@ -15,16 +15,21 @@ Ordre de dependance technique d'abord, risque decroissant en departage a profond
 | 009 | Consultation des collections et des liens | US-07 | 004, 005 | Depend de collections et de liens existants pour verifier le tri et l'isolation en lecture sur des donnees reelles. Risque le plus bas du backlog : lecture seule, patron d'isolation deja eprouve par les tranches precedentes. |
 | 010 | Durcissement de l'isolation tenant (tranche technique) | US-09 (transverse) | 001 | Decision humaine D-022 (audit-001 MINEUR-1, option A) + MINEUR-10. **Executee avant 002** (D-024) : toutes les tranches suivantes copient le patron `withTenant` et les politiques RLS ; il doit etre juste avant d'etre reproduit. |
 | 011 | Montee Next 16 et ESLint 10 (tranche technique) (ESLint 10 reporte, ADR-0013) | transverse | 010 | Decision humaine D-041 : Next 15 arrive en fin de maintenance en octobre 2026 (ADR-0008) ; la migration ne coutera jamais moins cher qu'avec 3 routes. **Executee avant 002.** |
+| 013 | Consultations pour les ecrans (mes organisations, membres) | US-07.1 (partiel) et parcours d'ecran | 001, 006 | Decision humaine D-136 : les deux lectures qui manquent aux ecrans de 012 (organisations de l'utilisateur, membres d'une organisation), separees de 012 pour garder une tranche d'ecrans sans travail serveur nouveau. Lectures decidees d'avance (D-138). **Executee avant 012, en mode autonome.** |
 
 ## Ordre d'execution
 
 Les identifiants ne sont jamais renumerotes (D-025) : une tranche inseree prend le prochain numero libre, et l'ordre d'execution est ecrit ici.
 
-001 (close) -> 010 (close) -> 011 (close) -> 002 (close) -> **003** -> 006 -> 004 (en mode autonome) -> 005 -> 009 (en mode autonome) -> 012 (ecrans)
+001 (close) -> 010 (close) -> 011 (close) -> 002 (close) -> **003** -> 006 -> 004 (en mode autonome) -> 005 -> 009 (en mode autonome) -> 013 (en mode autonome) -> 012 (ecrans)
 
-Objectif A (D-083, D-084, D-130) : la sequence ci-dessus termine l'usine. 009 y entre par D-130 (les ecrans de 012 doivent afficher collections et liens) ; 007 et 008 restent hors objectif (backlog), avec la mise en ligne et les vrais paiements.
+Objectif A (D-083, D-084, D-130, D-136) : la sequence ci-dessus termine l'usine. 009 y entre par D-130 (les ecrans de 012 doivent afficher collections et liens) ; 013 y entre par D-136 (les ecrans de 012 doivent lister les organisations de l'utilisateur et les membres) ; 007 et 008 restent hors objectif (backlog), avec la mise en ligne et les vrais paiements.
 
-Tranche **012 — Ecrans** (nouvelle, prochain numero libre selon D-025) : page de connexion et d'inscription, page de l'organisation (palier, membres, collections), page d'une collection et de ses liens. Depend de 001 a 006. Cadrage a ecrire a son ouverture.
+Tranche **012 — Ecrans** (nouvelle, prochain numero libre selon D-025) : page de connexion et d'inscription, page de l'organisation (palier, membres, collections), page d'une collection et de ses liens. Depend de 001 a 006, 009 et 013. Menee avec l'humain. Cadrage (D-137) :
+- **Preuves sans outil nouveau** : tests qui lisent les pages rendues par le serveur (contenu, echappement, isolation) **et** visite guidee par l'humain dans son navigateur, liste a cocher consignee dans la fiche de preuves ; robot de navigateur au backlog.
+- **Apparence sobre** : aucune bibliotheque de design ni dependance de style.
+- **Ecrans** : connexion et inscription ; mes organisations et creation d'une organisation ; page d'une organisation (collections et creation, membres ; palier et invitation pour l'owner seul, US-08.2, US-02) ; page d'une collection (liens et ajout, message clair au refus de quota) ; page d'acceptation d'invitation (`/invitations/accept#token=`, cible du lien d'e-mail, session exigee, P-4 **non** rouvert).
+- **Hors 012** : changement de palier (vrais paiements hors objectif), retrait d'un membre (008), suppression d'une collection (007).
 
 ## Tranche 010 — cadrage (decision D-022)
 
@@ -148,6 +153,15 @@ Tranche **012 — Ecrans** (nouvelle, prochain numero libre selon D-025) : page 
   - review-009 SUGGESTION 1 (etend review-005 SUGGESTION 5) : les filtres `organization_id` explicites de `readCollections` et `readLinks` ne sont prouves que par la lecture (la RLS masque leur retrait) ; ne pas croire la regle « filtre tenant explicite » prouvee par AC6 ;
   - review-009 SUGGESTION 3 : casts explicites (`$1::uuid`) dans `addLink` mais pas dans `readLinks` (`lib/links/links.ts`) ; aligner a la prochaine modification ;
   - review-009 SUGGESTION 4 : `snapshotOrganization` (`tests/helpers/consultation.ts`, AC10) ne compte que les lignes de `collection` ; comparer les lignes completes, comme AC8 pour `link`.
+- **Issus de la tranche 013 (D-139)** :
+  - **decision humaine** (D-139 point 6) : `createOrganization` et `listMyOrganizations` portent `minRole: "public"`, que `_contract.ts` definit depuis D-109 comme « aucune authentification », alors que les deux routes exigent une session (`401`) ; passer les deux a `"authenticated"` (modification de contrat, sans effet sur le comportement) ou garder l'ecart en le documentant dans `_contract.ts`. Argument d'audit-013 INFO-1 : un futur controle d'autorisation generique qui lirait `minRole` ouvrirait ces routes sans session. Le commentaire `// toute session valide` de `listMyOrganizations` (review-013 SUGGESTION 8) suit la meme decision ;
+  - **avant la mise en ligne** (audit-013 MINEUR-1, D-141) : `GET /api/organizations` et `GET .../members` rejoignent l'entree audit-009 MINEUR-1 (pagination, plafond de reponse, limiteur a stockage partage) ; `Cache-Control: private, no-store` (audit-009 INFO-1) vaut aussi pour ces reponses, qui portent des adresses (audit-013 INFO-3) ;
+  - **pour 008** (audit-013 INFO-2) : le retrait d'un membre doit supprimer sa ligne `member`, pour qu'il perde aussitot la vue sur les adresses des membres (`listMembers`, politique `app_user_visible_to_co_members`) ;
+  - contracts-013 : a la prochaine modification des contrats, ajouter aussi le `422 VALIDATION_FAILED` aux `errors` de `listMembers` (meme ecart que contracts-009) ; adresse rendue sans revalidation par `z.string().email()` en sortie (point 3, sans consequence aujourd'hui) ;
+  - review-013 SUGGESTION 5 (etend review-009 SUGGESTION 1) : le filtre `m.organization_id = $1` de la lecture des membres (`lib/members/members.ts`) n'est prouve que par la lecture du code (la politique `member_isolation` masque son retrait) ;
+  - review-013 SUGGESTION 3 : l'erreur d'invariant de `roleOf` (`lib/members/members.ts`) est journalisee comme « erreur inattendue de la base (code absent) » ; distinguer l'invariant applicatif de l'erreur `pg`, sans valeur ;
+  - review-013 SUGGESTION 4 : `listMyOrganizations` rend `Result` sans jamais produire `fail` ; branche `!result.ok` de `GET /api/organizations` inatteignable, a commenter ;
+  - review-013 SUGGESTION 6, **de preference avant 012** : `errorResponse`, `canonical` et le message d'identifiant invalide sont recopies dans trois fichiers de route ; extraire un module d'aide aux reponses d'erreur dans une branche hors tranche d'API.
 - Le detail complet de chaque tranche (perimetre fichiers, contrat de donnees, contrat d'API, criteres d'acceptation AC1-AC5, anti-regression) est ecrit au moment de son ouverture, au format `templates/SLICE.md`, dans `docs/03-slices/<id>-<nom>.md`.
 
 ## Questions d'architecture ouvertes

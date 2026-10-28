@@ -1,0 +1,40 @@
+# Passage autonome du 2026-10-28 (/run-queue)
+
+Budget fixe par l'humain : **1 tranche, la 013** (consultations pour les ecrans), selon `docs/04-runbooks/consigne-run-queue-013.md`, y compris D-135 a D-138 (decisions humaines). Arret apres `ship-slice.sh` ou a la premiere condition d'arret. Jamais de fusion.
+
+## Prerequis
+- `.gates/02-architecture.approved` present ; aucune tranche active.
+- `main` a jour sur 5f87b32 (PR #37, tranche 009, fusionnee). Arbre : seulement la consigne, non committee, incluse dans le commit d'ouverture.
+- File : 013 (depend de 001 et 006, closes et fusionnees). 007 et 008 ont aussi leurs dependances closes : **hors file** (consigne). 012 depend de 013 : **hors file** (menee avec l'humain). PR ouverte : #35 (Dependabot), sans lien avec 013.
+
+## Tranche 013 — Consultations pour les ecrans
+- Debut : 2026-10-28, 15:05. Branche `slice/013-consultations-ecrans`.
+- Sources relues : consigne ; contrats `createOrganization`, `listMembers`, `_contract.ts` ; `lib/organizations.ts`, route `/api/organizations` ; migrations 0003 (`member`, `app_user_visible_to_co_members`, privileges) et 0009 (`organizations_for_user`) ; contrat et journaux de 009.
+- Verifications avant contrat : (1) `signet_app` a `SELECT` sur `member` et `app_user` (0003) et `EXECUTE` sur `organizations_for_user` (0009) ; `member.created_at` existe : **aucune migration ni privilege necessaire**, D-138 point 5 tenu ; (2) **ecart** : D-138 fixe `minRole: "public"` « comme `createOrganization` », mais `_contract.ts` (depuis D-109) reserve `"public"` a « aucune authentification ». Le comportement n'est pas en cause (`401` sans session) : texte de D-138 applique tel quel, ecart inscrit en D-139 point 6 et au backlog (decision humaine). Pas une condition d'arret : aucune regle metier comblee par hypothese, l'etiquette n'a aucun effet a l'execution.
+- Ouverture : contrat `docs/03-slices/013-consultations-ecrans.md` (AC1 a AC12), perimetre `.gates/scope-013.txt`, journal de tranche ; contrat `listMyOrganizations` ajoute a `api-contracts/organizations.ts` (texte de D-138 point 1) ; registre D-135 a D-138 (humain), D-139 (a valider) ; index du journal (ligne 22), backlog (ligne 013, ordre, objectif A, section 012 par D-137, ecart `minRole`). Committee : 98ac205.
+- `test-writer` lance (15:20 env.) : 30 tests (`tests/screen-reads/{my-organizations,members-read,members-isolation,read-only}.test.ts`, helper `tests/helpers/screen-reads.ts`), 28 echecs attendus (`405` sur `GET /api/organizations`, `404` HTML sur `/members`), 2 verts (AC4 en base, AC8 c : RLS et fonction existantes, non-regression) ; `pnpm run check` vert ; commits 35520e5, cbe1c2f. Verifie par l'orchestrateur : rien hors perimetre, aucune comparaison a `main`. Point note : le helper d'AC3 (horodatage egal d'organisations) suspend les declencheurs (`session_replication_role = replica`, transaction locale, connexion d'administration de test) car les declencheurs definer de creation exigent un membre verifie ; sans effet sur le code ni sur la lecture testee (`organization`, `member`).
+- `slice-implementer` : c3a85a2 (lectures `listMyOrganizations`, `listMembers`, exports de contrat), c3ae367 (routes `GET`), journaux 5c260a0, 171aa17. `tests/screen-reads` 30/30 ; `pnpm run check` vert ; suite complete 62 fichiers, 748 passes, 1 ignore (preexistant, branche `slice/003-`), 0 echec, 197 s. Decisions locales au journal de tranche (patron D-133 point 3, role reduit a `owner | member` par garde d'invariant, reponses d'erreur du `GET` construites comme le `POST`, route `/members` copiee de 009).
+- AC12 verifie par l'orchestrateur (`git diff --name-only main..HEAD`) : aucun manifeste, verrou, migration, fichier d'environnement ni `packages/` ; `db.ts`, `errors.ts`, `auth.ts` inchanges ; dans `organizations/route.ts`, seule la ligne d'import change pour le `POST`. Commit d57dcfa.
+- Relecteurs lances en parallele : `contract-guardian` **CONTRACTS: PASS** (aucune rupture ; `422` absent de `listMembers.errors`, ecart `minRole`, adresse non revalidee en sortie) ; `security-auditor` **AUDIT: PASS** (0 critique, 0 majeur ; MINEUR-1 lectures sans borne ni limite de debit ; INFO-1 `minRole`, INFO-2 adresses visibles de tous les membres, prealable pour 008, INFO-3 `Cache-Control`) ; `code-reviewer` **REVIEW: PASS** (A CORRIGER 1 : decisions de l'implementeur au registre ; A CORRIGER 2 : le helper d'AC3 suspendait les declencheurs sur une justification inexacte — ma ligne ci-dessus reprenait cette justification, elle est fausse : la cause reelle du `42501` etait l'absence d'`app.organization_id`, les politiques definer ne verifiant pas l'appartenance ; 6 SUGGESTION). Rapports archives tels quels dans `audits/{contracts,audit,review}-013.md`.
+- Suites : A CORRIGER 2 renvoye a `test-writer` (auteur du test, precedent D-115) : contexte `app.organization_id` pose avant chaque insertion, declencheurs actifs, suspension retiree, aucune assertion changee ; 30/30, check vert ; 858a37b, bdb1377. Orchestrateur : D-140 (decisions de l'implementeur), D-141 (suites des relectures), backlog, etat du journal de tranche (SUGGESTION 7), journal de projet 23 et son index. Pas de nouvelle relecture (helper de test seulement), precedent D-112, D-117. Commit 37fe7ca.
+- Cloture : `close-slice.sh` **CLOTURE REUSSIE** (61bb76e), 748 passes / 1 ignore (preexistant), check, audit `--prod`, build CI, gitleaks : PASS ; fiche `evidence/013.md`.
+- Livraison : `ship-slice.sh` lance juste apres ce commit de journal (resultat dans le rapport de fin de session, comme pour 009).
+
+## Rapport final
+
+### A decider par l'humain
+1. **Fusion de la PR de la tranche 013** sur preuves (fiche `evidence/013.md`, trois verdicts PASS, CI).
+2. **`minRole` de `listMyOrganizations` et `createOrganization`** (D-139 point 6, audit-013 INFO-1) : `"public"` ecrit tel que D-138 le fixe, alors que `_contract.ts` le definit comme « aucune authentification » ; passer a `"authenticated"` ou documenter l'ecart.
+3. **Decisions prises en autonomie, a valider** : D-139 (lectures de forme), D-140 (decisions locales de l'implementeur), D-141 (suites des relectures).
+4. **Avant la mise en ligne** (backlog) : pagination, plafond et limite de debit des lectures, desormais aussi pour les organisations et les membres ; `Cache-Control: private, no-store`.
+
+### Tranches
+- 013 : close, PR ouverte. Aucune tranche arretee. 007, 008 hors file ; 012 menee avec l'humain.
+
+### Points d'attention
+- La justification du helper d'AC3 (suspension des declencheurs) etait fausse et je l'avais reprise telle quelle ; corrigee apres relecture, le helper ne suspend plus rien (858a37b).
+- Pour 008 : le retrait d'un membre doit supprimer sa ligne `member` (sinon il garde la vue sur les adresses).
+- Avant 012, de preference : extraire un module d'aide aux reponses d'erreur (trois copies, review-013 SUGGESTION 6).
+
+### Etat des branches
+- `slice/013-consultations-ecrans` poussee par `ship-slice.sh`, PR ouverte. `main` inchangee.

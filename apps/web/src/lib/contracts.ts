@@ -5,4 +5,4 @@
  * jamais en redefinissant une validation parallele : une seule source de
  * verite pour "a quoi ressemble cette route" (docs/02-architecture/api-contracts/_contract.ts).
  */
-export { createOrganization, renameOrganization } from "../../../../docs/02-architecture/api-contracts/organizations";
+export { createOrganization, listMyOrganizations, renameOrganization } from "../../../../docs/02-architecture/api-contracts/organizations";

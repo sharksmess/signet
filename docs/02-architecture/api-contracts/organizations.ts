@@ -44,6 +44,40 @@ export const createOrganization: ApiContract<
 };
 
 /**
+ * Liste des organisations de l'utilisateur de session (parcours d'ecran de la
+ * tranche 012 ; tranche 013, decision D-138). S'appuie sur
+ * `signet.organizations_for_user()` (ERD §1, ADR-0011 § e) : l'utilisateur lu
+ * est toujours celui de la session, jamais un parametre de la requete.
+ * Ordre : `created_at DESC, id DESC` de l'organisation. Pas de role dans la
+ * sortie (la fonction ne le rend pas ; la page d'organisation le lit par
+ * `listMembers`).
+ */
+const listMyOrganizationsInput = z.object({});
+
+const listMyOrganizationsOutput = z.array(
+  z.object({
+    id: Uuid,
+    name: z.string(),
+    createdAt: z.string().datetime(),
+  }),
+);
+
+export const listMyOrganizations: ApiContract<
+  typeof listMyOrganizationsInput,
+  typeof listMyOrganizationsOutput
+> = {
+  route: "/api/organizations",
+  method: "GET",
+  minRole: "public", // toute session valide, comme createOrganization
+  input: listMyOrganizationsInput,
+  output: listMyOrganizationsOutput,
+  errors: [
+    { status: 401, code: "UNAUTHENTICATED", trigger: "aucune session better-auth valide" },
+  ],
+  idempotency: "idempotente par nature : lecture seule, aucun effet de bord.",
+};
+
+/**
  * US-01.2 — Renommage, owner uniquement.
  */
 const renameOrganizationInput = z.object({
