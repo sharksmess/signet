@@ -80,7 +80,7 @@ Le texte affiche appartient a une **liste fermee de textes fixes** (`apps/web/sr
 | Creer une collection | `422`, `409 COLLECTION_NAME_TAKEN` | texte fixe de la route (« Nom de collection invalide : ... », « Une collection de cette organisation porte deja ce nom. ») |
 | Inviter | `422` | « Adresse e-mail invalide. » |
 | Inviter | `409 INVITATION_ALREADY_PENDING`, `409 ALREADY_MEMBER`, `503 SERVICE_UNAVAILABLE`, `403 INSUFFICIENT_ROLE` | texte fixe de `lib/errors.ts` |
-| Ajouter un lien | `422` (URL, titre), `409 FREE_TIER_QUOTA_EXCEEDED`, `404 COLLECTION_NOT_FOUND` | texte fixe de la route (« URL invalide : ... », « Titre invalide : ... », « Le quota de liens du palier Free est atteint : aucun lien n'a ete ajoute. Passer au palier Pro pour en ajouter d'autres. », « Collection introuvable. ») |
+| Ajouter un lien | `422` (URL, titre), `409 FREE_TIER_QUOTA_EXCEEDED`, `404 COLLECTION_NOT_FOUND` | texte fixe de la route (« URL invalide : ... », « Titre invalide : ... », « Le quota de liens du palier Free est atteint : aucun lien n'a ete ajoute. Passer au palier Pro pour en ajouter d'autres. », « Collection introuvable. ») ; `422` dont le message n'est pas dans la liste : « URL ou titre invalide. » (D-147) |
 | Accepter | `404`, `410`, `409 INVITATION_ALREADY_USED`, `403 INVITATION_EMAIL_MISMATCH`, `409 ALREADY_MEMBER`, `422` | texte fixe de `lib/errors.ts` (`422` : « Lien d'invitation invalide. ») ; `403` : propose « Se deconnecter » ; `409 ALREADY_MEMBER` : lien vers `/organisations` |
 | Tous les formulaires prives | `401` | « Session expiree. » et lien vers `/connexion` (sur la page d'acceptation : retour aux formulaires incorpores) |
 | Tous | `404 ORGANIZATION_NOT_FOUND` | « Organisation introuvable. » |
