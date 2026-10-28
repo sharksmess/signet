@@ -3,21 +3,22 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : en cours d'implementation
+- Statut : implementation terminee, relectures en cours
 - Branche : slice/012-ecrans
-- Dernier commit : 7d5893b feat(ui): pages et formulaires des ecrans de la tranche 012
-- Prochaine etape : BLOQUEE (voir Blocages) ; corrections de tests a confier a `test-writer` par l'orchestrateur, puis relancer `pnpm test tests/screens` et `pnpm run check`
+- Dernier commit : visite guidee `recette-012.md` (apres a64f1e8 test(slice-012) et f78152c D-149)
+- Prochaine etape : trois relecteurs (security-auditor, contract-guardian, code-reviewer), registre, puis `close-slice.sh` ; D-149 a valider par l'humain
 
 ## Couches
 - [ ] Migration — sans objet (aucune migration, consigne point 1)
 - [ ] Acces donnees — sans objet (fonctions existantes de `lib/`, inchangees)
 - [x] Logique metier — fonctions pures d'affichage et de requetes (`apps/web/src/ui/`) : 2f3ba49 (visible-text, requests, messages, form-protection : 77 tests verts)
 - [x] API — sans objet (aucune route) ; etiquette `minRole` de D-143 dans `api-contracts/organizations.ts` : c3deb74
-- [~] UI — pages `apps/web/src/app/` et composants `apps/web/src/ui/` : 7d5893b ; typecheck et lint de `apps/web/src` verts, build de test vert ; 76 tests de `tests/screens` rouges pour des causes de test (Blocages)
-- [ ] Suite complete verte + `pnpm run check` : 869 verts, 76 rouges (tous dans `tests/screens`), 67 fichiers sur 73 verts ; `pnpm run check` rouge sur 19 erreurs de lint dans des fichiers de test de 012
-- [ ] Visite guidee : `docs/04-runbooks/recette-012.md` ecrite, resultat consigne par l'humain
+- [x] UI — pages `apps/web/src/app/` et composants `apps/web/src/ui/` : 7d5893b ; typecheck et lint de `apps/web/src` verts, build de test vert ; tests de `tests/screens` verts apres a64f1e8 (200)
+- [x] Suite complete verte + `pnpm run check` : 2026-10-28 apres a64f1e8, 73 fichiers, 948 verts, 1 ignore (377 s), build de test vert ; `pnpm run check` vert (test-writer)
+- [~] Visite guidee : `docs/04-runbooks/recette-012.md` ecrite ; resultat a consigner par l'humain
 
 ## Blocages
+Tous leves le 2026-10-28 : D-146 point 4, D-148 (arbitrages humains), D-149 (a valider), corrections de `test-writer` a64f1e8. Constat d'origine conserve ci-dessous.
 Constat du 2026-10-28 (implementeur), apres 7d5893b. Les pages ont ete verifiees par une sonde jetable hors depot (fetch des memes pages avec `_rsc=`) : vue member sans bloc Palier ni formulaire d'invitation ni cle d'abonnement (HTML et RSC), marqueurs L-8 en place, aucun caractere invisible brut, aucun `__html`, RSC servie en `text/x-component`, liens conformes AC10, message `creation=echec` exact. Les echecs restants viennent des tests, pas des pages ; aucune assertion n'a ete modifiee.
 1. **Requete RSC sans `_rsc` (toutes les pages, 71 echecs)** : `getPage(..., { rsc: true })` (`tests/helpers/screens.ts`) envoie `RSC: 1` sans le parametre de cache `_rsc`. Next 16.4.3 a `experimental.validateRSCRequestHeaders: true` par defaut (`next/dist/server/config-shared.js`, l. 265) et repond `307` vers `<chemin>?_rsc` (`base-server.js`, l. 1449 et suivantes, protection contre l'empoisonnement de cache). Preuve : « HTTP 307 recu, 200 attendu. Location : /organisations?creation=echec&_rsc ». Aucune page ne peut l'eviter ; desactiver l'option serait dans `next.config.ts` (hors perimetre) et retirerait une protection. Correction de test : ajouter `_rsc=` (valeur vide quand aucun en-tete de routeur n'est envoye) a l'adresse des requetes RSC.
 2. **Statut de la charge RSC d'une page introuvable (AC6, AC7)** : avec `_rsc=`, `notFound()` donne `404` pour le HTML mais `200` pour la charge RSC (Next diffuse la reponse de vol et code l'introuvable dans la charge). `expectFullStatus(page, 404)` exige `404` sur les deux. Correction de test : statut `404` sur le HTML, et pour la RSC une egalite de charge (deja faite par la comparaison normalisee).
