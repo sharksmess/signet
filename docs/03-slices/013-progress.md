@@ -3,15 +3,15 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : tests ecrits
+- Statut : implementation en cours
 - Branche : slice/013-consultations-ecrans
-- Dernier commit : 35520e5 test(slice-013): criteres d'acceptation de la tranche 013
-- Prochaine etape : `slice-implementer` — routes `GET /api/organizations` et `GET .../members` ; les tests de `tests/screen-reads/` doivent passer
+- Dernier commit : c3a85a2 feat(slice-013): lectures listMyOrganizations et listMembers
+- Prochaine etape : couche API — `GET` dans `apps/web/src/app/api/organizations/route.ts`, nouvelle route `.../[organizationId]/members/route.ts`
 
 ## Couches
 - [ ] Migration — sans objet (D-138 point 5 : aucune migration)
-- [ ] Acces donnees
-- [ ] Logique metier
+- [x] Acces donnees — c3a85a2 (typecheck vert ; preuve fonctionnelle par les tests HTTP de la couche API)
+- [x] Logique metier — c3a85a2
 - [ ] API
 - [ ] UI — sans objet (tranche 012)
 - [ ] Suite complete verte + `pnpm run check`
@@ -26,4 +26,7 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 - Tests : horodatage egal des organisations (AC3) force avec `session_replication_role = replica` dans la seule transaction d'insertion, car les declencheurs `SECURITY DEFINER` de creation exigent un contexte de membre verifie impossible avant l'existence de la ligne (erreur 42501 constatee) ; la lecture testee ne depend que de `organization` et `member`. Les membres a date d'arrivee egale (AC6) n'ont pas besoin de cette suspension.
 - Tests : ordre d'arrivee (AC6) discriminant : m2 s'inscrit avant m1 (id plus petit) mais rejoint apres ; ordre d'AC3 discriminant : l'organisation creee par l'appelant est plus recente que celle rejointe, alors que son arrivee dans la rejointe est la plus tardive (distingue `organization.created_at` de `member.created_at`).
 - Tests : seul message fige : « Identifiant d'organisation invalide. » (cite au contrat, D-124) ; les autres 422/404 sont verifies fixes, sans valeur soumise ni fragments Zod/SQL (`expectCleanErrorBody`).
+- Implementation : `listMyOrganizations` et `listMembers` enveloppent leur transaction dans un `try/catch` qui journalise le seul code SQL et releve une erreur sans detail (patron D-133 point 3, comme `listCollections`). Ecarte : laisser remonter l'erreur brute (son message peut porter une valeur) ; une fonction commune `pgErrorOf` partagee (aucun module commun hors `errors.ts`, qui ne change pas) : extraction du code ecrite localement, en une ligne.
+- Implementation : `role` de `listMembers` reduit a `"owner" | "member"` par une garde qui `throw` hors domaine (invariant : contrainte `member_role_chk` de 0003). Ecarte : un transtypage `as` (masquerait une derive du schema) ; une validation par `listMembers.output.parse` a l'execution (le contrat n'est utilise cote serveur que pour l'entree, patron 009).
+- Implementation : la couche donnees n'a pas de test unitaire propre ; elle est committee apres `pnpm typecheck` vert et prouvee par les tests HTTP de `tests/screen-reads/` au commit API (les tests de la tranche sont tous de bout en bout, aucun test n'a ete ajoute).
 - Tests : AC10 compare `to_jsonb` des lignes completes de organization/member/app_user/invitation (filtrees par identifiants du test) ; AC11 = test de coexistence POST/GET, l'assertion de fond reste `tests/organizations/**` inchange ; AC12 : aucun test permanent (D-099).
