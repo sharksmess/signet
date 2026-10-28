@@ -3,18 +3,19 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : implementation en cours
+- Statut : implementation terminee, AC1 a AC11 verts (AC12 : verification ponctuelle de l'orchestrateur)
 - Branche : slice/013-consultations-ecrans
-- Dernier commit : c3a85a2 feat(slice-013): lectures listMyOrganizations et listMembers
-- Prochaine etape : couche API — `GET` dans `apps/web/src/app/api/organizations/route.ts`, nouvelle route `.../[organizationId]/members/route.ts`
+- Dernier commit : c3ae367 feat(slice-013): routes GET organisations et membres
+- Prochaine etape : orchestrateur — trois relecteurs, registre, `bash scripts/close-slice.sh` (fiche de preuves, AC12)
+- Resultats (2026-10-28) : `tests/screen-reads` 4 fichiers, 30/30 en 90,95 s ; `pnpm run check` vert (typecheck + eslint) ; `pnpm test` 62 fichiers, 748 passes, 1 ignore (AC16 de 003, `runIf` de branche `slice/003-`, preexistant), 0 echec, 196,58 s
 
 ## Couches
 - [ ] Migration — sans objet (D-138 point 5 : aucune migration)
 - [x] Acces donnees — c3a85a2 (typecheck vert ; preuve fonctionnelle par les tests HTTP de la couche API)
 - [x] Logique metier — c3a85a2
-- [ ] API
+- [x] API — c3ae367 (`tests/screen-reads` 30/30)
 - [ ] UI — sans objet (tranche 012)
-- [ ] Suite complete verte + `pnpm run check`
+- [x] Suite complete verte + `pnpm run check`
 
 ## Blocages
 
@@ -29,4 +30,6 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 - Implementation : `listMyOrganizations` et `listMembers` enveloppent leur transaction dans un `try/catch` qui journalise le seul code SQL et releve une erreur sans detail (patron D-133 point 3, comme `listCollections`). Ecarte : laisser remonter l'erreur brute (son message peut porter une valeur) ; une fonction commune `pgErrorOf` partagee (aucun module commun hors `errors.ts`, qui ne change pas) : extraction du code ecrite localement, en une ligne.
 - Implementation : `role` de `listMembers` reduit a `"owner" | "member"` par une garde qui `throw` hors domaine (invariant : contrainte `member_role_chk` de 0003). Ecarte : un transtypage `as` (masquerait une derive du schema) ; une validation par `listMembers.output.parse` a l'execution (le contrat n'est utilise cote serveur que pour l'entree, patron 009).
 - Implementation : la couche donnees n'a pas de test unitaire propre ; elle est committee apres `pnpm typecheck` vert et prouvee par les tests HTTP de `tests/screen-reads/` au commit API (les tests de la tranche sont tous de bout en bout, aucun test n'a ete ajoute).
+- Implementation : `GET /api/organizations` ajoute au fichier existant ; seule ligne existante modifiee : l'import de `@/lib/organizations` (ajout de `listMyOrganizations`), le corps du `POST` est inchange ligne pour ligne. Le `GET` reprend le style de reponse du `POST` (corps `{ code, message }` construit en ligne) plutot qu'un `errorResponse` local, pour ne pas toucher au `POST`. Ecarte : une seconde ligne d'import du meme module (doublon d'import) ; refactoriser le `POST` vers un helper commun (interdit par le contrat).
+- Implementation : la route `.../members` reprend a l'identique le patron de la route `GET .../collections` (009) : message de repli « Requete invalide. » si le schema refusait un champ autre que `organizationId` (inatteignable aujourd'hui, le seul champ est `organizationId`), forme canonique `toLowerCase()` locale. Ecarte : importer `canonical` depuis la route 009 (couplage entre routes) ; `lib/uuid.ts` (hors perimetre, non verifie).
 - Tests : AC10 compare `to_jsonb` des lignes completes de organization/member/app_user/invitation (filtrees par identifiants du test) ; AC11 = test de coexistence POST/GET, l'assertion de fond reste `tests/organizations/**` inchange ; AC12 : aucun test permanent (D-099).
