@@ -44,6 +44,8 @@ export const MESSAGES = {
   invitationLinkInvalid: "Lien d'invitation invalide.",
   invitationLinkIncomplete: "Lien d'invitation incomplet",
   creationFailed: "Votre compte est cree, mais l'organisation n'a pas pu l'etre. Creez-la ci-dessous.",
+  /** Seul texte de succes affiche par un formulaire : les autres ecritures relisent la page (L-3). */
+  invitationSent: "Invitation enregistree : l'e-mail part dans quelques instants.",
 } as const;
 
 export const FIXED_MESSAGES: readonly string[] = Object.values(MESSAGES);
