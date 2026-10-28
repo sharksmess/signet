@@ -3,16 +3,16 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : ouverte
+- Statut : en cours d'implementation
 - Branche : slice/012-ecrans
-- Dernier commit : 6d49e4d test(slice-012): criteres d'acceptation de la tranche 012
-- Prochaine etape : implementer couche par couche (fonctions pures `apps/web/src/ui/`, puis pages) jusqu'a faire passer `tests/screens/**` ; questions de la section Decisions tranchees (D-146)
+- Dernier commit : c3deb74 docs(contracts): minRole authenticated pour les organisations (D-143)
+- Prochaine etape : fonctions pures `apps/web/src/ui/` (visible-text, safe-link, requests, messages)
 
 ## Couches
 - [ ] Migration — sans objet (aucune migration, consigne point 1)
 - [ ] Acces donnees — sans objet (fonctions existantes de `lib/`, inchangees)
 - [ ] Logique metier — fonctions pures d'affichage et de requetes (`apps/web/src/ui/`)
-- [ ] API — sans objet (aucune route ; seule l'etiquette `minRole` de D-143 dans `api-contracts/organizations.ts`)
+- [x] API — sans objet (aucune route) ; etiquette `minRole` de D-143 dans `api-contracts/organizations.ts` : c3deb74
 - [ ] UI — pages `apps/web/src/app/` et composants `apps/web/src/ui/`
 - [ ] Suite complete verte + `pnpm run check`
 - [ ] Visite guidee : `docs/04-runbooks/recette-012.md` ecrite, resultat consigne par l'humain
