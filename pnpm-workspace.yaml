@@ -22,3 +22,5 @@ overrides:
   sharp: ">=0.35.5"
   # GHSA-587h-7wmj-h5pm : launch-editor contournable sous Windows (via better-auth > vitest).
   vite: ">=8.3.3"
+  # GHSA-3f7j-7jwc-fxfj : injection de commande Windows dans services() (via inngest > @opentelemetry/auto-instrumentations-node > instrumentation-host-metrics).
+  systeminformation: ">=5.33.16"

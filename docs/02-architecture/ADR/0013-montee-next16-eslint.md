@@ -196,3 +196,11 @@ Origine : `apps/web/src/lib/auth.ts` est evalue a l'import des Route Handlers pe
 - **Avis corriges** : GHSA-2464-fhr4-w9xw et GHSA-673q-mjm6-r5xr (critiques), GHSA-p3m5-59mp-jv5r (high) sur `next` <=16.4.0 ; GHSA-mrhx-c7xc-m3w5 (high) sur `zod` <4.6.6 ; GHSA-587h-7wmj-h5pm (high) sur `vite` 8.3.0 a 8.3.2. Signet n'expose aucune des fonctions visees de Next (ni `use cache`, ni Server Actions, ni `next/image`).
 - **Residu hors `--prod`** : `next` 16.3.8 (pair d'`inngest` sous `@inngest/test`, racine sans `next`) et `zod` 4.6.5 (sous `eslint-plugin-react-hooks`) restent dans l'arbre de developpement, sans entree externe (D-100).
 - **Preuve** : `pnpm audit --prod --audit-level=high` (aucune vulnerabilite connue), `pnpm test`, `pnpm run check`, CI de la PR.
+
+## 2026-10-29 — systeminformation par overrides
+
+- **Decision** : D-154 ; branche `fix/systeminformation-5.33.16`, ordre decide par l'humain (D-152) : correctif hors tranche avant la cloture de la tranche 012, dont `close-slice.sh` etait refuse par l'audit.
+- **Avis corrige** : GHSA-3f7j-7jwc-fxfj (high), injection de commande sous Windows dans `services()` par guillemets Unicode, `systeminformation` <5.33.16. Chemin de production : `apps/web` > `inngest` 4.23.0 > `@opentelemetry/auto-instrumentations-node` 0.81.0 > `@opentelemetry/instrumentation-host-metrics` 0.6.0 > `systeminformation`. Publie apres l'audit-012 (2026-10-28, `--prod` vert).
+- **Version** : `overrides` `systeminformation: ">=5.33.16"` dans `pnpm-workspace.yaml` (avis cite en commentaire) ; **5.33.17** installee (publiee le 2026-10-28T05:41Z) ; 5.33.18 (2026-10-28T13:36Z) en quarantaine pnpm, non retenue ; aucune exclusion. Reste dans la ligne majeure 5 tiree par `instrumentation-host-metrics`. A retirer quand `inngest` tirera lui-meme une version corrigee.
+- **Effet de bord** : la nouvelle resolution a remplace `zod` 4.6.5 (sous `eslint-plugin-react-hooks`, via `zod-validation-error`) par 4.6.7, deja installee pour l'application : le residu `zod` de developpement de la section du 2026-10-25 disparait (audit-012 INFO-3). Aucun autre paquet change (diff du lockfile : `systeminformation`, `zod`).
+- **Preuve** : `pnpm audit --prod --audit-level=high` (aucune vulnerabilite connue), `pnpm test` (62 fichiers, 748 verts, 1 ignore), `pnpm run check`, CI de la PR.
