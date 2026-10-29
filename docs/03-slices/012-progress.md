@@ -3,10 +3,10 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : relectures faites (AUDIT, CONTRACTS, REVIEW : PASS), suites traitees (D-150, D-151), cloture en cours
+- Statut : close (apres rebase sur main avec la PR #39), livraison en cours
 - Branche : slice/012-ecrans
-- Dernier commit : 53a737c docs(slice-012): D-151 remplace D-149 (apres e3bfbd7 test(slice-012): suites de review-012 ; 223 tests des ecrans verts, `pnpm run check` vert)
-- Prochaine etape : `close-slice.sh`, puis arret avant `ship-slice.sh` pour la visite guidee ; D-145, D-150, D-151 a valider par l'humain
+- Dernier commit : documents de cloture (D-155, entree 24, recette-012.md)
+- Prochaine etape : `close-slice.sh`, section Visite guidee dans la fiche, `ship-slice.sh`, puis fusion par l'humain
 
 ## Couches
 - [ ] Migration — sans objet (aucune migration, consigne point 1)
@@ -15,7 +15,7 @@ Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conver
 - [x] API — sans objet (aucune route) ; etiquette `minRole` de D-143 dans `api-contracts/organizations.ts` : c3deb74
 - [x] UI — pages `apps/web/src/app/` et composants `apps/web/src/ui/` : 7d5893b ; typecheck et lint de `apps/web/src` verts, build de test vert ; tests de `tests/screens` verts apres a64f1e8 (200)
 - [x] Suite complete verte + `pnpm run check` : 2026-10-28 apres a64f1e8, 73 fichiers, 948 verts, 1 ignore (377 s), build de test vert ; `pnpm run check` vert (test-writer)
-- [~] Visite guidee : `docs/04-runbooks/recette-012.md` ecrite ; resultat a consigner par l'humain
+- [x] Visite guidee : `docs/04-runbooks/recette-012.md`, resultat de l'humain du 2026-10-29, conforme (D-153)
 
 ## Blocages
 Tous leves le 2026-10-28 : D-146 point 4, D-148 (arbitrages humains), D-149 (a valider), corrections de `test-writer` a64f1e8. Constat d'origine conserve ci-dessous.
