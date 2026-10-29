@@ -5,9 +5,12 @@ But : voir de vos yeux, dans votre navigateur, les ecrans que les tests automati
 Valeurs a utiliser : inventees et visiblement fausses (adresses en `.invalid`, noms « Org-Test-... »). Ne collez jamais une valeur de `.env` dans un ticket, une conversation ou ce fichier.
 
 ## Prerequis (une fois)
-- [ ] `.env` aligne sur les roles : `docs/04-runbooks/stripe-facturation-locale.md`, section 1, **etape 4** (sans elle, `pnpm dev` refuse de demarrer).
-- [ ] Controle du fichier, sans afficher aucune valeur : `.\scripts\env-check.ps1 -Local .env -Example .env.example` → aucune variable manquante.
-- [ ] `pnpm db:migrate`, puis `pnpm dev` ; ouvrir `http://localhost:3100`.
+**Quel fichier est lu** (constat du 2026-10-29, D-153) : Next lit les fichiers d'environnement du **dossier de l'application**, `apps/web/.env*` (dont `apps/web/.env.local`), et non le `.env` de la racine ; `pnpm db:migrate` lit `packages/db/.env` (`import "dotenv/config"` lit le `.env` du dossier courant, `packages/db` sous `pnpm --filter`). Le `.env` de la racine n'est lu par rien. La section 1, etape 4 de `stripe-facturation-locale.md` vise a tort le `.env` de la racine (correction au backlog).
+- [ ] `apps/web/.env.local` : URL de chaque role (`DATABASE_URL_APP`, `DATABASE_URL_AUTH`, `DATABASE_URL_BILLING`, chacune sous son role `signet_*`, jamais le superutilisateur), `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL=http://localhost:3100`, `APP_ENV=development`, valeurs Stripe inventees ; sur une **base de developpement**, distincte de la base de test. Modele : `.env.example`.
+- [ ] `packages/db/.env` : `DATABASE_URL_MIGRATE` (superutilisateur, migrations seulement) vers la meme base de developpement.
+- [ ] Controle sans afficher aucune valeur : `.\scripts\env-check.ps1 -Local apps/web/.env.local -Example .env.example` → aucune variable manquante.
+- [ ] `pnpm db:migrate`, puis `pnpm dev` ; ouvrir `http://localhost:3100` (aucune suite de tests en meme temps : meme port).
+- Sur le poste de l'humain, ces fichiers ont ete prepares le 2026-10-29 par deux scripts locaux ignores par git (`scripts/preparer-dev.local.ps1`, `scripts/corriger-migrate.local.ps1`) ; un outil d'usine equivalent est au backlog.
 - [ ] Deux navigateurs, ou une fenetre normale et une fenetre privee (deux comptes en meme temps).
 
 ## Ce qui n'est pas faisable sur le poste
@@ -55,3 +58,10 @@ Valeurs a utiliser : inventees et visiblement fausses (adresses en `.invalid`, n
 
 ## Resultat
 A recopier dans `docs/04-runbooks/evidence/012.md`, section « Visite guidee » : date, navigateur, cases cochees, ecarts constates (une ligne chacun), verdict (`conforme` / `ecarts`).
+
+### Resultat de l'humain (2026-10-29, D-153)
+- Date : 2026-10-29 ; navigateur : Microsoft Edge (fenetre normale + fenetre InPrivate).
+- Parties 1 a 7 : toutes les cases cochees, comportement conforme, attestation de l'humain. Seule variante : l'organisation de la fenetre A s'appelle « KIKSDICTADOR » au lieu de « Org-Test-Recette » (sans effet).
+- Trace : le journal du serveur de developpement transmis a l'orchestrateur couvre les parties 1 a 5, l'etape « collection d'autrui -> 404 » de la partie 6 et l'invitation 503 de la partie 7 (une seule creation d'organisation au double clic, 409 sur le doublon, 422 sur ftp:, 404 sur la collection d'autrui). Les etapes « organisation d'autrui -> introuvable », « /organisations de B » et la page d'acceptation (sans fragment, #token=faux, clic, deconnexion) n'y figurent pas : elles reposent sur l'attestation de l'humain et sont prouvees par les tests automatiques (AC5, AC6, AC11, AC12).
+- Ecarts : cosmetiques seulement — accents absents dans toute l'interface, quelques accords manquants (« s »). Au backlog (correction groupee hors 012 : les textes fixes sont testes mot pour mot).
+- Verdict : conforme (ecarts cosmetiques au backlog).

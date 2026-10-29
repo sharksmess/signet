@@ -81,3 +81,7 @@ Constat du 2026-10-28 (implementeur), apres 7d5893b. Les pages ont ete verifiees
 - `requests.test.ts` (AC2 c) : texte exact de chaque refus d'inscription compare a la table du contrat.
 - Echo d'AC5 dans la charge : Next ecrit la chaine de requete en JSON (`&` devient `\u0026`, `\u0026` dans le script du HTML) ; `withoutAddressEcho` (`organizations.test.ts`) retire aussi ces formes echappees, et seulement l'echo exact.
 - D-149, motif trop large : `maskAddressDerivedKeys` avait masque `data-testid="create-collection-form"` (22 caracteres finissant par `m`). L'affirmation de D-149 sur l'etroitesse du motif etait fausse (cas `create-collection-form`), motif restreint a la position de cle d'un element React de la charge RSC : `["$","$L<n>","<cle 21 car.>[vm]",{`, en JSON brut ou echappe. Nouveau `tests/screens/address-mask.test.ts` : les 18 marqueurs `data-testid` de 012 (dont `create-collection-form`), un attribut HTML et une valeur de page ne sont pas masques.
+
+### Visite guidee (D-152, D-153)
+- 2026-10-29 : visite faite par l'humain, verdict conforme, ecarts cosmetiques au backlog ; resultat dans `recette-012.md` (section Resultat), a reporter dans `evidence/012.md` apres `close-slice.sh` (qui reecrit la fiche). AC1 a AC17 coches.
+- Suite (D-152) : branche `fix/` pour `systeminformation` (override, ADR, suite complete, PR), arret pour fusion humaine ; puis rebase de 012 sur `main`, `close-slice.sh`, section « Visite guidee » ajoutee a la fiche, `ship-slice.sh`.
