@@ -11,7 +11,9 @@ fail() { printf 'ECHEC: %s\n' "$1" >&2; exit 1; }
 BRANCH=$(git symbolic-ref --short HEAD)
 case "$BRANCH" in fix/*|chore/*|docs/*) ;; slice/*) fail "branche de tranche : utilise scripts/ship-slice.sh." ;;
   *) fail "branche '$BRANCH' : attendu fix/, chore/ ou docs/." ;; esac
-[ -z "$(git status --porcelain)" ] || fail "arbre de travail non propre : committe ou retire les modifications."
+# Le marqueur d'une tranche ouverte ailleurs est tolere (usine 1.6.5) : un correctif
+# hors tranche se livre aussi pendant une tranche (Signet, 2026-10-29).
+[ -z "$(git status --porcelain --untracked-files=all | grep -vE '^.. \.gates/current-slice$')" ] || fail "arbre de travail non propre : committe ou retire les modifications."
 command -v gh >/dev/null || fail "gh (GitHub CLI) introuvable."
 gh auth status >/dev/null 2>&1 || fail "gh non authentifie : l'humain lance 'gh auth login'."
 git fetch -q origin main || fail "fetch origin/main impossible."

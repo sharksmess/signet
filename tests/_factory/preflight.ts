@@ -2,6 +2,7 @@
 // Vecu (Signet, 2026-10-02 puis 07) : Smart App Control (Windows 11) bloquait le
 // binaire natif de Next. Le build echouait avec un message obscur, et l'on a
 // d'abord cru a un probleme de version. Ce controle nomme la cause en une phrase.
+import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 
@@ -53,4 +54,28 @@ export function checkNextNativeBinding(appDir: string): string | null {
   } catch (err) {
     return explainNativeLoadError(pkg, err);
   }
+}
+
+// Fichiers d'environnement que Next charge de lui-meme en mode production
+// (`next build`, `next start`) depuis le dossier de l'application — usine 1.6.5.
+// Vecu (Signet, 2026-10-29) : un `apps/web/.env.local` de developpement a fourni
+// au serveur de test une variable que le test retirait expres ; le test du
+// demarrage refuse est devenu rouge sans que le code ait change.
+// `.env.development.local` n'est lu que par `next dev` : c'est le bon nom pour
+// le poste de developpement.
+export const NEXT_PRODUCTION_ENV_FILES = [".env", ".env.local", ".env.production", ".env.production.local"] as const;
+
+/** Noms des fichiers presents que `next build` / `next start` chargeraient. */
+export function nextStartEnvFiles(appDir: string): string[] {
+  return NEXT_PRODUCTION_ENV_FILES.filter((f) => existsSync(path.join(appDir, f)));
+}
+
+/** Message lisible (noms de fichiers seulement, jamais leur contenu). */
+export function explainAppEnvFiles(files: string[]): string {
+  return (
+    `Le dossier de l'application contient ${files.join(", ")} : next build et next start le chargeraient, ` +
+    `et le serveur de test recevrait des variables qui ne viennent pas de .env.test.local (tests non hermetiques). ` +
+    `Pour le poste de developpement, renomme-le en .env.development.local (lu par next dev seulement) ; ` +
+    `c'est un geste humain, un agent ne lit ni ne deplace ces fichiers.`
+  );
 }

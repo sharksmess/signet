@@ -17,7 +17,10 @@ say "=== Cloture de la tranche $SLICE ==="
 # 0. Branche et arbre propres : on clot ce qui est committe, rien d'autre.
 BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "")
 case "$BRANCH" in slice/"$SLICE"-*) ;; *) bad "branche '$BRANCH' : attendu slice/$SLICE-nom." ;; esac
-[ -z "$(git status --porcelain --untracked-files=normal)" ] || bad "modifications non committees : ce qui serait clos ne serait pas ce qui est teste."
+# Le marqueur de la tranche active est tolere, suivi ou non (usine 1.6.5) : il est
+# retire par cette cloture meme. Signet 012 : ouverture committee sans lui, cloture refusee.
+[ -z "$(git status --porcelain --untracked-files=all | grep -vE '^.. \.gates/current-slice$')" ] \
+  || bad "modifications non committees : ce qui serait clos ne serait pas ce qui est teste."
 
 LOG=$(mktemp -d)
 strip() { sed -E 's/\x1b\[[0-9;]*m//g' "$1" | tr -d '\r'; }
@@ -133,7 +136,8 @@ if [ -n "$BASE" ]; then
       || bad "migration ajoutee sans mise a jour de docs/02-architecture/ERD.md."
   fi
   # 8. Aucun marqueur TODO dans le code modifie par la tranche
-  TODOS=$(git diff --name-only "$BASE"...HEAD -- apps packages 2>/dev/null | while read -r f; do [ -f "$f" ] && grep -lE '(TODO|FIXME|XXX)' "$f"; done)
+  # Mots entiers (usine 1.6.5) : une notation comme « [U+XXXX] » n'est pas un marqueur.
+  TODOS=$(git diff --name-only "$BASE"...HEAD -- apps packages 2>/dev/null | while read -r f; do [ -f "$f" ] && grep -lwE '(TODO|FIXME|XXX)' "$f"; done)
   [ -n "$TODOS" ] && bad "marqueurs TODO/FIXME : $TODOS"
 fi
 
@@ -147,6 +151,11 @@ fi
 # auditeur externe retrouve dans l'historique. Produite par la machine, jamais recopiee.
 EVID="docs/04-runbooks/evidence/$SLICE.md"
 mkdir -p "$(dirname "$EVID")"
+# Complements ecrits a la main avant la cloture (visite guidee, verification
+# ponctuelle) : tout ce qui suit le premier titre « ## Complements » est conserve
+# (usine 1.6.5 ; Signet 012 : la visite guidee consignee avant la cloture etait effacee).
+KEEP=""
+[ -f "$EVID" ] && KEEP=$(sed -n '/^## Compl/,$p' "$EVID")
 {
   printf '# Preuves de la tranche %s\n\n' "$SLICE"
   printf 'Produit par `scripts/close-slice.sh` le %s, sur le commit `%s` (branche `%s`).\n\n' "$(date '+%Y-%m-%d %H:%M')" "$(git rev-parse --short HEAD)" "$BRANCH"
@@ -163,6 +172,7 @@ mkdir -p "$(dirname "$EVID")"
   printf '| Dependances ajoutees | %s |\n' "${ADDED:- aucune}"
   printf '| Dependances changees de version | %s |\n' "${CHANGED:- aucune}"
   printf '\nLa CI rejoue check, tests, build, audit et recherche de secrets sur un serveur neutre ; son resultat est attache a la PR.\n'
+  [ -n "$KEEP" ] && printf '\n%s\n' "$KEEP"
 } > "$EVID"
 rm -rf "$LOG"
 
