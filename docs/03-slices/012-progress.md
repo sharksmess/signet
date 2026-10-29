@@ -3,10 +3,10 @@
 Tenu par l'implementeur apres **chaque commit**. C'est ce fichier, pas la conversation, qui permet de reprendre apres une interruption.
 
 ## Etat
-- Statut : implementation terminee, relectures en cours
+- Statut : relectures faites (AUDIT, CONTRACTS, REVIEW : PASS), suites traitees (D-150, D-151), cloture en cours
 - Branche : slice/012-ecrans
-- Dernier commit : visite guidee `recette-012.md` (apres a64f1e8 test(slice-012) et f78152c D-149)
-- Prochaine etape : trois relecteurs (security-auditor, contract-guardian, code-reviewer), registre, puis `close-slice.sh` ; D-149 a valider par l'humain
+- Dernier commit : 53a737c docs(slice-012): D-151 remplace D-149 (apres e3bfbd7 test(slice-012): suites de review-012 ; 223 tests des ecrans verts, `pnpm run check` vert)
+- Prochaine etape : `close-slice.sh`, puis arret avant `ship-slice.sh` pour la visite guidee ; D-145, D-150, D-151 a valider par l'humain
 
 ## Couches
 - [ ] Migration — sans objet (aucune migration, consigne point 1)
