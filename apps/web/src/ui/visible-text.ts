@@ -1,7 +1,7 @@
 /**
  * Texte visible (tranche 012, L-8, D-144) : les caracteres invisibles ou
  * bidirectionnels d'une liste FERMEE sont remplaces par un marqueur visible
- * `[U+XXXX]` (hexadecimal majuscule, 4 chiffres).
+ * `[U+` suivi de 4 chiffres hexadecimaux majuscules puis `]` (ex. `[U+202E]`).
  *
  * Liste : controles bidirectionnels U+202A a U+202E, U+2066 a U+2069, U+200E,
  * U+200F, U+061C ; largeur nulle U+200B, U+2060, U+FEFF. U+200D n'est PAS
