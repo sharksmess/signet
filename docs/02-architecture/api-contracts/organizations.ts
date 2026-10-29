@@ -32,7 +32,7 @@ export const createOrganization: ApiContract<
 > = {
   route: "/api/organizations",
   method: "POST",
-  minRole: "public", // authentifie via better-auth, mais n'appartient encore a aucune organisation
+  minRole: "authenticated", // toute session valide, sans appartenance prealable a une organisation (D-143)
   input: createOrganizationInput,
   output: createOrganizationOutput,
   errors: [
@@ -68,7 +68,7 @@ export const listMyOrganizations: ApiContract<
 > = {
   route: "/api/organizations",
   method: "GET",
-  minRole: "public", // toute session valide, comme createOrganization
+  minRole: "authenticated", // toute session valide, comme createOrganization (D-143)
   input: listMyOrganizationsInput,
   output: listMyOrganizationsOutput,
   errors: [

@@ -1,0 +1,61 @@
+/* Apparence sobre (tranche 012, consigne point 10) : aucune bibliotheque de style. */
+body {
+  font-family: system-ui, sans-serif;
+  margin: 0;
+  color: #1a1a1a;
+  background: #fafafa;
+}
+
+.banner {
+  padding: 0.75rem 1.5rem;
+  font-weight: 600;
+  border-bottom: 1px solid #ddd;
+  background: #fff;
+}
+
+main {
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 1rem 1.5rem 3rem;
+}
+
+form,
+section {
+  margin: 1.5rem 0;
+  padding: 1rem;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+label {
+  display: block;
+  margin: 0.5rem 0;
+}
+
+input {
+  display: block;
+  width: 100%;
+  max-width: 28rem;
+  margin-top: 0.25rem;
+  padding: 0.4rem;
+  box-sizing: border-box;
+}
+
+button {
+  margin-top: 0.5rem;
+  padding: 0.4rem 0.9rem;
+}
+
+.message {
+  color: #a40000;
+}
+
+ul {
+  padding-left: 1.25rem;
+}
+
+li {
+  margin: 0.5rem 0;
+  overflow-wrap: anywhere;
+}
