@@ -42,7 +42,9 @@ const INVITE_EMAIL_INVALID = "Adresse e-mail invalide.";
 const URL_INVALID =
   "URL invalide : schema http ou https en minuscules, nom d'hote obligatoire, sans identifiants, espaces ni caracteres de controle, 8 a 2048 caracteres.";
 const TITLE_INVALID = "Titre invalide : 1 a 200 caracteres, espaces de bord exclus, sans caractere nul.";
-const LINK_INVALID = "Lien d'invitation invalide.";
+const INVITATION_LINK_INVALID = "Lien d'invitation invalide.";
+/** D-147 : texte fixe de « Ajouter un lien » pour un 422 dont le message n'est pas celui de la route. */
+const ADD_LINK_INVALID = "URL ou titre invalide.";
 
 type Case = readonly [form: FormId, status: number, code: string | undefined, expected: string];
 
@@ -67,7 +69,7 @@ const TABLE: readonly Case[] = [
   fromRoute(invitationAlreadyUsed(), "accept"),
   fromRoute(invitationEmailMismatch(), "accept"),
   fromRoute(alreadyMemberOnAcceptance(), "accept"),
-  ["accept", 422, "VALIDATION_FAILED", LINK_INVALID],
+  ["accept", 422, "VALIDATION_FAILED", INVITATION_LINK_INVALID],
 ];
 
 describe("AC14 : choix du message, texte fixe attendu pour chaque formulaire et chaque code de la table", () => {
@@ -143,6 +145,14 @@ describe("AC14 : choix du message, texte fixe attendu pour chaque formulaire et 
     const zod = '[{"origin":"string","code":"too_big","maximum":120,"path":["name"],"message":"Too big: expected string to have <=120 characters"}]';
     expect(chooseMessage("create-organization", 422, { code: "VALIDATION_FAILED", message: zod })).toBe(ORGANIZATION_NAME_INVALID);
     expect(chooseMessage("invite", 422, { code: "VALIDATION_FAILED", message: zod })).toBe(INVITE_EMAIL_INVALID);
+  });
+
+  it("AC14 (D-147) : add-link, 422 dont le message est hors liste ou contient la valeur soumise -> « URL ou titre invalide. » exactement", async () => {
+    const { chooseMessage } = await loadMessages();
+    const submitted = "https://exemple.test/VALEUR-SOUMISE";
+    for (const message of ["Texte invente hors liste", `Valeur invalide : ${submitted}`, "[Zod : too_big]"]) {
+      expect(chooseMessage("add-link", 422, { code: "VALIDATION_FAILED", message }), message).toBe(ADD_LINK_INVALID);
+    }
   });
 
   it("AC14 : un texte hors liste, meme avec un code connu, n'est jamais repris ; le resultat est toujours dans la liste fermee", async () => {

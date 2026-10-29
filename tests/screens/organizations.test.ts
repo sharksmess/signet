@@ -23,6 +23,7 @@ import {
   getFullPage,
   getPage,
   hasTestId,
+  maskAddressDerivedKeys,
   organizationIdsOf,
   rowsOf,
   textOf,
@@ -31,6 +32,17 @@ import {
 } from "../helpers/screens";
 
 let fakes: InvitationFakes;
+
+/** D-148 : retire de la reponse l'echo exact de la chaine de requete demandee (`?role=owner`...), sous ses formes encodees, puis masque les cles derivees de l'adresse (D-149). */
+function withoutAddressEcho(text: string, query: string): string {
+  const raw = query.slice(1);
+  const base = [query, raw, encodeURIComponent(raw), encodeURI(raw)];
+  // Dans la charge, la chaine est du JSON : le « & » y devient « u0026 » precede d'une barre oblique inverse (deux dans le script du HTML).
+  const forms = new Set(base.flatMap((form) => [form, form.split("&").join("\x5cu0026"), form.split("&").join("\x5c\x5cu0026")]));
+  let result = text;
+  for (const form of [...forms].sort((a, b) => b.length - a.length)) result = result.split(form).join("");
+  return maskAddressDerivedKeys(result);
+}
 
 beforeAll(async () => {
   fakes = await startInvitationFakes();
@@ -300,8 +312,10 @@ describe("AC5 : vue du member (invitation reelle)", () => {
     for (const query of ["?role=owner", "?role=owner&tier=pro", "?owner=1", "?subscription=1"]) {
       const tampered = await getFullPage(`/organisations/${org.organizationId}${query}`, memberSession);
       expectFullStatus(tampered, 200, `AC5 : ${query}`);
-      // D-146 point 4 / D-115 : Next recopie la chaine de requete dans la charge ("q", "c") ; l'egalite brute
-      // n'est plus possible. Meme intention : aucun element reserve a l'owner n'apparait, le contenu visible est inchange.
+      // D-146 point 4 / D-148 : Next recopie la chaine de requete dans le HTML et la charge ("q", "c").
+      // On retire cet echo exact puis on exige l'EGALITE de la reponse avec celle sans parametre.
+      expect(withoutAddressEcho(tampered.html.text, query), `HTML identique, echo de l'adresse mis a part, avec ${query}`).toBe(maskAddressDerivedKeys(asMember.html.text));
+      expect(withoutAddressEcho(tampered.rsc.text, query), `charge RSC identique, echo de l'adresse mis a part, avec ${query}`).toBe(maskAddressDerivedKeys(asMember.rsc.text));
       expectNoOwnerElements(tampered);
       expect(textOf(tampered.html.text), `texte visible identique avec ${query}`).toBe(textOf(asMember.html.text));
       expect(rowsOf(tampered.html.text, "member-row").map(textOf), `membres inchanges avec ${query}`).toEqual(rowsOf(asMember.html.text, "member-row").map(textOf));

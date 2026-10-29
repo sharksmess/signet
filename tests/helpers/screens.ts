@@ -94,7 +94,7 @@ export function expectPageStatus(page: PageResult, expected: number, label: stri
   }
 }
 
-/** Statut attendu pour le HTML et, sauf `rscStatus` different, pour la charge RSC. */
+/** Meme statut attendu pour le HTML et pour la charge RSC. */
 export function expectFullStatus(page: FullPage, expected: number, label: string): void {
   expectPageStatus(page.html, expected, `${label} (HTML ${page.path})`);
   expectPageStatus(page.rsc, expected, `${label} (RSC ${page.path})`);
@@ -134,12 +134,16 @@ export function replaceIds(text: string, replacements: readonly (readonly [strin
 
 /**
  * Next derive de l'adresse demandee (chemin ET chaine de requete) les cles React des elements d'en-tete
- * (metadonnees, viewport) de la charge RSC : 21 caracteres base64url suivis de « v » ou « m », entre
- * guillemets. Elles different donc d'une adresse a l'autre sans porter de donnee : on les masque avant de
- * comparer deux charges (meme famille que l'echo « q »/« c » de D-146 point 4 et D-148).
+ * (metadonnees, viewport) de la charge RSC : 21 caracteres base64url suivis de « v » ou « m ». Elles different
+ * d'une adresse a l'autre sans porter de donnee : on les masque avant de comparer deux charges (meme famille
+ * que l'echo « q »/« c » de D-146 point 4 et D-148).
+ *
+ * Le motif est restreint a leur SEUL emplacement : la position de cle d'un element React de la charge, soit
+ * `["$","$L<n>","<cle>",{` (sequence JSON brute, ou echappee `\"` dans le script du HTML). Un attribut HTML
+ * (`data-testid="create-collection-form"`) ou une valeur de page n'y correspond jamais (D-149 corrige).
  */
 export function maskAddressDerivedKeys(text: string): string {
-  return text.replace(/"[A-Za-z0-9_-]{21}[vm]"/g, '"CLE_ENTETE_FIXE"');
+  return text.replace(/(\$L[0-9a-f]+\x5c?",\x5c?")[A-Za-z0-9_-]{21}[vm](?=\x5c?",\{)/g, "$1CLE_ENTETE_FIXE");
 }
 
 // ---------------------------------------------------------------------------

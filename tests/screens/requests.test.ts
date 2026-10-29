@@ -131,14 +131,16 @@ describe("AC2 : enchainement de l'inscription avec organisation (fetch injecte)"
   it("AC2 (c) : inscription refusee (compte existant, mot de passe court, 429, 500, reseau) -> aucune creation tentee, texte fixe", async () => {
     const r = await loadRequests();
     const messages = await loadMessages();
-    const refusals: FakeReply[] = [
-      { status: 422, body: { code: "USER_ALREADY_EXISTS", message: `Adresse ${EMAIL} deja utilisee` } },
-      { status: 400, body: { code: "PASSWORD_TOO_SHORT", message: "Password too short" } },
-      { status: 429, body: { message: "Too many requests" } },
-      { status: 500, body: { message: "boom" } },
-      { throws: true },
+    // Textes exacts de la table « Messages d'erreur » du contrat.
+    const generic = "Une erreur est survenue. Reessayer.";
+    const refusals: { refusal: FakeReply; text: string }[] = [
+      { refusal: { status: 422, body: { code: "USER_ALREADY_EXISTS", message: `Adresse ${EMAIL} deja utilisee` } }, text: "Un compte existe deja pour cette adresse." },
+      { refusal: { status: 400, body: { code: "PASSWORD_TOO_SHORT", message: "Password too short" } }, text: "Adresse e-mail invalide, ou mot de passe trop court (8 caracteres minimum)." },
+      { refusal: { status: 429, body: { message: "Too many requests" } }, text: "Trop de tentatives. Reessayer dans quelques minutes." },
+      { refusal: { status: 500, body: { message: "boom" } }, text: generic },
+      { refusal: { throws: true }, text: generic },
     ];
-    for (const refusal of refusals) {
+    for (const { refusal, text } of refusals) {
       const { fetchFn, calls } = fakeFetch([refusal, { status: 201, body: { id: ORG_ID } }]);
 
       const outcome = await r.signUpWithOrganization(fetchFn, { email: EMAIL, password: PASSWORD, organizationName: ORG_NAME });
@@ -148,6 +150,7 @@ describe("AC2 : enchainement de l'inscription avec organisation (fetch injecte)"
       expect(outcome.kind).toBe("refused");
       if (outcome.kind !== "refused") throw new Error(`issue inattendue : ${JSON.stringify(outcome)}`);
       expect(messages.FIXED_MESSAGES, `le message ${JSON.stringify(outcome.message)} est dans la liste fermee`).toContain(outcome.message);
+      expect(outcome.message, `texte exact attendu pour ${JSON.stringify(refusal)}`).toBe(text);
       expect(outcome.message).not.toContain(EMAIL);
       expect(outcome.message).not.toContain(PASSWORD);
       expect(outcome.message).not.toContain(ORG_NAME.trim());
