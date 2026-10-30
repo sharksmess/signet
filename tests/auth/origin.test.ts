@@ -42,9 +42,13 @@ function codeOf(rawBody: string): string | undefined {
   return undefined;
 }
 
-/** Message d'echec honnete : vrai statut et corps brut complet. */
+/**
+ * Message d'echec honnete : vrai statut et corps brut complet. Seul le nom des
+ * cookies poses est recopie, jamais leur valeur (jeton de session).
+ */
 function describeObserved(label: string, o: Observed): string {
-  return `${label} : statut ${o.status}, corps brut ${o.rawBody}, set-cookie ${JSON.stringify(o.setCookies)}`;
+  const cookieNames = o.setCookies.map((c) => c.split("=")[0] ?? "");
+  return `${label} : statut ${o.status}, corps brut ${o.rawBody}, cookies poses ${JSON.stringify(cookieNames)}`;
 }
 
 function hasSessionCookie(o: Observed): boolean {
@@ -186,37 +190,41 @@ describe("AC5 : fetch sans Origin (Node ajoute sec-fetch-mode: cors)", () => {
   });
 });
 
-/** Requete `node:http` construite a la main ; renvoie aussi les en-tetes effectivement poses. */
+/**
+ * Requete `node:http` construite a la main ; renvoie aussi les en-tetes effectivement poses.
+ * `node:http` ne parle que `http:` : le serveur de test du globalSetup est servi en clair.
+ * Le chemin de la base (vide pour le serveur de test) est conserve, comme dans `viaFetch`.
+ */
 function viaHttp(path: string, payload: object): Promise<Observed & { sentHeaders: string[] }> {
   const body = JSON.stringify(payload);
   const target = new URL(baseUrl());
+  expect(target.protocol, "viaHttp suppose une base `http:` (node:http)").toBe("http:");
+  const fullPath = `${target.pathname.replace(/\/+$/, "")}${path}`;
   return new Promise((resolve, reject) => {
-    const req = request(
-      {
-        method: "POST",
-        hostname: target.hostname,
-        port: target.port,
-        path,
-        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
-      },
-      (res) => {
-        const chunks: Buffer[] = [];
-        res.on("data", (chunk: Buffer) => chunks.push(chunk));
-        res.on("end", () => {
-          const rawBody = Buffer.concat(chunks).toString("utf8");
-          const setCookie = res.headers["set-cookie"] ?? [];
-          resolve({
-            status: res.statusCode ?? 0,
-            rawBody,
-            code: codeOf(rawBody),
-            setCookies: setCookie,
-            sentHeaders: sent,
-          });
-        });
-        res.on("error", reject);
-      },
-    );
+    const req = request({
+      method: "POST",
+      hostname: target.hostname,
+      port: target.port,
+      path: fullPath,
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+    });
     const sent = Object.keys(req.getHeaders()).map((name) => name.toLowerCase());
+    req.on("response", (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (chunk: Buffer) => chunks.push(chunk));
+      res.on("end", () => {
+        const rawBody = Buffer.concat(chunks).toString("utf8");
+        const setCookie = res.headers["set-cookie"] ?? [];
+        resolve({
+          status: res.statusCode ?? 0,
+          rawBody,
+          code: codeOf(rawBody),
+          setCookies: setCookie,
+          sentHeaders: sent,
+        });
+      });
+      res.on("error", reject);
+    });
     req.on("error", reject);
     req.end(body);
   });
@@ -227,6 +235,7 @@ function expectNoBrowserHints(sentHeaders: string[]): void {
   expect(forbidden, `en-tetes de navigateur envoyes : ${JSON.stringify(sentHeaders)}`).toEqual([]);
 }
 
+// Echec ici = comportement de better-auth change ; re-decider (D-158), ne pas forcer le test.
 describe("AC6 : client sans aucun en-tete de navigateur (constat)", () => {
   it("AC6 : inscription node:http sans Origin, Referer, Cookie ni sec-fetch-* -> acceptee, compte cree", async () => {
     const email = uniqueEmail("ac6-up");
