@@ -1,0 +1,13 @@
+docs/03-slices/014-*
+docs/03-slices/000-backlog.md
+docs/DECISIONS.md
+docs/00-context/JOURNAL.md
+docs/00-context/journal/26-*
+docs/04-runbooks/FRICTION.md
+docs/04-runbooks/consigne-run-queue-014.md
+docs/04-runbooks/autonomous-run-2026-10-30.md
+docs/04-runbooks/evidence/014.md
+docs/04-runbooks/audits/*-014.md
+tests/auth/**
+tests/helpers/auth.ts
+tests/helpers/origin*.ts
