@@ -43,7 +43,7 @@ Si la tranche initialise le projet (creation de l'application, installation des 
 ## 6. Journal d'avancement et tests
 Copie `docs/templates/PROGRESS.md` en `docs/03-slices/NNN-progress.md`. C'est ce fichier, et non la conversation, qui permet de reprendre apres une interruption.
 
-Committe l'ouverture : `chore(slice-NNN): ouvrir la tranche` (contrat, perimetre, journal).
+Committe l'ouverture : `chore(slice-NNN): ouvrir la tranche` (contrat, journal, `.gates/scope-NNN.txt` **et** `.gates/current-slice`). Sans le marqueur dans ce commit, chaque changement de branche le laisse en fichier non suivi (Signet 012, usine 1.6.5).
 
 Puis lance le sous-agent `test-writer` pour produire les tests depuis les criteres d'acceptation, avant toute implementation.
 

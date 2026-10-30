@@ -68,3 +68,29 @@ export function testDbUrl(): string {
   u.pathname = `/${TEST_DATABASE_NAME}`;
   return u.toString();
 }
+
+/**
+ * Environnement du serveur de test (usine 1.6.5). Part de l'environnement du
+ * processus de test, puis :
+ *  - retire `TEST`, `VITEST` et `VITEST_*`, poses par Vitest : des bibliotheques
+ *    s'en servent pour se croire « en test » et couper des protections (better-auth
+ *    1.7 saute alors son controle d'origine ; vecu sur Signet, 2026-10-28) ;
+ *  - retire toutes les variables `TEST_*` (dont l'URL d'administration de la base) :
+ *    elles servent aux tests, jamais a l'application ;
+ *  - transmet `TEST_SERVER_ENV_FOO=bar` sous le nom `FOO=bar` (la base de TEST,
+ *    jamais celle de dev) ;
+ *  - force `NODE_ENV=production`, comme `next start`.
+ */
+export function buildServerEnv(source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const [k, v] of Object.entries(source)) {
+    if (v === undefined) continue;
+    if (k === "TEST" || k === "VITEST" || k.startsWith("VITEST_") || k.startsWith("TEST_")) continue;
+    env[k] = v;
+  }
+  for (const [k, v] of Object.entries(source)) {
+    if (k.startsWith("TEST_SERVER_ENV_") && v !== undefined) env[k.slice("TEST_SERVER_ENV_".length)] = v;
+  }
+  env.NODE_ENV = "production";
+  return env;
+}

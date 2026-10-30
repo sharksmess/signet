@@ -9,8 +9,8 @@ import { spawn, execSync, type ChildProcess } from "node:child_process";
 import net from "node:net";
 import path from "node:path";
 import pg from "pg";
-import { ROOT, envOrigin, loadTestEnv, requireEnv, testDbUrl } from "./env";
-import { checkNextNativeBinding } from "./preflight";
+import { ROOT, buildServerEnv, envOrigin, loadTestEnv, requireEnv, testDbUrl } from "./env";
+import { checkNextNativeBinding, explainAppEnvFiles, nextStartEnvFiles } from "./preflight";
 
 const log = (m: string) => process.stdout.write(`[tests] ${m}\n`);
 
@@ -83,16 +83,6 @@ function portInUse(port: number): Promise<boolean> {
   });
 }
 
-function serverEnv(): NodeJS.ProcessEnv {
-  // TEST_SERVER_ENV_FOO=bar est transmis au serveur sous le nom FOO=bar.
-  // Ainsi le serveur de test pointe sur la base de test, jamais sur celle de dev.
-  const env: NodeJS.ProcessEnv = { ...process.env, NODE_ENV: "production" };
-  for (const [k, v] of Object.entries(process.env)) {
-    if (k.startsWith("TEST_SERVER_ENV_") && v !== undefined) env[k.slice("TEST_SERVER_ENV_".length)] = v;
-  }
-  return env;
-}
-
 function killTree(child: ChildProcess): void {
   if (!child.pid || child.exitCode !== null) return;
   try {
@@ -110,11 +100,16 @@ async function startServer(): Promise<ChildProcess | undefined> {
   if (await portInUse(port)) {
     fail(`le port ${port} est deja occupe. Arrete le serveur qui l'utilise : il pointe peut-etre sur la base de dev.`);
   }
-  const env = serverEnv();
+  const env = buildServerEnv();
+  const appDir = path.join(ROOT, process.env.TEST_NEXT_APP_DIR ?? "apps/web");
   // Composant natif de Next : un blocage du systeme (Smart App Control) se nomme
   // ici en une phrase, au lieu d'un build en echec au message obscur.
-  const nativeProblem = checkNextNativeBinding(path.join(ROOT, process.env.TEST_NEXT_APP_DIR ?? "apps/web"));
+  const nativeProblem = checkNextNativeBinding(appDir);
   if (nativeProblem) fail(nativeProblem);
+  // Fichiers d'environnement que `next build` / `next start` chargeraient d'eux-memes
+  // (usine 1.6.5) : le serveur de test ne serait plus hermetique.
+  const localEnvFiles = nextStartEnvFiles(appDir);
+  if (localEnvFiles.length > 0) fail(explainAppEnvFiles(localEnvFiles));
   if (process.env.TEST_SKIP_BUILD !== "1") {
     const build = process.env.TEST_SERVER_BUILD_CMD ?? "pnpm run build";
     log(`build : ${build}`);
