@@ -16,12 +16,13 @@ Ordre de dependance technique d'abord, risque decroissant en departage a profond
 | 010 | Durcissement de l'isolation tenant (tranche technique) | US-09 (transverse) | 001 | Decision humaine D-022 (audit-001 MINEUR-1, option A) + MINEUR-10. **Executee avant 002** (D-024) : toutes les tranches suivantes copient le patron `withTenant` et les politiques RLS ; il doit etre juste avant d'etre reproduit. |
 | 011 | Montee Next 16 et ESLint 10 (tranche technique) (ESLint 10 reporte, ADR-0013) | transverse | 010 | Decision humaine D-041 : Next 15 arrive en fin de maintenance en octobre 2026 (ADR-0008) ; la migration ne coutera jamais moins cher qu'avec 3 routes. **Executee avant 002.** |
 | 013 | Consultations pour les ecrans (mes organisations, membres) | US-07.1 (partiel) et parcours d'ecran | 001, 006 | Decision humaine D-136 : les deux lectures qui manquent aux ecrans de 012 (organisations de l'utilisateur, membres d'une organisation), separees de 012 pour garder une tranche d'ecrans sans travail serveur nouveau. Lectures decidees d'avance (D-138). **Executee avant 012, en mode autonome.** |
+| 014 | Preuve du controle d'origine de better-auth (tranche technique) | US-09 (transverse) et securite d'authentification | 001 | Decisions humaines D-146 (points 2 et 3) et D-157 : l'usine 1.6.5 rend le serveur de test sans `TEST` ni `VITEST`, le controle d'origine de better-auth y est actif et doit etre prouve (refus d'une `Origin` etrangere, controle positif, requete sans `Origin`) ; tests et documentation seulement. **Executee apres 012, en mode autonome.** |
 
 ## Ordre d'execution
 
 Les identifiants ne sont jamais renumerotes (D-025) : une tranche inseree prend le prochain numero libre, et l'ordre d'execution est ecrit ici.
 
-001 (close) -> 010 (close) -> 011 (close) -> 002 (close) -> **003** -> 006 -> 004 (en mode autonome) -> 005 -> 009 (en mode autonome) -> 013 (en mode autonome) -> 012 (ecrans)
+001 (close) -> 010 (close) -> 011 (close) -> 002 (close) -> **003** -> 006 -> 004 (en mode autonome) -> 005 -> 009 (en mode autonome) -> 013 (en mode autonome) -> 012 (ecrans) -> 014 (en mode autonome)
 
 Objectif A (D-083, D-084, D-130, D-136) : la sequence ci-dessus termine l'usine. 009 y entre par D-130 (les ecrans de 012 doivent afficher collections et liens) ; 013 y entre par D-136 (les ecrans de 012 doivent lister les organisations de l'utilisateur et les membres) ; 007 et 008 restent hors objectif (backlog), avec la mise en ligne et les vrais paiements.
 
