@@ -20,15 +20,40 @@ export function baseUrl(): string {
 }
 
 /**
- * better-auth refuse (403 MISSING_OR_NULL_ORIGIN / INVALID_ORIGIN) toute
- * requete vers `/api/auth/*` dont l'origine ne peut pas etre validee — la
- * protection CSRF reste active volontairement (regle du projet : la corriger
- * cote client de test, jamais en la desactivant cote serveur). Un client
- * navigateur envoie toujours `Origin` ; `fetch` sous Node ne le fait pas,
- * d'ou ce header pose explicitement, egal a `TEST_APP_BASE_URL` lui-meme
- * (aucun `baseURL` n'etant configure cote serveur, better-auth deduit son
- * origine de confiance de la requete entrante — cf. apps/web/src/lib/auth.ts
- * et l'avertissement "Base URL is not set" au demarrage).
+ * Controles d'origine de better-auth 1.7.7 (dist/api/middlewares/origin-check.mjs).
+ *
+ * 1. `sign-up/email` et `sign-in/email` (`formCsrfMiddleware`), sans cookie :
+ *    - `Sec-Fetch-Site: cross-site` + `Sec-Fetch-Mode: navigate`
+ *      -> 403 CROSS_SITE_NAVIGATION_LOGIN_BLOCKED ;
+ *    - sinon, si `Sec-Fetch-Site`, `Sec-Fetch-Mode` ou `Sec-Fetch-Dest` est
+ *      present, ou `Origin` ou `Referer` : validation forcee de l'origine ;
+ *    - aucun de ces en-tetes : non controle (constat d'AC6, a valider par
+ *      l'humain, D-158). Avec un cookie : validation de l'origine.
+ * 2. `originCheckMiddleware` (toutes les routes, dist/api/index.mjs) valide
+ *    l'origine de tout `POST` de better-auth qui porte un cookie : c'est
+ *    pourquoi `authHeaders` pose aussi `Origin`.
+ *
+ * Validation de l'origine : origine = `Origin`, a defaut `Referer` ; absente
+ * ou `null` -> 403 MISSING_OR_NULL_ORIGIN, sauf `Origin: null` avec
+ * `Sec-Fetch-Site: same-origin` (origine deduite de la requete, acceptee) ;
+ * hors de la liste de confiance -> 403 INVALID_ORIGIN.
+ *
+ * Pourquoi ce header : `fetch` sous Node envoie de lui-meme
+ * `sec-fetch-mode: cors` ; sans `Origin`, la requete serait refusee en
+ * MISSING_OR_NULL_ORIGIN. La valeur posee est `baseUrl()` tel quel
+ * (= `TEST_APP_BASE_URL`), egale a l'origine de l'application tant que cette
+ * URL n'a ni chemin ni barre finale. Elle est acceptee car, sans `baseURL` ni
+ * `trustedOrigins` (apps/web/src/lib/auth.ts), better-auth fait confiance a
+ * l'origine deduite de la requete recue.
+ *
+ * Ce controle n'est actif sur le serveur de test que depuis l'usine 1.6.5
+ * (usine D-033 : serveur sans `TEST` ni `VITEST`) ; auparavant `isTest()` le
+ * sautait (FRICTION 2026-10-28). Regle conservee : corriger cote client de
+ * test, jamais desactiver la protection cote serveur.
+ *
+ * Preuve executable : tranche 014, `tests/auth/origin.test.ts`. `Referer`
+ * seul, la navigation entre sites et `null` + `same-origin` sont decrits
+ * d'apres le code, non prouves (D-158, point 5).
  */
 function originHeader(): Record<string, string> {
   return { Origin: baseUrl() };
