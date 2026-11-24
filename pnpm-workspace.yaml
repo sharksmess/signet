@@ -24,3 +24,15 @@ overrides:
   vite: ">=8.3.3"
   # GHSA-3f7j-7jwc-fxfj : injection de commande Windows dans services() (via inngest > @opentelemetry/auto-instrumentations-node > instrumentation-host-metrics).
   systeminformation: ">=5.33.16"
+  # GHSA-2464-fhr4-w9xw, GHSA-673q-mjm6-r5xr (critiques), GHSA-p3m5-59mp-jv5r (eleve) :
+  # next, pair optionnel d'inngest, installe d'office en 16.3.8 sous @inngest/test
+  # (developpement). Aligne sur la version d'apps/web (D-166).
+  "inngest>next": "16.4.5"
+auditConfig:
+  ignoreGhsas:
+    # D-165 : glob sous gaxios@7.1.3 > rimraf@5 ; gaxios ne l'importe pas, jamais
+    # charge a l'execution. Correctif (>=14.0.2) hors de la plage de rimraf (^10.3.7).
+    - GHSA-3g3m-2fjr-6pw4
+    # D-165 : minimatch sous ce meme glob (jamais charge) et sous typescript-estree
+    # (developpement, motifs fixes de la configuration). Correctif (>=11.0.1) hors plage.
+    - GHSA-g3hv-75wg-m249
