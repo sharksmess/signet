@@ -238,3 +238,20 @@ Origine : `apps/web/src/lib/auth.ts` est evalue a l'import des Route Handlers pe
 - **Lockfile** : seuls `next`, `@next/env`, `@next/swc-*`, `eslint-config-next` et `@next/eslint-plugin-next` changent de version ; `better-auth` 1.7.13 et `inngest` 4.26.0 ne changent que par leur suffixe de pair `next`. Aucun nouveau paquet, `pnpm-workspace.yaml` inchange.
 - **Residu hors `--prod`** : la copie `next@16.3.8` (pair d'`inngest` sous `@inngest/test`, residu D-100) reste dans l'arbre de developpement ; elle porte GHSA-2464-fhr4-w9xw et GHSA-673q-mjm6-r5xr (critiques) et GHSA-p3m5-59mp-jv5r (high) ; au backlog, a traiter juste apres ce correctif (D-162).
 - **Preuve** (2026-11-24) : `pnpm test` (75 fichiers, 981 verts, 1 ignore, 187 s), `pnpm run check` (types et lint), `pnpm audit --prod --audit-level=moderate` sans avis sur `next` (restent `glob` GHSA-3g3m-2fjr-6pw4 et `minimatch` GHSA-g3hv-75wg-m249, moderes, backlog), CI de la PR.
+
+## 2026-11-24 — Avis transitifs avant l'usine 1.6.7
+
+- **Decisions** : D-164 et D-165 (humain), D-166 (claude-code) ; branche `fix/audit-transitifs`, chemin « correctif de securite hors tranche », consigne `docs/04-runbooks/consigne-correctif-audit-transitifs.md`. But : `pnpm audit --prod --audit-level=moderate` propre (seuil de l'usine 1.6.7) et plus aucun avis `high` ou `critical`, meme en developpement.
+
+| Paquet | Chemin | Avis | Version corrigee | Traitement |
+|---|---|---|---|---|
+| `next` 16.3.8 (dev) | `.>@inngest/test>inngest>next` (pair optionnel d'`inngest`, installe d'office) | GHSA-2464-fhr4-w9xw, GHSA-673q-mjm6-r5xr (critiques), GHSA-p3m5-59mp-jv5r (eleve), six moderes de D-163 | >=16.4.5 | **`overrides` `"inngest>next": "16.4.5"`** (version d'`apps/web`, publiee 2026-11-03, hors quarantaine) |
+| `glob` 10.5.0 (prod et dev) | `inngest>…>resource-detector-gcp@0.58.0>gcp-metadata@8.1.4>gaxios@7.1.3>rimraf@5.0.10>glob` | GHSA-3g3m-2fjr-6pw4 (modere) | 14.0.2, hors de `rimraf` (`^10.3.7`) | **ecarte** (`auditConfig.ignoreGhsas`, D-165) : jamais charge |
+| `minimatch` 9.0.9 (prod et dev) | sous ce meme `glob` (`^9.0.4`) | GHSA-g3hv-75wg-m249 (modere) | 11.0.1, hors plage | **ecarte** (D-165) : jamais charge |
+| `minimatch` 10.2.6 (dev) | `typescript-eslint` 8.72.0 / `eslint-config-next` > `@typescript-eslint/typescript-estree` (`^10.2.2`) | GHSA-g3hv-75wg-m249 (modere) | 11.0.1, hors plage ; `typescript-eslint` 8.74.0 accepte `^11.0.1` mais etait en quarantaine | **ecarte** (D-165) : motifs fixes de la configuration |
+
+- **Pourquoi « jamais charge »** : `gaxios` 7.1.3 declare `rimraf` en dependance, mais son code publie (`build/cjs`, `build/esm`) ne l'importe nulle part ; `rimraf`, `glob` et le `minimatch` en dessous ne sont donc pas charges a l'execution. `gaxios` 8 a retire `rimraf`, mais `gcp-metadata` 8.1.4 epingle `gaxios` 7.1.3 et `@opentelemetry/resource-detector-gcp` 0.60.0 (latest) veut encore `gcp-metadata ^8`. L'avis `glob` vise l'annulation par `AbortSignal` d'un parcours qui continue en arriere-plan ; l'avis `minimatch` exige un motif fourni par un attaquant avec `optimizationLevel >= 2`.
+- **Ecartes** : forcer `glob` 14 / `minimatch` 11 ou `gaxios` 8 par `overrides` (majeures hors de la plage declaree) ; monter `typescript-eslint` en 8.74.0 (publiee le 2026-11-23T17:06Z, quarantaine) ; `overrides` global sur `next`.
+- **Lockfile** : `+1 -12` ; seuls `next@16.3.8`, `@next/env@16.3.8`, `@next/swc-*@16.3.8` et l'instance d'`inngest` liee a 16.3.8 disparaissent. Les deux instances d'`inngest` n'en font plus qu'une.
+- **Limite** : `ignoreGhsas` vaut pour tout le projet ; un nouveau chemin vers ces avis serait masque. Reexamen au backlog (D-165).
+- **Preuve** (2026-11-24) : `pnpm test` (75 fichiers, 981 verts, 1 ignore), `pnpm run check`, `pnpm audit --prod --audit-level=moderate` et `pnpm audit --audit-level=high` : sortie 0, seuls les 2 avis ecartes restent (« 2 ignored »).
