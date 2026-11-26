@@ -21,3 +21,6 @@ coverage/
 .DS_Store
 Thumbs.db
 .claude/settings.json.bak-*
+
+# --- usine 1.6.7 : sorties completes des commandes, locales ---
+.logs/
