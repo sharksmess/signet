@@ -22,7 +22,10 @@ case "$BRANCH" in slice/"$SLICE"-*) ;; *) bad "branche '$BRANCH' : attendu slice
 [ -z "$(git status --porcelain --untracked-files=all | grep -vE '^.. \.gates/current-slice$')" ] \
   || bad "modifications non committees : ce qui serait clos ne serait pas ce qui est teste."
 
-LOG=$(mktemp -d)
+# Sorties completes conservees (usine 1.6.7) : en 1.6.6, un echec n'affichait que
+# la fin de la sortie et le dossier temporaire etait efface (liste-courses 003).
+# Fichiers *.log, ignores par git : l'arbre reste propre.
+LOG=".logs/close-slice-$SLICE"; mkdir -p "$LOG"
 strip() { sed -E 's/\x1b\[[0-9;]*m//g' "$1" | tr -d '\r'; }
 R_CHECK="ECHEC"; R_TEST="ECHEC"; R_AUDIT="ECHEC"
 
@@ -33,20 +36,24 @@ node -e "process.exit(require('./package.json').packageManager ? 0 : 1)" 2>/dev/
 # 2. Controles statiques : script "check" du package.json (types + lint).
 if node -e "process.exit(require('./package.json').scripts?.check ? 0 : 1)" 2>/dev/null; then
   say "-- pnpm run check"
-  if pnpm run check > "$LOG/check.txt" 2>&1; then R_CHECK="PASS"; else bad "controle de types ou lint en echec"; tail -30 "$LOG/check.txt"; fi
+  if pnpm run check > "$LOG/check.log" 2>&1; then R_CHECK="PASS"; else bad "controle de types ou lint en echec (sortie complete : $LOG/check.log)"; tail -30 "$LOG/check.log"; fi
 else
   bad "aucun script \"check\" dans package.json. Attendu : types + lint, ex. \"check\": \"pnpm typecheck && pnpm lint\"."
 fi
 
 # 3. Suite de tests complete, contre la vraie base de test.
 say "-- pnpm test"
-if pnpm test > "$LOG/test.txt" 2>&1; then R_TEST="PASS"; else bad "la suite de tests ne passe pas"; strip "$LOG/test.txt" | tail -40; fi
-TEST_SUMMARY=$(strip "$LOG/test.txt" | grep -E '^ *(Test Files|Tests) ' | sed -E 's/^ +//' | paste -sd ';' - | sed 's/;/ ; /')
+if pnpm test > "$LOG/test.log" 2>&1; then R_TEST="PASS"; else bad "la suite de tests ne passe pas (sortie complete : $LOG/test.log)"; strip "$LOG/test.log" | tail -40; fi
+TEST_SUMMARY=$(strip "$LOG/test.log" | grep -E '^ *(Test Files|Tests) ' | sed -E 's/^ +//' | paste -sd ';' - | sed 's/;/ ; /')
 say "   ${TEST_SUMMARY:-(resume des tests introuvable)}"
 
 # 4. Audit des dependances de production
-say "-- pnpm audit --prod --audit-level=high"
-if pnpm audit --prod --audit-level=high > "$LOG/audit.txt" 2>&1; then R_AUDIT="PASS"; else bad "vulnerabilites hautes ou critiques en production (pnpm audit --prod)."; fi
+# Seuil modere (usine 1.6.7) : sept avis moderes sur Next.js passaient sous le seuil
+# « high », et c'est Next lui-meme qui a fini par refuser de construire (liste-courses,
+# 2026-11-19). Un avis ecarte apres analyse se declare dans pnpm-workspace.yaml
+# (auditConfig.ignoreGhsas), avec sa decision au registre : rules/dependencies.md.
+say "-- pnpm audit --prod --audit-level=moderate"
+if pnpm audit --prod --audit-level=moderate > "$LOG/audit.log" 2>&1; then R_AUDIT="PASS"; else bad "vulnerabilites moderees ou plus en production (pnpm audit --prod ; sortie complete : $LOG/audit.log)."; fi
 
 BASE=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main 2>/dev/null || echo "")
 
@@ -56,7 +63,7 @@ BASE=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main 2
 R_BUILD="ECHEC"
 if [ -f scripts/ci-build.sh ]; then
   say "-- bash scripts/ci-build.sh (etape Build de la CI)"
-  if bash scripts/ci-build.sh > "$LOG/build.txt" 2>&1; then R_BUILD="PASS"; else bad "l'etape Build de la CI echoue avec le seul environnement de ci/build.env"; strip "$LOG/build.txt" | tail -25; fi
+  if bash scripts/ci-build.sh > "$LOG/build.log" 2>&1; then R_BUILD="PASS"; else bad "l'etape Build de la CI echoue avec le seul environnement de ci/build.env (sortie complete : $LOG/build.log)"; strip "$LOG/build.log" | tail -25; fi
 else
   bad "scripts/ci-build.sh absent : l'etape Build de la CI ne peut pas etre rejouee en local (install-project le pose)."
 fi
@@ -66,11 +73,11 @@ R_SECRETS="non installe localement (CI seule)"
 if command -v gitleaks >/dev/null 2>&1; then
   say "-- gitleaks (historique de la branche)"
   RANGE="${BASE:+$BASE..}HEAD"
-  if gitleaks git --no-banner --log-opts="$RANGE" . > "$LOG/leaks.txt" 2>&1 \
-     || { grep -q 'unknown command' "$LOG/leaks.txt" && gitleaks detect --no-banner --log-opts="$RANGE" > "$LOG/leaks.txt" 2>&1; }; then
+  if gitleaks git --no-banner --log-opts="$RANGE" . > "$LOG/leaks.log" 2>&1 \
+     || { grep -q 'unknown command' "$LOG/leaks.log" && gitleaks detect --no-banner --log-opts="$RANGE" > "$LOG/leaks.log" 2>&1; }; then
     R_SECRETS="PASS"
   else
-    bad "gitleaks signale des secrets potentiels dans l'historique de la branche"; strip "$LOG/leaks.txt" | grep -E 'RuleID|File|Line|Commit' | head -20
+    bad "gitleaks signale des secrets potentiels dans l'historique de la branche"; strip "$LOG/leaks.log" | grep -E 'RuleID|File|Line|Commit' | head -20
   fi
 else
   say "   AVERTISSEMENT : gitleaks absent, la recherche de secrets ne sera faite que par la CI (WINDOWS.md)."
@@ -95,7 +102,7 @@ if [ -n "$DOC" ]; then
   grep -qE '^- \[ \] (\*\*)?AC[0-9]' "$DOC" && bad "criteres d'acceptation non coches dans $DOC"
   NB_AC=$(grep -cE '^- \[[xX]\] (\*\*)?AC[0-9]' "$DOC" 2>/dev/null); NB_AC=${NB_AC:-0}
   [ "$NB_AC" -gt 0 ] || bad "aucun critere d'acceptation coche reconnu dans $DOC (format attendu : « - [x] AC1 — ... »)"
-  grep -qi 'tenant' "$DOC" || bad "aucun critere d'isolation tenant dans la tranche"
+  grep -qi 'tenant' "$DOC" || bad "aucun critere d'isolation tenant dans $DOC : le script cherche le mot « tenant ». Si le projet nomme son tenant autrement (foyer, organisation...), garde le mot dans le titre du critere, ex. « AC5 — Isolation tenant (entre foyers) ». Une tranche sans donnee de tenant l'ecrit aussi : « Isolation tenant : sans objet, car ... »."
 else
   bad "contrat de tranche introuvable (docs/03-slices/$SLICE-*.md)"
 fi
@@ -142,7 +149,6 @@ if [ -n "$BASE" ]; then
 fi
 
 if [ "$FAIL" -ne 0 ]; then
-  rm -rf "$LOG"
   say "=== CLOTURE REFUSEE : tranche $SLICE NON close. Corrige les points ci-dessus. ==="
   exit 1
 fi
@@ -162,7 +168,7 @@ KEEP=""
   printf '| Preuve | Resultat |\n|---|---|\n'
   printf '| `pnpm run check` (types + lint) | %s |\n' "$R_CHECK"
   printf '| `pnpm test` (base Postgres reelle) | %s — %s |\n' "$R_TEST" "${TEST_SUMMARY:-resume introuvable}"
-  printf '| `pnpm audit --prod --audit-level=high` | %s |\n' "$R_AUDIT"
+  printf '| `pnpm audit --prod --audit-level=moderate` | %s |\n' "$R_AUDIT"
   printf '| Etape Build de la CI (`scripts/ci-build.sh`) | %s |\n' "$R_BUILD"
   printf '| Secrets, gitleaks local | %s |\n' "$R_SECRETS"
   printf '| Securite (`security-auditor`) | %s |\n' "$(tail -1 "$AUDIT" | tr -d '\r')"
@@ -174,7 +180,6 @@ KEEP=""
   printf '\nLa CI rejoue check, tests, build, audit et recherche de secrets sur un serveur neutre ; son resultat est attache a la PR.\n'
   [ -n "$KEEP" ] && printf '\n%s\n' "$KEEP"
 } > "$EVID"
-rm -rf "$LOG"
 
 touch ".gates/slice-$SLICE.closed"
 rm -f .gates/current-slice

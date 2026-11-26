@@ -6,7 +6,14 @@ fail() { printf '\n[pre-commit] REFUSE : %s\n' "$1" >&2; exit 1; }
 
 BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "")
 case "$BRANCH" in
-  main|master) fail "commit direct sur $BRANCH. Travaille sur une branche slice/NNN-nom ; main ne recoit que des PR fusionnees." ;;
+  main|master)
+    # Seule exception (usine 1.6.6) : le tout premier commit d'un depot neuf.
+    # Aucune PR n'est possible avant lui : il n'y a encore ni main ni depot distant
+    # (liste-courses, 30/10/2026 : premier commit fait sur une branche renommee, D-006).
+    if git rev-parse -q --verify HEAD >/dev/null 2>&1; then
+      fail "commit direct sur $BRANCH. Travaille sur une branche slice/NNN-nom ; main ne recoit que des PR fusionnees."
+    fi
+    printf '[pre-commit] premier commit du depot sur %s : autorise (aucune PR possible avant lui).\n' "$BRANCH" >&2 ;;
 esac
 
 STAGED=$(git diff --cached --name-only --diff-filter=ACMR)

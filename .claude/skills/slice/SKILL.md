@@ -33,6 +33,8 @@ tests/invitations/*
 
 Le hook `gate-check.sh` refusera toute ecriture hors de ces motifs. Sois precis : un motif trop large annule la protection, un motif trop etroit bloquera l'implementation sur un fichier legitime. En cas de doute, reste etroit — elargir prend dix secondes, une derive de perimetre coute une journee.
 
+Le perimetre ne gouverne que `apps/`, `packages/` et `tests/` : c'est la que `gate-check.sh` l'applique. Les ecritures dans `docs/` (contrat, journal, registre, ERD, ADR, rapports des relecteurs dans `docs/04-runbooks/audits/`, fiche de preuves) n'ont **pas** a y figurer et ne demandent jamais de `scope-add` (usine 1.6.6 ; liste-courses 001 s'est arretee sur une demande inutile pour `audits/`).
+
 ## 5. Activer
 Ecris l'identifiant de la tranche dans `.gates/current-slice`, **apres** le perimetre et avec l'outil Write.
 

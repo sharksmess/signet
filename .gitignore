@@ -24,3 +24,6 @@ Thumbs.db
 
 # --- usine 1.6.7 : sorties completes des commandes, locales ---
 .logs/
+
+# --- ajoute par saas-factory 1.6.7 ---
+next-env.d.ts

@@ -9,6 +9,7 @@ Mode autonome. Tu enchaines des tranches sans supervision humaine. La totalite d
 ## 0. Prerequis, verifies avant de commencer
 - `.gates/02-architecture.approved` existe. Le mode autonome ne franchit jamais un gate humain.
 - L'arbre de travail est propre (`git status`).
+- **Le poste ne se met pas en veille** pendant le passage (reglage humain, rappele dans le rapport de depart). Vecu (liste-courses 002 a 004) : trois passages de tests figes de 4 a 6 heures par une mise en veille, dont deux refus de push inexpliques sur le moment. Un passage de tests plus de trois fois plus long que d'habitude se note dans le journal du passage, avec sa duree.
 - Le budget est fixe : nombre de tranches, ou duree. Si l'humain ne l'a pas donne, demande-le. Pas de file illimitee.
 
 ## 1. Constituer la file
