@@ -11,6 +11,14 @@
 # -Fill : une variable absente dont la valeur du modele est inventee (sans
 # MOT_DE_PASSE ni autre etiquette) est recopiee telle quelle ; sinon la valeur
 # est demandee en saisie masquee. Les fichiers locaux restent ignores par git.
+#
+# Ecrire un modele *.example (usine 1.6.6) :
+# - une valeur a fournir porte une ETIQUETTE en majuscules (MOT_DE_PASSE) :
+#   -Fill la demande en saisie masquee et la met a sa place ;
+# - jamais de valeur d'allure aleatoire, meme factice : gitleaks la prendrait
+#   pour une cle et refuserait le commit (liste-courses 001) ;
+# - une variable laissee VIDE dans le modele est FACULTATIVE : un secret requis
+#   n'est donc jamais vide, il porte une etiquette ou une valeur inventee lisible.
 param(
   [string]$Local = ".env.test.local",
   [string]$Example = ".env.test.example",

@@ -6,6 +6,12 @@
 # variable de l'application : en 1.6.0, une liste noire laissait passer
 # AUTH_RATE_LIMIT pose par le job de CI (Signet, PR #28). Appele par la CI
 # (.github/workflows/ci.yml) et par scripts/close-slice.sh.
+#
+# Mode « typegen » (usine 1.6.7) : `bash scripts/ci-build.sh typegen [dossier]`
+# lance `next typegen` dans le meme environnement. `next typegen` charge
+# next.config.ts, qui peut valider l'environnement du serveur : sans ces valeurs
+# inventees, le controle de types echouait sur un poste neuf (liste-courses D-050).
+# Appele par le script `typecheck` de l'application (rules/nextjs.md).
 set -uo pipefail
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 cd "$ROOT" || exit 1
@@ -29,4 +35,8 @@ if [ -f "$ENVF" ]; then
   done < "$ENVF"
 fi
 
-exec env -i "${ARGS[@]}" CI=true pnpm run --if-present build
+case "${1:-}" in
+  typegen) exec env -i "${ARGS[@]}" CI=true pnpm --dir "${2:-apps/web}" exec next typegen ;;
+  "") exec env -i "${ARGS[@]}" CI=true pnpm run --if-present build ;;
+  *) echo "ECHEC: mode inconnu '$1' (attendu : rien, ou typegen [dossier])."; exit 1 ;;
+esac

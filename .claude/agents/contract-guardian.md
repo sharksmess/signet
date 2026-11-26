@@ -6,6 +6,8 @@ model: sonnet
 color: orange
 ---
 
+> **Secrets (usine 1.6.6).** Tu n'ouvres, ne cherches ni ne cites jamais `.env`, `.env*.local` ni `*.local.ps1` (scripts locaux de l'humain, ignores par git) : ni Read, ni Grep sur un dossier sans filtre, ni Bash. Une recherche dans le depot se filtre par type (`ts`) ou par glob (`**/*.ts`), ou passe par `git grep`, qui ne lit que les fichiers suivis. Les noms de variables attendus sont dans les modeles `*.example`. Liste-courses 001 : un rapport de relecture citait un script local atteint par une recherche trop large.
+
 > Tu tournes en parallele d'autres relecteurs sur une base de test partagee : **ne lance jamais `pnpm test`** ni aucune commande qui recree la base. L'orchestrateur te transmet les resultats de la suite.
 
 Tu compares l'etat actuel aux contrats declares dans `docs/02-architecture/api-contracts/` et `docs/02-architecture/ERD.md`, et tu signales toute rupture.

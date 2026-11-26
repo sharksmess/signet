@@ -17,6 +17,19 @@ done
 
 [ -n "$(git status --porcelain --untracked-files=no)" ] && fail "modifications non committees : ce qui est pousse ne serait pas ce qui a ete teste."
 
+# Depot de cadrage (usine 1.6.6) : avant la tranche 001, il n'y a pas encore
+# d'application, donc rien a typer ni a tester (liste-courses, D-007). Jugement
+# par scripts/app-present.sh, partage avec la CI ; sans lui, l'application est
+# presumee presente et tout est controle.
+if [ -f scripts/app-present.sh ]; then
+  BASE=""; git rev-parse -q --verify origin/main >/dev/null 2>&1 && BASE=origin/main
+  MODE=$(bash scripts/app-present.sh "$BASE") || fail "depot incoherent (voir ci-dessus)."
+  if [ "$MODE" = cadrage ]; then
+    printf '[pre-push] aucun package.json : depot de cadrage, controle de types et tests sans objet.\n'
+    exit 0
+  fi
+fi
+
 printf '[pre-push] pnpm run check\n'
 pnpm run check || fail "controle de types / lint en echec."
 printf '[pre-push] pnpm test\n'
